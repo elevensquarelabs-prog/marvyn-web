@@ -1,0 +1,457 @@
+import { NextRequest } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { connectDB } from '@/lib/mongodb'
+import SEOAudit from '@/models/SEOAudit'
+import Brand from '@/models/Brand'
+import { getDfsCredentials, crawlAndLighthouse, findCompetitors, getCompetitorData, getDomainRankOverview, type PageData } from '@/lib/dataforseo'
+import { llm } from '@/lib/llm'
+import { skills } from '@/lib/skills'
+import Keyword from '@/models/Keyword'
+import AuditRun from '@/models/AuditRun'
+import mongoose from 'mongoose'
+import type { IIssue, IPageKeyword, IAuditAction } from '@/models/SEOAudit'
+
+function sse(data: unknown): Uint8Array {
+  return new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`)
+}
+
+// Map on_page check flags → human-readable issues
+const CHECK_MAP: Record<string, { severity: IIssue['severity']; category: IIssue['category']; title: string; recommendation: string }> = {
+  no_title:            { severity: 'critical', category: 'On-Page',    title: 'Missing title tag',               recommendation: 'Add a unique title tag 30–60 characters long.' },
+  no_description:      { severity: 'critical', category: 'On-Page',    title: 'Missing meta description',        recommendation: 'Write a 120–160 character meta description.' },
+  no_h1_tag:           { severity: 'critical', category: 'On-Page',    title: 'No H1 heading found',             recommendation: 'Add one H1 tag containing your primary keyword.' },
+  is_http:             { severity: 'critical', category: 'Technical',  title: 'Page served over HTTP',           recommendation: 'Enable HTTPS and redirect all HTTP traffic.' },
+  is_broken:           { severity: 'critical', category: 'Technical',  title: 'Page returns error',              recommendation: 'Fix or redirect the broken page.' },
+  is_4xx_code:         { severity: 'critical', category: 'Technical',  title: '4xx error code',                  recommendation: 'Resolve or redirect the page to return 200.' },
+  is_5xx_code:         { severity: 'critical', category: 'Technical',  title: '5xx server error',                recommendation: 'Investigate server errors immediately.' },
+  canonical_to_broken: { severity: 'critical', category: 'Technical',  title: 'Canonical points to broken URL',  recommendation: 'Update canonical tag to a live URL.' },
+  no_image_alt:        { severity: 'warning',  category: 'On-Page',    title: 'Images missing alt text',         recommendation: 'Add descriptive alt attributes to all images.' },
+  title_too_long:      { severity: 'warning',  category: 'On-Page',    title: 'Title tag too long (>60 chars)',  recommendation: 'Shorten the title to 30–60 characters.' },
+  title_too_short:     { severity: 'warning',  category: 'On-Page',    title: 'Title tag too short (<30 chars)', recommendation: 'Expand the title to 30–60 characters.' },
+  duplicate_meta_tags: { severity: 'warning',  category: 'On-Page',    title: 'Duplicate meta tags',             recommendation: 'Remove duplicate meta tags.' },
+  no_favicon:          { severity: 'warning',  category: 'Technical',  title: 'No favicon',                     recommendation: 'Add a favicon.ico for brand recognition.' },
+  large_page_size:     { severity: 'warning',  category: 'Performance', title: 'Page size too large',            recommendation: 'Compress images and minify resources.' },
+  high_loading_time:   { severity: 'warning',  category: 'Performance', title: 'High page load time',            recommendation: 'Optimise assets and use a CDN.' },
+  high_waiting_time:   { severity: 'warning',  category: 'Performance', title: 'High server response time',      recommendation: 'Improve server performance and enable caching.' },
+  has_render_blocking_resources: { severity: 'warning', category: 'Performance', title: 'Render-blocking resources', recommendation: 'Defer or async-load JavaScript and CSS.' },
+  low_content_rate:    { severity: 'warning',  category: 'On-Page',    title: 'Low text-to-HTML ratio',          recommendation: 'Add more meaningful content.' },
+  low_character_count: { severity: 'warning',  category: 'On-Page',    title: 'Very little content',             recommendation: 'Add substantive content (aim for 300+ words).' },
+  https_to_http_links: { severity: 'warning',  category: 'Technical',  title: 'HTTPS page links to HTTP',        recommendation: 'Update all links to use HTTPS.' },
+  no_encoding_meta_tag:{ severity: 'warning',  category: 'Technical',  title: 'Missing charset meta tag',        recommendation: 'Add <meta charset="UTF-8"> inside <head>.' },
+  redirect_chain:      { severity: 'warning',  category: 'Technical',  title: 'Redirect chain detected',         recommendation: 'Point directly to the final URL.' },
+  deprecated_html_tags:{ severity: 'warning',  category: 'Technical',  title: 'Deprecated HTML tags',            recommendation: 'Replace deprecated tags with HTML5 equivalents.' },
+  flash:               { severity: 'warning',  category: 'Technical',  title: 'Flash content detected',          recommendation: 'Remove Flash — not supported by modern browsers.' },
+  frame:               { severity: 'warning',  category: 'Technical',  title: 'Frames or iframes detected',      recommendation: 'Avoid frames as they cause SEO indexing issues.' },
+}
+
+function buildIssues(checks: Record<string, boolean | number | null>): {
+  issues: IIssue[]
+  criticalCount: number
+  warningCount: number
+  passedCount: number
+  score: number
+} {
+  const issues: IIssue[] = []
+  let criticalCount = 0
+  let warningCount = 0
+  const totalChecks = Object.keys(CHECK_MAP).length
+
+  for (const [key, def] of Object.entries(CHECK_MAP)) {
+    const val = checks[key]
+    if (val && val !== 0) {
+      issues.push({ severity: def.severity, category: def.category, title: def.title, recommendation: def.recommendation })
+      if (def.severity === 'critical') criticalCount++
+      else warningCount++
+    }
+  }
+
+  const passedCount = totalChecks - issues.length
+  const score = Math.max(0, Math.round(100 - criticalCount * 12 - warningCount * 4))
+
+  return { issues, criticalCount, warningCount, passedCount, score }
+}
+
+function extractPageKeywords(pageData: { h1: string; keywords: string; headings: { h2: string[]; h3: string[] } }): IPageKeyword[] {
+  const seen = new Set<string>()
+  const result: IPageKeyword[] = []
+
+  const add = (kw: string, source: string) => {
+    const k = kw.trim()
+    if (!k || k.length < 2 || seen.has(k.toLowerCase())) return
+    seen.add(k.toLowerCase())
+    result.push({ keyword: k, source })
+  }
+
+  if (pageData.h1) add(pageData.h1, 'h1')
+  pageData.headings.h2?.forEach(h => add(h, 'h2'))
+  pageData.headings.h3?.forEach(h => add(h, 'h3'))
+  if (pageData.keywords) {
+    pageData.keywords.split(',').forEach(k => add(k, 'meta'))
+  }
+
+  return result.slice(0, 25)
+}
+
+const MONTHLY_AUDIT_LIMIT = 10
+
+export async function POST(req: NextRequest) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { domain, location = 'India', city } = await req.json()
+  if (!domain) return Response.json({ error: 'domain required' }, { status: 400 })
+
+  const cleanDomain = domain.replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+
+  // ── Rate limit: max 10 full audit runs per calendar month ─────────
+  await connectDB()
+  const monthStart = new Date()
+  monthStart.setDate(1)
+  monthStart.setHours(0, 0, 0, 0)
+
+  const runsThisMonth = await AuditRun.countDocuments({
+    userId: session.user.id,
+    createdAt: { $gte: monthStart },
+  })
+
+  if (runsThisMonth >= MONTHLY_AUDIT_LIMIT) {
+    return Response.json({
+      error: 'Monthly audit limit reached',
+      message: `You've used ${runsThisMonth}/${MONTHLY_AUDIT_LIMIT} audits this month. Limit resets on the 1st.`,
+      limitReached: true,
+      runsThisMonth,
+      limit: MONTHLY_AUDIT_LIMIT,
+    }, { status: 429 })
+  }
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (data: unknown) => controller.enqueue(sse(data))
+
+      try {
+        const credentials = getDfsCredentials()
+        if (!credentials) throw new Error('DataForSEO not configured')
+        // connectDB already called before stream starts
+
+        // ── Step 1: Crawl + Lighthouse (parallel) ─────────────────────
+        send({ type: 'step', step: 1, status: 'running', message: 'Crawling website & running Lighthouse…' })
+        const defaultPageData: PageData = { title: cleanDomain, h1: cleanDomain, description: '', keywords: '', onpageScore: 0, checks: {}, headings: { h2: [], h3: [] } }
+        let pageData: PageData = defaultPageData
+        let performance = { score: 0, mobile: false }
+        let issues: IIssue[] = []
+        let criticalCount = 0, warningCount = 0, passedCount = 0, score = 50
+
+        try {
+          const result = await crawlAndLighthouse(cleanDomain, credentials)
+          pageData = result.pageData
+          performance = result.performance
+          ;({ issues, criticalCount, warningCount, passedCount, score } = buildIssues(pageData.checks))
+        } catch (e) {
+          console.error('[seo/run] crawl/lighthouse failed:', e)
+        }
+        send({ type: 'step', step: 1, status: 'done', message: 'Website crawled' })
+
+        // ── Step 2: Competitors (SERP) ────────────────────────────────
+        send({ type: 'step', step: 2, status: 'running', message: 'Finding competitors on Google…' })
+        let competitors: Awaited<ReturnType<typeof findCompetitors>> = []
+        try {
+          competitors = await findCompetitors(pageData.h1, pageData.description, location, credentials)
+        } catch (e) {
+          console.error('[seo/run] SERP failed:', e)
+        }
+        send({ type: 'step', step: 2, status: 'done', message: `Found ${competitors.length} competitors` })
+
+        // ── Step 3: Traffic data (user domain + all competitors, parallel) ──
+        send({ type: 'step', step: 3, status: 'running', message: 'Fetching traffic data…' })
+
+        // Sum real GSC clicks from synced keywords — this is exact data, not an estimate
+        const gscAgg = await Keyword.aggregate([
+          { $match: { userId: new mongoose.Types.ObjectId(session.user.id), clicks: { $gt: 0 } } },
+          { $group: { _id: null, totalClicks: { $sum: '$clicks' }, totalKeywords: { $sum: 1 } } },
+        ]).catch(() => [])
+        const gscClicks: number | undefined = gscAgg[0]?.totalClicks
+        const gscKeywords: number | undefined = gscAgg[0]?.totalKeywords
+
+        console.log(`[seo/run] GSC data: clicks=${gscClicks} keywords=${gscKeywords}`)
+
+        const [domainMetrics, competitorDetails] = await Promise.all([
+          getDomainRankOverview(cleanDomain, location, credentials).catch(() => ({})),
+          Promise.all(
+            competitors.map(c => {
+              const normDomain = c.domain.replace(/^www\./, '')
+              return getCompetitorData(normDomain, location, credentials)
+                .then(d => ({ ...c, ...d, domain: normDomain }))
+                .catch(() => ({ ...c, domain: normDomain }))
+            })
+          ),
+        ])
+
+        // DataForSEO's domain_rank_overview is unreliable for subdomains — it rolls up
+        // to the root domain, inflating numbers massively (e.g. pro.site.com → site.com's traffic)
+        const domainParts = cleanDomain.replace(/^www\./, '').split('.')
+        const isSubdomain = domainParts.length > 2
+
+        const dfsTraffic = (domainMetrics as { organicTraffic?: number }).organicTraffic
+        const dfsKeywords = (domainMetrics as { organicKeywords?: number }).organicKeywords
+
+        // Prefer GSC (real clicks). For subdomains, never fall back to DataForSEO etv
+        // (DataForSEO rolls subdomain traffic up to root domain, giving wildly wrong numbers).
+        // Use null (not undefined) so $set actually clears stale values from previous audits.
+        const finalOrganicTraffic: number | null = gscClicks && gscClicks > 0
+          ? gscClicks
+          : isSubdomain ? null : (dfsTraffic ?? null)
+        const finalOrganicKeywords: number | null = gscKeywords && gscKeywords > 0
+          ? gscKeywords
+          : isSubdomain ? null : (dfsKeywords ?? null)
+        const trafficSource: 'gsc' | 'estimated' | null = finalOrganicTraffic
+          ? (gscClicks && gscClicks > 0 ? 'gsc' : 'estimated')
+          : null
+
+        console.log(`[seo/run] isSubdomain=${isSubdomain} gscClicks=${gscClicks} dfsEtv=${dfsTraffic} → finalTraffic=${finalOrganicTraffic} source=${trafficSource}`)
+
+        send({ type: 'step', step: 3, status: 'done', message: 'Traffic data fetched' })
+
+        // ── Step 4: AI Actions ────────────────────────────────────────
+        send({ type: 'step', step: 4, status: 'running', message: 'Generating recommendations…' })
+        let aiActions: IAuditAction[] = []
+
+        try {
+          const prompt = `You are an SEO expert. Generate prioritised action items for this website audit.
+
+Domain: ${cleanDomain} (${location})
+SEO Score: ${score}/100
+Critical issues: ${criticalCount}, Warnings: ${warningCount}
+Page title: "${pageData.title}"
+H1: "${pageData.h1}"
+Performance score: ${performance.score}/100 (desktop Lighthouse)
+LCP: ${(performance as Record<string, unknown>).lcp ?? 'unknown'}, CLS: ${(performance as Record<string, unknown>).cls ?? 'unknown'}, TBT: ${(performance as Record<string, unknown>).tbt ?? 'unknown'}
+
+Top issues found:
+${issues.slice(0, 8).map(i => `- [${i.severity}] ${i.title}`).join('\n')}
+
+Top competitors: ${competitorDetails.slice(0, 3).map(c => c.domain).join(', ')}
+
+Return ONLY valid JSON, no markdown:
+{
+  "actions": [
+    {
+      "priority": "critical",
+      "effort": "Low",
+      "impact": "Direct ranking improvement",
+      "title": "Action title",
+      "instructions": ["Step 1", "Step 2", "Step 3"],
+      "type": "technical"
+    }
+  ]
+}
+
+Generate 6-8 actions. Mix of technical, content, keyword, and competitor types.`
+
+          const raw = await llm(prompt, skills.seoAudit, 'powerful')
+          const match = raw.match(/\{[\s\S]*\}/)
+          if (match) {
+            const parsed = JSON.parse(match[0])
+            aiActions = (parsed.actions || []).map((a: Partial<IAuditAction>) => ({ ...a, done: false }))
+          }
+        } catch (e) {
+          console.error('[seo/run] AI failed:', e)
+        }
+
+        send({ type: 'step', step: 4, status: 'done', message: `${aiActions.length} recommendations ready` })
+
+        // ── Save & complete ───────────────────────────────────────────
+        const pageKeywords = extractPageKeywords(pageData)
+
+        const audit = await SEOAudit.findOneAndUpdate(
+          { userId: session.user.id },
+          { $set: {
+            userId: session.user.id,
+            domain: cleanDomain,
+            location,
+            city,
+            score,
+            criticalCount,
+            warningCount,
+            passedCount,
+            organicTraffic: finalOrganicTraffic,
+            organicKeywords: finalOrganicKeywords,
+            trafficSource,
+            pageData: {
+              title: pageData.title,
+              h1: pageData.h1,
+              description: pageData.description,
+              keywords: pageData.keywords,
+              onpageScore: pageData.onpageScore,
+              headings: [...(pageData.headings.h2 || []), ...(pageData.headings.h3 || [])],
+            },
+            issues,
+            competitors: competitorDetails,
+            performance,
+            aiActions,
+            pageKeywords,
+            status: 'complete',
+            createdAt: new Date(),
+            completedAt: new Date(),
+          } },
+          { upsert: true, new: true }
+        )
+
+        // ── Sync competitors → Brand knowledge base ───────────────────
+        // So Settings > Competitors and the AI agent context stay up to date
+        try {
+          const brand = await Brand.findOne({ userId: session.user.id })
+          if (brand) {
+            const existingUrls: Set<string> = new Set(
+              (brand.competitors ?? []).map((c: { url: string }) => c.url.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, ''))
+            )
+            const toAdd = competitorDetails
+              .filter(c => !existingUrls.has(c.domain.replace(/^www\./, '')))
+              .map(c => ({
+                url: `https://${c.domain}`,
+                name: c.title || c.domain,
+                status: 'analyzed',
+                analyzedAt: new Date(),
+              }))
+            if (toAdd.length > 0) {
+              await Brand.findOneAndUpdate(
+                { userId: session.user.id },
+                { $push: { competitors: { $each: toAdd } } }
+              )
+            }
+          }
+        } catch (e) {
+          console.error('[seo/run] brand sync failed:', e)
+        }
+
+        // Log this run for rate limiting
+        await AuditRun.create({ userId: session.user.id, domain: cleanDomain }).catch(() => {})
+
+        send({ type: 'complete', audit: audit.toObject() })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error('[seo/run]', msg)
+        send({ type: 'error', message: msg })
+        await SEOAudit.findOneAndUpdate(
+          { userId: session.user.id },
+          { status: 'failed' },
+          { upsert: true }
+        ).catch(() => {})
+      } finally {
+        controller.close()
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  })
+}
+
+// GET: load latest saved audit + monthly run count
+export async function GET(_req: NextRequest) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+
+  await connectDB()
+  const monthStart = new Date()
+  monthStart.setDate(1)
+  monthStart.setHours(0, 0, 0, 0)
+
+  const [audit, runsThisMonth] = await Promise.all([
+    SEOAudit.findOne({ userId: session.user.id }).lean(),
+    AuditRun.countDocuments({ userId: session.user.id, createdAt: { $gte: monthStart } }),
+  ])
+
+  return Response.json({ audit: audit ?? null, runsThisMonth, limit: MONTHLY_AUDIT_LIMIT })
+}
+
+// PATCH: various mutation ops
+export async function PATCH(req: NextRequest) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = await req.json()
+  await connectDB()
+
+  // Mark AI action done
+  if ('actionIndex' in body) {
+    await SEOAudit.findOneAndUpdate(
+      { userId: session.user.id },
+      { $set: { [`aiActions.${body.actionIndex}.done`]: body.done } }
+    )
+    return Response.json({ ok: true })
+  }
+
+  // Add competitor
+  if (body.op === 'add_competitor') {
+    const existing = await SEOAudit.findOne({ userId: session.user.id }, { competitors: 1 }).lean() as { competitors?: { domain: string }[] } | null
+    if ((existing?.competitors?.length ?? 0) >= 5) {
+      return Response.json({ error: 'Competitor limit reached (max 5)' }, { status: 400 })
+    }
+
+    const cleanDomain = (body.domain as string).replace(/^www\./, '')
+
+    // Fetch live metrics for the new competitor
+    const credentials = getDfsCredentials()
+    let metrics: { organicTraffic?: number; organicKeywords?: number } = {}
+    if (credentials) {
+      try {
+        metrics = await getCompetitorData(cleanDomain, '', credentials)
+      } catch {}
+    }
+
+    const newEntry = {
+      domain: cleanDomain,
+      tag: body.tag ?? 'unset',
+      added: true,
+      title: '',
+      url: '',
+      description: '',
+      organicTraffic: metrics.organicTraffic,
+      organicKeywords: metrics.organicKeywords,
+    }
+
+    await SEOAudit.findOneAndUpdate(
+      { userId: session.user.id },
+      { $push: { competitors: newEntry } }
+    )
+    // Sync to Brand knowledge base (skip if already there)
+    await Brand.findOneAndUpdate(
+      { userId: session.user.id, 'competitors.url': { $ne: `https://${cleanDomain}` } },
+      { $push: { competitors: { url: `https://${cleanDomain}`, name: cleanDomain, status: 'analyzed', analyzedAt: new Date() } } }
+    ).catch(() => {})
+    return Response.json({ ok: true, competitor: newEntry })
+  }
+
+  // Delete competitor
+  if (body.op === 'delete_competitor') {
+    const cleanDomain = (body.domain as string).replace(/^www\./, '')
+    await SEOAudit.findOneAndUpdate(
+      { userId: session.user.id },
+      { $pull: { competitors: { domain: body.domain } } }
+    )
+    // Sync removal to Brand knowledge base
+    await Brand.findOneAndUpdate(
+      { userId: session.user.id },
+      { $pull: { competitors: { url: `https://${cleanDomain}` } } }
+    ).catch(() => {})
+    return Response.json({ ok: true })
+  }
+
+  // Tag competitor
+  if (body.op === 'tag_competitor') {
+    await SEOAudit.findOneAndUpdate(
+      { userId: session.user.id, 'competitors.domain': body.domain },
+      { $set: { 'competitors.$.tag': body.tag } }
+    )
+    return Response.json({ ok: true })
+  }
+
+  return Response.json({ error: 'Unknown op' }, { status: 400 })
+}

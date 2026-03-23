@@ -1,0 +1,112 @@
+import { NextRequest } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { getUserConnections, makeConnectionError, parseMetaApiError, type ConnectionError } from '@/lib/get-user-connections'
+import { getValidGoogleToken } from '@/lib/google-auth'
+import axios from 'axios'
+
+export async function GET(_req: NextRequest) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+
+  let user, userId: string
+  try {
+    ;({ user, userId } = await getUserConnections())
+  } catch {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const campaigns: unknown[] = []
+  const errors: string[] = []
+  const connectionErrors: ConnectionError[] = []
+
+  // ─── Meta Ads ─────────────────────────────────────────────────────
+  const meta = user.connections?.meta
+  if (!meta?.accessToken) {
+    connectionErrors.push(makeConnectionError('META_NOT_CONNECTED'))
+  } else if (!meta.accountId) {
+    connectionErrors.push(makeConnectionError('META_ACCOUNT_NOT_SELECTED'))
+  } else {
+    try {
+      const accountId = String(meta.accountId).replace(/^act_/, '')
+      const res = await axios.get(
+        `https://graph.facebook.com/v21.0/act_${accountId}/campaigns`,
+        {
+          params: {
+            access_token: meta.accessToken,
+            fields: 'id,name,status,objective,daily_budget,lifetime_budget',
+            limit: 50,
+          },
+        }
+      )
+      const metaCampaigns = (res.data.data || []).map((c: Record<string, unknown>) => ({ ...c, platform: 'meta' }))
+      campaigns.push(...metaCampaigns)
+      console.log(`[campaigns] Meta: fetched ${metaCampaigns.length} campaigns for account ${accountId}`)
+    } catch (err) {
+      console.error('[campaigns] Meta Ads fetch failed:', err)
+      const parsed = parseMetaApiError(err)
+      if (parsed) {
+        connectionErrors.push({ ...makeConnectionError(parsed.code), message: `Meta Ads: ${parsed.detail} — reconnect in Settings` })
+      } else {
+        errors.push('Meta Ads fetch failed — check your connection in Settings')
+      }
+    }
+  }
+
+  // ─── Google Ads ───────────────────────────────────────────────────
+  const google = user.connections?.google
+  if (!google?.customerId) {
+    connectionErrors.push(makeConnectionError('GOOGLE_NOT_CONNECTED'))
+  } else {
+    try {
+      const accessToken = await getValidGoogleToken(userId, 'google')
+      if (!accessToken) throw new Error('No Google token')
+
+      const developerToken = process.env.GOOGLE_DEVELOPER_TOKEN
+      if (!developerToken) throw new Error('No Google Ads developer token')
+
+      const customerId = google.customerId.replace(/-/g, '')
+      const query = `
+        SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type,
+               campaign_budget.amount_micros
+        FROM campaign
+        WHERE campaign.status != 'REMOVED'
+        LIMIT 50
+      `
+
+      const res = await axios.post(
+        `https://googleads.googleapis.com/v19/customers/${customerId}/googleAds:search`,
+        { query: query.trim() },
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'developer-token': developerToken,
+            'login-customer-id': customerId,
+            'Content-Type': 'application/json',
+          },
+        }
+      )
+
+      const rows = res.data.results ?? []
+      const results = rows.map((row: { campaign?: Record<string, unknown>; campaignBudget?: Record<string, unknown> }) => ({
+        id: row.campaign?.id,
+        name: row.campaign?.name,
+        status: row.campaign?.status,
+        channelType: row.campaign?.advertisingChannelType,
+        dailyBudgetMicros: row.campaignBudget?.amountMicros,
+        platform: 'google',
+      }))
+
+      campaigns.push(...results)
+      console.log(`[campaigns] Google: fetched ${results.length} campaigns for customer ${customerId}`)
+    } catch (err) {
+      const e = err as { response?: { data?: unknown; status?: number }; message?: string }
+      const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message
+      console.error('[campaigns] Google Ads fetch failed status:', e.response?.status)
+      console.error('[campaigns] Google Ads fetch failed detail:', detail)
+      errors.push(`Google Ads fetch failed: ${detail?.slice(0, 300)}`)
+    }
+  }
+
+  return Response.json({ campaigns, errors, connectionErrors })
+}

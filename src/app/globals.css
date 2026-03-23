@@ -1,26 +1,188 @@
 @import "tailwindcss";
 
+/* ── Light mode (default) ─────────────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #F5F4EF;
+  --bg-sidebar: #ECEAE3;
+  --surface: #FFFFFF;
+  --surface-2: #F0EFE9;
+  --border: #D8D5CC;
+  --accent: #DA7756;
+  --accent-hover: #C4633F;
+  --text-primary: #1A1614;
+  --text-secondary: #4A4540;
+  --text-muted: #706B65;
+  /* user chat bubble */
+  --user-bubble-bg: #EDD8D0;
+  --user-bubble-text: #3A1A10;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ── Dark mode ────────────────────────────────────────────────────── */
+.dark {
+  --bg: #0A0A0A;
+  --bg-sidebar: #0D0D0D;
+  --surface: #111111;
+  --surface-2: #1A1A1A;
+  --border: #1E1E1E;
+  --accent: #DA7756;
+  --accent-hover: #C4633F;
+  --text-primary: #FFFFFF;
+  --text-secondary: #A0A0A0;
+  --text-muted: #555555;
+  /* user chat bubble */
+  --user-bubble-bg: #3D2018;
+  --user-bubble-text: #F5DDD5;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+* { box-sizing: border-box; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: Inter, system-ui, sans-serif;
+  margin: 0;
+  padding: 0;
 }
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+::selection { background: rgba(218, 119, 86, 0.3); }
+
+/* ── Theme-aware utility classes ─────────────────────────────────── */
+.bg-theme         { background: var(--bg); }
+.bg-sidebar       { background: var(--bg-sidebar); }
+.bg-surface       { background: var(--surface); }
+.bg-surface-2     { background: var(--surface-2); }
+.border-theme     { border-color: var(--border); }
+.text-theme       { color: var(--text-primary); }
+.text-theme-2     { color: var(--text-secondary); }
+.text-theme-muted { color: var(--text-muted); }
+
+/* ── Light mode: remap all hardcoded dark hex values ─────────────── */
+/* Backgrounds */
+:root:not(.dark) .bg-\[\#0A0A0A\] { background-color: var(--bg) !important; }
+:root:not(.dark) .bg-\[\#0D0D0D\] { background-color: var(--surface) !important; }
+:root:not(.dark) .bg-\[\#111\]    { background-color: var(--surface) !important; }
+:root:not(.dark) .bg-\[\#111111\] { background-color: var(--surface) !important; }
+:root:not(.dark) .bg-\[\#131313\] { background-color: var(--surface) !important; }
+:root:not(.dark) .bg-\[\#161616\] { background-color: var(--surface) !important; }
+:root:not(.dark) .bg-\[\#1A1A1A\] { background-color: var(--surface-2) !important; }
+:root:not(.dark) .bg-\[\#1E1E1E\] { background-color: var(--surface-2) !important; }
+:root:not(.dark) .bg-\[\#222\]    { background-color: var(--surface-2) !important; }
+:root:not(.dark) .bg-\[\#222222\] { background-color: var(--surface-2) !important; }
+:root:not(.dark) .bg-\[\#2A2A2A\] { background-color: var(--surface-2) !important; }
+:root:not(.dark) .bg-\[\#333\]    { background-color: var(--surface-2) !important; }
+:root:not(.dark) .bg-\[\#333333\] { background-color: var(--surface-2) !important; }
+
+/* Borders — map dark borders to light theme border */
+:root:not(.dark) .border-\[\#1A1A1A\] { border-color: var(--border) !important; }
+:root:not(.dark) .border-\[\#1E1E1E\] { border-color: var(--border) !important; }
+:root:not(.dark) .border-\[\#2A2A2A\] { border-color: var(--border) !important; }
+:root:not(.dark) .border-\[\#2E2E2E\] { border-color: var(--border) !important; }
+:root:not(.dark) .border-\[\#333\]    { border-color: var(--border) !important; }
+:root:not(.dark) .border-\[\#333333\] { border-color: var(--border) !important; }
+:root:not(.dark) .border-\[\#3A3A3A\] { border-color: var(--border) !important; }
+
+/* Table row separators inside white cards — make them very subtle */
+:root:not(.dark) table .border-\[\#1A1A1A\],
+:root:not(.dark) table .border-\[\#1E1E1E\] { border-color: var(--border) !important; }
+
+/* Text — remap all hardcoded grays to readable dark values in light mode */
+:root:not(.dark) .text-\[\#333\]    { color: var(--text-primary) !important; }
+:root:not(.dark) .text-\[\#333333\] { color: var(--text-primary) !important; }
+:root:not(.dark) .text-\[\#444\]    { color: var(--text-secondary) !important; }
+:root:not(.dark) .text-\[\#555\]    { color: var(--text-secondary) !important; }
+:root:not(.dark) .text-\[\#555555\] { color: var(--text-secondary) !important; }
+:root:not(.dark) .text-\[\#666\]    { color: var(--text-secondary) !important; }
+:root:not(.dark) .text-\[\#777\]    { color: var(--text-muted) !important; }
+:root:not(.dark) .text-\[\#888\]    { color: var(--text-muted) !important; }
+:root:not(.dark) .text-\[\#888888\] { color: var(--text-muted) !important; }
+:root:not(.dark) .text-\[\#999\]    { color: var(--text-muted) !important; }
+:root:not(.dark) .text-\[\#999999\] { color: var(--text-muted) !important; }
+:root:not(.dark) .text-\[\#A0A0A0\] { color: var(--text-muted) !important; }
+:root:not(.dark) .text-\[\#C0C0C0\] { color: var(--text-secondary) !important; }
+:root:not(.dark) .text-\[\#C0B8AF\] { color: var(--text-secondary) !important; }
+:root:not(.dark) .text-\[\#D0D0D0\] { color: var(--text-secondary) !important; }
+:root:not(.dark) .text-\[\#D1C9C0\] { color: var(--text-secondary) !important; }
+:root:not(.dark) .text-\[\#E0E0E0\] { color: var(--text-secondary) !important; }
+
+/* Hover backgrounds */
+:root:not(.dark) .hover\:bg-\[\#111\]:hover      { background-color: var(--surface) !important; }
+:root:not(.dark) .hover\:bg-\[\#161616\]:hover   { background-color: var(--surface-2) !important; }
+:root:not(.dark) .hover\:bg-\[\#1A1A1A\]:hover   { background-color: var(--surface-2) !important; }
+:root:not(.dark) .hover\:bg-\[\#1E1E1E\]:hover   { background-color: var(--surface-2) !important; }
+:root:not(.dark) .hover\:bg-\[\#222\]:hover       { background-color: var(--surface-2) !important; }
+:root:not(.dark) .hover\:bg-\[\#2A2A2A\]:hover    { background-color: var(--surface-2) !important; }
+
+/* bg with opacity modifiers — e.g. bg-[#111]/60 (locked overlays) */
+:root:not(.dark) .bg-\[\#111\]\/60  { background-color: rgb(240 239 233 / 0.85) !important; }
+:root:not(.dark) .bg-\[\#111\]\/70  { background-color: rgb(240 239 233 / 0.9) !important; }
+:root:not(.dark) .bg-\[\#111\]\/80  { background-color: rgb(240 239 233 / 0.93) !important; }
+:root:not(.dark) .bg-\[\#0A0A0A\]\/70 { background-color: rgb(240 239 233 / 0.9) !important; }
+
+/* text-white → theme-aware primary text (still readable on accent/colored bg) */
+:root:not(.dark) .text-white { color: var(--text-primary) !important; }
+:root:not(.dark) .hover\:text-white:hover { color: var(--text-primary) !important; }
+
+/* Placeholder text on light inputs */
+:root:not(.dark) .placeholder-\[\#333\]::placeholder { color: var(--text-muted) !important; }
+:root:not(.dark) .placeholder-\[\#444\]::placeholder { color: var(--text-muted) !important; }
+:root:not(.dark) .placeholder-\[\#555\]::placeholder { color: var(--text-muted) !important; }
+
+/* Date input calendar icon — dark mode inverts icon white; light mode keep default */
+:root:not(.dark) input[type="date"]::-webkit-calendar-picker-indicator { filter: none; }
+
+/* Divide colors — remove visible row separators in light mode */
+:root:not(.dark) .divide-\[\#1A1A1A\] > :not([hidden]) ~ :not([hidden]) { border-color: transparent !important; }
+:root:not(.dark) .divide-\[\#2A2A2A\] > :not([hidden]) ~ :not([hidden]) { border-color: transparent !important; }
+:root:not(.dark) .divide-\[\#1E1E1E\] > :not([hidden]) ~ :not([hidden]) { border-color: transparent !important; }
+
+/* SEO score gauge — SVG inline fill overridden via CSS fill property */
+:root:not(.dark) .score-gauge .gauge-score { fill: var(--text-primary); }
+:root:not(.dark) .score-gauge .gauge-sub   { fill: var(--text-muted); }
+:root:not(.dark) .score-gauge .gauge-track { stroke: var(--border); }
+.dark .score-gauge .gauge-score { fill: #FFFFFF; }
+.dark .score-gauge .gauge-sub   { fill: #555555; }
+.dark .score-gauge .gauge-track { stroke: #2A2A2A; }
+
+/* ── Tailwind semantic colors — too light on cream; remap to dark readable versions ── */
+/* Yellow / amber */
+:root:not(.dark) .text-yellow-400   { color: #92610A !important; }
+:root:not(.dark) .text-yellow-300   { color: #92610A !important; }
+
+/* Green / emerald */
+:root:not(.dark) .text-green-400    { color: #166534 !important; }
+:root:not(.dark) .text-green-300    { color: #166534 !important; }
+:root:not(.dark) .text-emerald-400  { color: #065F46 !important; }
+
+/* Blue */
+:root:not(.dark) .text-blue-400     { color: #1E40AF !important; }
+:root:not(.dark) .text-blue-300     { color: #1E40AF !important; }
+
+/* Red */
+:root:not(.dark) .text-red-400      { color: #9B1C1C !important; }
+:root:not(.dark) .text-red-300      { color: #9B1C1C !important; }
+
+/* Semantic badge backgrounds — darken for light mode readability */
+:root:not(.dark) .bg-yellow-900\/10  { background-color: rgba(234, 179, 8, 0.12) !important; }
+:root:not(.dark) .bg-yellow-900\/20  { background-color: rgba(234, 179, 8, 0.15) !important; }
+:root:not(.dark) .bg-yellow-900\/30  { background-color: rgba(234, 179, 8, 0.18) !important; }
+:root:not(.dark) .bg-green-900\/10   { background-color: rgba(22, 163, 74, 0.10) !important; }
+:root:not(.dark) .bg-green-900\/20   { background-color: rgba(22, 163, 74, 0.12) !important; }
+:root:not(.dark) .bg-green-900\/30   { background-color: rgba(22, 163, 74, 0.14) !important; }
+:root:not(.dark) .bg-blue-900\/20    { background-color: rgba(37, 99, 235, 0.10) !important; }
+:root:not(.dark) .bg-blue-900\/30    { background-color: rgba(37, 99, 235, 0.12) !important; }
+:root:not(.dark) .bg-red-900\/20     { background-color: rgba(185, 28, 28, 0.10) !important; }
+:root:not(.dark) .bg-red-900\/30     { background-color: rgba(185, 28, 28, 0.12) !important; }
+:root:not(.dark) .bg-red-900\/50     { background-color: rgba(185, 28, 28, 0.15) !important; }
+:root:not(.dark) .bg-emerald-900\/20 { background-color: rgba(6, 95, 70, 0.10) !important; }
+
+/* Semantic badge borders */
+:root:not(.dark) .border-yellow-900\/30  { border-color: rgba(161, 98, 7, 0.35) !important; }
+:root:not(.dark) .border-green-900\/30   { border-color: rgba(22, 101, 52, 0.35) !important; }
+:root:not(.dark) .border-blue-900\/30    { border-color: rgba(30, 58, 138, 0.30) !important; }
+:root:not(.dark) .border-red-900\/30     { border-color: rgba(127, 29, 29, 0.30) !important; }
+:root:not(.dark) .border-red-900\/50     { border-color: rgba(127, 29, 29, 0.40) !important; }
+:root:not(.dark) .border-emerald-900\/30 { border-color: rgba(6, 78, 59, 0.30) !important; }
