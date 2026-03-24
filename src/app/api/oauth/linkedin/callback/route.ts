@@ -3,13 +3,15 @@ import { connectDB } from '@/lib/mongodb'
 import User from '@/models/User'
 import axios from 'axios'
 
+const BASE_URL = () => (process.env.NEXTAUTH_URL || '').trim()
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const code = searchParams.get('code')
   const userId = searchParams.get('state')
 
   if (!code || !userId) {
-    return Response.redirect(`${process.env.NEXTAUTH_URL}/settings?error=linkedin_oauth_failed`)
+    return Response.redirect(`${BASE_URL()}/settings?error=linkedin_oauth_failed`)
   }
 
   try {
@@ -18,7 +20,7 @@ export async function GET(req: NextRequest) {
       new URLSearchParams({
         grant_type: 'authorization_code',
         code,
-        redirect_uri: `${process.env.NEXTAUTH_URL}/api/oauth/linkedin/callback`,
+        redirect_uri: `${BASE_URL()}/api/oauth/linkedin/callback`,
         client_id: process.env.LINKEDIN_CLIENT_ID!,
         client_secret: process.env.LINKEDIN_CLIENT_SECRET!,
       }),
@@ -39,9 +41,9 @@ export async function GET(req: NextRequest) {
       'connections.linkedin': { accessToken, profileId, profileName },
     })
 
-    return Response.redirect(`${process.env.NEXTAUTH_URL}/settings?connected=linkedin`)
+    return Response.redirect(`${BASE_URL()}/settings?connected=linkedin`)
   } catch (err) {
     console.error('[linkedin/callback]', err)
-    return Response.redirect(`${process.env.NEXTAUTH_URL}/settings?error=linkedin_oauth_failed`)
+    return Response.redirect(`${BASE_URL()}/settings?error=linkedin_oauth_failed`)
   }
 }
