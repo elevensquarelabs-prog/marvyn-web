@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import { connectDB } from '@/lib/mongodb'
 import Brand from '@/models/Brand'
+import User from '@/models/User'
 import { SessionProvider } from '@/components/providers/SessionProvider'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { MissionControl } from '@/components/layout/MissionControl'
@@ -17,7 +18,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   try {
     await connectDB()
-    const brand = await Brand.findOne({ userId: session.user.id })
+    const [brand, user] = await Promise.all([
+      Brand.findOne({ userId: session.user.id }),
+      User.findById(session.user.id).select('mustResetPassword').lean(),
+    ])
+    if ((user as { mustResetPassword?: boolean } | null)?.mustResetPassword) redirect('/reset-password')
     if (!brand?.name) redirect('/onboarding')
   } catch {
     // DB unavailable — don't block the user, let them through

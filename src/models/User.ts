@@ -10,7 +10,7 @@ export interface IUser extends Document {
     razorpayCustomerId?: string
     razorpaySubscriptionId?: string
     currentPeriodEnd?: Date
-    plan?: 'monthly' | 'yearly'
+    plan?: 'monthly' | 'yearly' | 'beta'
   }
   connections: {
     meta?: { accessToken?: string; accountId?: string; accountName?: string }
@@ -31,6 +31,7 @@ export interface IUser extends Document {
     emailsGenerated?: number
     copyAssetsGenerated?: number
   }
+  mustResetPassword?: boolean
   createdAt: Date
 }
 
@@ -44,7 +45,7 @@ const UserSchema = new Schema<IUser>({
     razorpayCustomerId: String,
     razorpaySubscriptionId: String,
     currentPeriodEnd: Date,
-    plan: { type: String, enum: ['monthly', 'yearly'] },
+    plan: { type: String, enum: ['monthly', 'yearly', 'beta'] },
   },
   connections: {
     meta: { accessToken: String, accountId: String, accountName: String },
@@ -65,6 +66,7 @@ const UserSchema = new Schema<IUser>({
     emailsGenerated: { type: Number, default: 0 },
     copyAssetsGenerated: { type: Number, default: 0 },
   },
+  mustResetPassword: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
 })
 

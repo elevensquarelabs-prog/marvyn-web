@@ -1,32 +1,40 @@
 'use client'
 
 import { useState } from 'react'
-import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/shared/Button'
 
-export default function LoginPage() {
-  const [email, setEmail] = useState('')
+export default function ResetPasswordPage() {
+  const router = useRouter()
   const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    if (password !== confirm) {
+      setError('Passwords do not match')
+      return
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters')
+      return
+    }
     setLoading(true)
     try {
-      const res = await signIn('credentials', {
-        email,
-        password,
-        redirect: false,
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPassword: password }),
       })
-      if (res?.error) {
-        setError('Invalid email or password')
-      } else {
-        router.push('/dashboard')
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error || 'Failed to reset password')
+        return
       }
+      router.replace('/dashboard')
     } finally {
       setLoading(false)
     }
@@ -35,38 +43,38 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0A0A0A]">
       <div className="w-full max-w-sm px-4">
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="w-10 h-10 bg-[#DA7756] rounded-xl flex items-center justify-center text-white font-bold text-lg mx-auto mb-3">
             M
           </div>
-          <h1 className="text-xl font-semibold text-white">Welcome back</h1>
-          <p className="text-sm text-[#555] mt-1">Sign in to Marvyn</p>
+          <h1 className="text-xl font-semibold text-white">Set your password</h1>
+          <p className="text-sm text-[#555] mt-1">Choose a new password to continue</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="text-xs text-[#555] block mb-1.5">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-              className="w-full bg-[#111] border border-[#1E1E1E] rounded-lg px-3 py-2.5 text-sm text-white placeholder-[#555] outline-none focus:border-[#DA7756]/60 transition-colors"
-              placeholder="you@company.com"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-[#555] block mb-1.5">Password</label>
+            <label className="text-xs text-[#555] block mb-1.5">New password</label>
             <input
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
-              autoComplete="current-password"
+              minLength={8}
+              autoComplete="new-password"
               className="w-full bg-[#111] border border-[#1E1E1E] rounded-lg px-3 py-2.5 text-sm text-white placeholder-[#555] outline-none focus:border-[#DA7756]/60 transition-colors"
-              placeholder="••••••••"
+              placeholder="Min 8 characters"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-[#555] block mb-1.5">Confirm password</label>
+            <input
+              type="password"
+              value={confirm}
+              onChange={e => setConfirm(e.target.value)}
+              required
+              autoComplete="new-password"
+              className="w-full bg-[#111] border border-[#1E1E1E] rounded-lg px-3 py-2.5 text-sm text-white placeholder-[#555] outline-none focus:border-[#DA7756]/60 transition-colors"
+              placeholder="Repeat password"
             />
           </div>
 
@@ -75,17 +83,9 @@ export default function LoginPage() {
           )}
 
           <Button type="submit" loading={loading} className="w-full mt-1" size="md">
-            Sign in
+            Set password & continue
           </Button>
         </form>
-
-        <p className="text-center text-xs text-[#555] mt-6">
-          Want to join?{' '}
-          <a href="/#beta-form" className="text-[#DA7756] hover:underline">Request beta access</a>
-        </p>
-        <p className="text-center text-[11px] text-[#333] mt-2">
-          Forgot password? Contact <span className="text-[#444]">raayed32@gmail.com</span>
-        </p>
       </div>
     </div>
   )

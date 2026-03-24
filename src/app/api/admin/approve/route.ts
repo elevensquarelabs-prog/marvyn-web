@@ -8,6 +8,7 @@ import { randomBytes } from 'crypto'
 import bcrypt from 'bcryptjs'
 
 const SUPER_ADMIN_EMAIL = 'raayed32@gmail.com'
+const BETA_EXPIRY = new Date('2099-12-31')
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -21,29 +22,42 @@ export async function POST(req: NextRequest) {
   const betaReq = await BetaRequest.findById(betaRequestId)
   if (!betaReq) return Response.json({ error: 'Not found' }, { status: 404 })
 
-  // Check if user already exists
-  const existing = await User.findOne({ email: betaReq.email })
-  if (existing) {
-    await BetaRequest.findByIdAndUpdate(betaRequestId, { status: 'approved' })
-    return Response.json({ success: true, message: 'User already exists', userId: existing._id })
-  }
-
   const temporaryPassword = randomBytes(8).toString('hex')
   const hashedPassword = await bcrypt.hash(temporaryPassword, 10)
+
+  // If user already exists, upgrade their subscription and reset password
+  const existing = await User.findOne({ email: betaReq.email })
+  if (existing) {
+    await User.findByIdAndUpdate(existing._id, {
+      password: hashedPassword,
+      mustResetPassword: true,
+      'subscription.status': 'active',
+      'subscription.plan': 'beta',
+      'subscription.currentPeriodEnd': BETA_EXPIRY,
+    })
+    await BetaRequest.findByIdAndUpdate(betaRequestId, { status: 'approved' })
+    console.log(`[admin/approve] Upgraded existing user ${betaReq.email} — temp password: ${temporaryPassword}`)
+    return Response.json({
+      success: true,
+      userId: existing._id,
+      email: betaReq.email,
+      temporaryPassword,
+    })
+  }
 
   const user = await User.create({
     name: betaReq.name,
     email: betaReq.email,
     password: hashedPassword,
+    mustResetPassword: true,
     subscription: {
       status: 'active',
       plan: 'beta',
-      currentPeriodEnd: new Date('2099-12-31'),
+      currentPeriodEnd: BETA_EXPIRY,
     },
   })
 
   await BetaRequest.findByIdAndUpdate(betaRequestId, { status: 'approved' })
-
   console.log(`[admin/approve] Approved ${betaReq.email} — temp password: ${temporaryPassword}`)
 
   return Response.json({

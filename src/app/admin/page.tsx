@@ -43,7 +43,7 @@ export default function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
-  const [approvedCredentials, setApprovedCredentials] = useState<{ email: string; password: string } | null>(null)
+  const [approvedCredentials, setApprovedCredentials] = useState<{ email: string; password: string; label?: string } | null>(null)
   const [betaFilter, setBetaFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending')
   const [userSearch, setUserSearch] = useState('')
 
@@ -75,19 +75,46 @@ export default function AdminPage() {
 
   async function approveBeta(id: string) {
     setActionLoading(id)
-    const res = await fetch('/api/admin/approve', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ betaRequestId: id }),
-    })
-    const data = await res.json()
-    if (data.success) {
-      if (data.temporaryPassword) {
-        setApprovedCredentials({ email: data.email, password: data.temporaryPassword })
+    try {
+      const res = await fetch('/api/admin/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ betaRequestId: id }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setApprovedCredentials({ email: data.email, password: data.temporaryPassword, label: 'User approved — share these credentials' })
+        setBetaRequests(prev => prev.map(r => r._id === id ? { ...r, status: 'approved' } : r))
+        await fetchAll()
+      } else {
+        alert(data.error || 'Approve failed')
       }
-      setBetaRequests(prev => prev.map(r => r._id === id ? { ...r, status: 'approved' } : r))
+    } catch (err) {
+      alert('Network error: ' + String(err))
+    } finally {
+      setActionLoading(null)
     }
-    setActionLoading(null)
+  }
+
+  async function resetUserPassword(userId: string) {
+    setActionLoading('reset-' + userId)
+    try {
+      const res = await fetch('/api/admin/reset-user-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setApprovedCredentials({ email: data.email, password: data.temporaryPassword, label: 'Password reset — share new credentials' })
+      } else {
+        alert(data.error || 'Reset failed')
+      }
+    } catch (err) {
+      alert('Network error: ' + String(err))
+    } finally {
+      setActionLoading(null)
+    }
   }
 
   async function rejectBeta(id: string) {
@@ -156,7 +183,7 @@ export default function AdminPage() {
           <div className="mb-6 bg-green-900/20 border border-green-500/30 rounded-xl p-4">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm font-medium text-green-400 mb-1">User approved — send these credentials</p>
+                <p className="text-sm font-medium text-green-400 mb-1">{approvedCredentials.label || 'Share these credentials'}</p>
                 <p className="text-xs text-[#999]">Email: <span className="text-white font-mono">{approvedCredentials.email}</span></p>
                 <p className="text-xs text-[#999] mt-0.5">Temp password: <span className="text-white font-mono">{approvedCredentials.password}</span></p>
               </div>
@@ -326,17 +353,26 @@ export default function AdminPage() {
                           : '—'}
                       </td>
                       <td className="py-3">
-                        <button
-                          onClick={() => toggleUserAccess(user._id, user.subscription.status)}
-                          disabled={actionLoading === user._id}
-                          className={`text-xs px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
-                            user.subscription.status === 'revoked'
-                              ? 'bg-green-500/10 hover:bg-green-500/20 text-green-400 border-green-500/20'
-                              : 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20'
-                          }`}
-                        >
-                          {actionLoading === user._id ? '...' : user.subscription.status === 'revoked' ? 'Restore' : 'Revoke'}
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => resetUserPassword(user._id)}
+                            disabled={!!actionLoading}
+                            className="text-xs px-2 py-1.5 rounded-lg border border-[#1E1E1E] text-[#555] hover:text-white transition-colors disabled:opacity-50 whitespace-nowrap"
+                          >
+                            {actionLoading === 'reset-' + user._id ? '...' : 'Reset Pwd'}
+                          </button>
+                          <button
+                            onClick={() => toggleUserAccess(user._id, user.subscription.status)}
+                            disabled={!!actionLoading}
+                            className={`text-xs px-2 py-1.5 rounded-lg border transition-colors disabled:opacity-50 whitespace-nowrap ${
+                              user.subscription.status === 'revoked'
+                                ? 'bg-green-500/10 hover:bg-green-500/20 text-green-400 border-green-500/20'
+                                : 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20'
+                            }`}
+                          >
+                            {actionLoading === user._id ? '...' : user.subscription.status === 'revoked' ? 'Restore' : 'Revoke'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
