@@ -6,6 +6,7 @@ import BetaRequest from '@/models/BetaRequest'
 import User from '@/models/User'
 import { randomBytes } from 'crypto'
 import bcrypt from 'bcryptjs'
+import { sendWelcomeEmail } from '@/lib/email'
 
 const SUPER_ADMIN_EMAIL = 'raayed32@gmail.com'
 const BETA_EXPIRY = new Date('2099-12-31')
@@ -59,6 +60,7 @@ export async function POST(req: NextRequest) {
 
   await BetaRequest.findByIdAndUpdate(betaRequestId, { status: 'approved' })
   console.log(`[admin/approve] Approved ${betaReq.email} — temp password: ${temporaryPassword}`)
+  sendWelcomeEmail(betaReq.email, betaReq.name).catch(() => {})
 
   return Response.json({
     success: true,

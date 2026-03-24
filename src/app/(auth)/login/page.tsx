@@ -83,8 +83,8 @@ export default function LoginPage() {
           Want to join?{' '}
           <a href="/#beta-form" className="text-[#DA7756] hover:underline">Request beta access</a>
         </p>
-        <p className="text-center text-[11px] text-[#333] mt-2">
-          Forgot password? Contact <span className="text-[#444]">raayed32@gmail.com</span>
+        <p className="text-center text-[11px] text-[#555] mt-2">
+          <a href="/forgot-password" className="hover:text-[#DA7756] transition-colors">Forgot password?</a>
         </p>
       </div>
     </div>

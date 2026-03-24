@@ -3,6 +3,9 @@ import bcrypt from 'bcryptjs'
 import { connectDB } from '@/lib/mongodb'
 import User from '@/models/User'
 import Brand from '@/models/Brand'
+import Token from '@/models/Token'
+import { sendWelcomeEmail, sendVerificationEmail } from '@/lib/email'
+import { randomBytes } from 'crypto'
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,6 +33,19 @@ export async function POST(req: NextRequest) {
     })
 
     await Brand.create({ userId: user._id })
+
+    // Send welcome + verification emails (non-blocking)
+    const verifyToken = randomBytes(32).toString('hex')
+    await Token.create({
+      userId: user._id,
+      email: user.email,
+      token: verifyToken,
+      type: 'email_verification',
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    }).catch(() => {})
+
+    sendWelcomeEmail(user.email, user.name).catch(() => {})
+    sendVerificationEmail(user.email, verifyToken).catch(() => {})
 
     return Response.json({ success: true, userId: user._id.toString() }, { status: 201 })
   } catch (err) {

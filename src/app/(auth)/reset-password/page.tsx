@@ -1,15 +1,22 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/shared/Button'
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const token = searchParams.get('token') // present when coming from email link
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // If no token and no session-based reset, check if we even need to be here
+  useEffect(() => {
+    if (token) return // email link flow — always valid to show the form
+  }, [token])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -27,14 +34,15 @@ export default function ResetPasswordPage() {
       const res = await fetch('/api/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ newPassword: password }),
+        body: JSON.stringify({ newPassword: password, token: token || undefined }),
       })
       const data = await res.json()
       if (!res.ok) {
         setError(data.error || 'Failed to reset password')
         return
       }
-      router.replace('/dashboard')
+      // Token flow: redirect to login; session flow: redirect to dashboard
+      router.replace(token ? '/login?reset=1' : '/dashboard')
     } finally {
       setLoading(false)
     }
@@ -47,8 +55,12 @@ export default function ResetPasswordPage() {
           <div className="w-10 h-10 bg-[#DA7756] rounded-xl flex items-center justify-center text-white font-bold text-lg mx-auto mb-3">
             M
           </div>
-          <h1 className="text-xl font-semibold text-white">Set your password</h1>
-          <p className="text-sm text-[#555] mt-1">Choose a new password to continue</p>
+          <h1 className="text-xl font-semibold text-white">
+            {token ? 'Reset your password' : 'Set your password'}
+          </h1>
+          <p className="text-sm text-[#555] mt-1">
+            {token ? 'Choose a new password to continue' : 'Your account requires a new password'}
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -83,10 +95,18 @@ export default function ResetPasswordPage() {
           )}
 
           <Button type="submit" loading={loading} className="w-full mt-1" size="md">
-            Set password & continue
+            {token ? 'Reset password' : 'Set password & continue'}
           </Button>
         </form>
       </div>
     </div>
+  )
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense>
+      <ResetPasswordForm />
+    </Suspense>
   )
 }

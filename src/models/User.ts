@@ -32,6 +32,7 @@ export interface IUser extends Document {
     copyAssetsGenerated?: number
   }
   mustResetPassword?: boolean
+  emailVerified?: Date
   createdAt: Date
 }
 
@@ -67,6 +68,7 @@ const UserSchema = new Schema<IUser>({
     copyAssetsGenerated: { type: Number, default: 0 },
   },
   mustResetPassword: { type: Boolean, default: false },
+  emailVerified: { type: Date },
   createdAt: { type: Date, default: Date.now },
 })
 
