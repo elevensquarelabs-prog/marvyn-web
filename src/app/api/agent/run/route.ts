@@ -12,14 +12,21 @@ import mongoose from 'mongoose'
 import OpenAI from 'openai'
 import { getSkillByChipId } from '@/lib/skills'
 
-const openai = new OpenAI({
-  baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: process.env.OPENROUTER_API_KEY,
-  defaultHeaders: {
-    'HTTP-Referer': process.env.NEXTAUTH_URL || 'http://localhost:3000',
-    'X-Title': 'Marvyn Marketing OS',
-  },
-})
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _openai: any = null
+function getOpenAI() {
+  if (!_openai) {
+    _openai = new OpenAI({
+      baseURL: 'https://openrouter.ai/api/v1',
+      apiKey: process.env.OPENROUTER_API_KEY || 'placeholder',
+      defaultHeaders: {
+        'HTTP-Referer': process.env.NEXTAUTH_URL || 'http://localhost:3000',
+        'X-Title': 'Marvyn Marketing OS',
+      },
+    })
+  }
+  return _openai
+}
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -132,7 +139,7 @@ Be concise, specific, and actionable. Use bullet points when listing things. Alw
         const historyMsgs = (chatSession.messages.slice(-11, -1) as { role: 'user' | 'assistant'; content: string }[])
           .map(m => ({ role: m.role, content: m.content }))
 
-        const aiStream = await openai.chat.completions.create({
+        const aiStream = await getOpenAI().chat.completions.create({
           model: 'anthropic/claude-sonnet-4-6',
           messages: [
             { role: 'system', content: finalSystemPrompt },
