@@ -49,6 +49,10 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (status === 'loading') return
+    if (status === 'unauthenticated') {
+      router.replace('/login')
+      return
+    }
     if (!session?.user?.email || !ADMIN_EMAILS.includes(session.user.email)) {
       router.replace('/')
       return

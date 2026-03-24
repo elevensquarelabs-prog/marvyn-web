@@ -81,8 +81,8 @@ export default function LoginPage() {
         </form>
 
         <p className="text-center text-xs text-[#555] mt-6">
-          Don&apos;t have an account?{' '}
-          <Link href="/signup" className="text-[#DA7756] hover:underline">Start free trial</Link>
+          Want to join?{' '}
+          <a href="/#beta-form" className="text-[#DA7756] hover:underline">Request beta access</a>
         </p>
       </div>
     </div>
