@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 
-const ADMIN_EMAILS = ['raayed32@gmail.com']
+const SUPER_ADMIN_EMAIL = 'raayed32@gmail.com'
 
 interface BetaRequest {
   _id: string
@@ -53,7 +53,7 @@ export default function AdminPage() {
       router.replace('/login')
       return
     }
-    if (!session?.user?.email || !ADMIN_EMAILS.includes(session.user.email)) {
+    if (session?.user?.email !== SUPER_ADMIN_EMAIL) {
       router.replace('/')
       return
     }
@@ -128,7 +128,7 @@ export default function AdminPage() {
     )
   }
 
-  if (!session?.user?.email || !ADMIN_EMAILS.includes(session.user.email)) {
+  if (session?.user?.email !== SUPER_ADMIN_EMAIL) {
     return null
   }
 

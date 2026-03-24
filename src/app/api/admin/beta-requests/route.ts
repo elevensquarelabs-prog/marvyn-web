@@ -4,12 +4,12 @@ import { authOptions } from '@/lib/auth'
 import { connectDB } from '@/lib/mongodb'
 import BetaRequest from '@/models/BetaRequest'
 
-const ADMIN_EMAILS = ['raayed32@gmail.com']
+const SUPER_ADMIN_EMAIL = 'raayed32@gmail.com'
 
 export async function GET() {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.email || !ADMIN_EMAILS.includes(session.user.email)) {
-    return Response.json({ error: 'Forbidden' }, { status: 403 })
+  if (!session || session.user?.email !== SUPER_ADMIN_EMAIL) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
   await connectDB()
   const requests = await BetaRequest.find().sort({ createdAt: -1 }).lean()
@@ -18,8 +18,8 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.email || !ADMIN_EMAILS.includes(session.user.email)) {
-    return Response.json({ error: 'Forbidden' }, { status: 403 })
+  if (!session || session.user?.email !== SUPER_ADMIN_EMAIL) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
   await connectDB()
   const { id, status } = await req.json()

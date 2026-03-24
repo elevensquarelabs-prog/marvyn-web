@@ -137,15 +137,11 @@ export function Sidebar() {
       </div>
 
       {/* Subscription badge */}
-      <div className="px-4 py-2.5">
-        {sub === 'active' ? (
-          <span className="text-xs px-2 py-0.5 rounded bg-[#DA7756]/20 text-[#DA7756] font-medium">Pro</span>
-        ) : sub === 'trial' ? (
-          <span className="text-xs px-2 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text-secondary)]">Trial</span>
-        ) : (
-          <span className="text-xs px-2 py-0.5 rounded bg-red-900/30 text-red-400">Expired</span>
-        )}
-      </div>
+      {sub === 'active' && (
+        <div className="px-4 py-2.5">
+          <span className="text-xs px-2 py-0.5 rounded bg-[#DA7756]/20 text-[#DA7756] font-medium">Beta</span>
+        </div>
+      )}
 
       {/* Nav */}
       <nav className="flex-1 px-2 py-2 space-y-0.5">
