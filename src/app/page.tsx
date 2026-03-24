@@ -39,7 +39,7 @@ function Nav() {
           <span className="text-white font-semibold text-base tracking-tight">Marvyn</span>
         </Link>
         <div className="hidden md:flex items-center gap-8">
-          {['Features', 'Pricing', 'About'].map(item => (
+          {['Features', 'About'].map(item => (
             <a
               key={item}
               href={`#${item.toLowerCase()}`}
@@ -53,12 +53,12 @@ function Nav() {
           <Link href="/login" className="text-sm text-[#A0A0A0] hover:text-white transition-colors px-3 py-1.5">
             Sign in
           </Link>
-          <Link
-            href="/signup"
+          <a
+            href="#beta-form"
             className="text-sm font-medium bg-[#DA7756] hover:bg-[#C4633F] text-white px-4 py-2 rounded-lg transition-colors"
           >
-            Start free trial
-          </Link>
+            Request Beta Access
+          </a>
         </div>
       </div>
     </nav>
@@ -98,12 +98,12 @@ function Hero() {
 
         {/* CTAs */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-5">
-          <Link
-            href="/signup"
+          <a
+            href="#beta-form"
             className="px-8 py-3.5 bg-[#DA7756] hover:bg-[#C4633F] text-white font-semibold rounded-xl text-base transition-all hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(218,119,86,0.35)]"
           >
-            Start 14-day free trial
-          </Link>
+            Request Beta Access →
+          </a>
           <a
             href="#features"
             className="px-8 py-3.5 border border-white/10 text-[#A0A0A0] hover:text-white hover:border-white/20 font-medium rounded-xl text-base transition-colors"
@@ -111,7 +111,7 @@ function Hero() {
             See how it works →
           </a>
         </div>
-        <p className="text-xs text-[#444] tracking-wide">No credit card required · Free for 14 days · Cancel anytime</p>
+        <p className="text-xs text-[#444] tracking-wide">Limited spots · Closed beta · Apply to get early access</p>
 
         {/* Dashboard mockup */}
         <div className="relative mt-16 mx-auto max-w-5xl">
@@ -325,7 +325,7 @@ function Pricing() {
   ]
 
   return (
-    <section id="pricing" className="py-24 px-6 border-t border-white/5">
+    <section id="pricing" className="hidden">
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight mb-4">Simple, honest pricing</h2>
@@ -445,28 +445,98 @@ function Testimonials() {
   )
 }
 
-// ─── Final CTA ────────────────────────────────────────────────────────────────
+// ─── Beta Form ────────────────────────────────────────────────────────────────
 
-function FinalCTA() {
+function BetaForm() {
+  const [betaSubmitted, setBetaSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleBetaSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setSubmitting(true)
+    const form = e.currentTarget
+    const data = Object.fromEntries(new FormData(form))
+    try {
+      await fetch('/api/beta-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      setBetaSubmitted(true)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
-    <section className="py-32 px-6 border-t border-white/5 relative overflow-hidden">
+    <section id="beta-form" className="py-24 px-6 border-t border-white/5 relative overflow-hidden">
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-[#DA7756]/8 rounded-full blur-[100px]" />
       </div>
-      <div className="relative max-w-2xl mx-auto text-center">
-        <h2 className="text-4xl md:text-5xl font-black text-white tracking-tight mb-5">
-          Ready to transform<br />your marketing?
-        </h2>
-        <p className="text-[#606060] text-lg mb-10">
-          Start your free 14-day trial. No credit card required.
+      <div className="relative max-w-xl mx-auto text-center">
+        <div className="inline-block bg-[#DA7756]/10 border border-[#DA7756]/30 rounded-full px-4 py-1 text-[#DA7756] text-sm mb-6">
+          Closed Beta
+        </div>
+        <h2 className="text-3xl font-bold text-white mb-4">Request Early Access</h2>
+        <p className="text-[#606060] mb-8">
+          We&apos;re onboarding a limited number of marketing teams.
+          Tell us about yourself and we&apos;ll be in touch.
         </p>
-        <Link
-          href="/signup"
-          className="inline-flex items-center gap-2 px-10 py-4 bg-[#DA7756] hover:bg-[#C4633F] text-white font-semibold rounded-xl text-lg transition-all hover:scale-[1.02] hover:shadow-[0_0_40px_rgba(218,119,86,0.4)]"
-        >
-          Get started free
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 9h12M10.5 4.5L15 9l-4.5 4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </Link>
+
+        {betaSubmitted ? (
+          <div className="p-6 bg-green-500/10 border border-green-500/30 rounded-2xl text-green-400">
+            <p className="text-lg font-semibold mb-1">✓ Request received!</p>
+            <p className="text-sm text-green-400/80">We&apos;ll review and get back to you within 48 hours.</p>
+          </div>
+        ) : (
+          <form onSubmit={handleBetaSubmit} className="space-y-4 text-left">
+            <div className="grid grid-cols-2 gap-4">
+              <input
+                name="name"
+                placeholder="Your name"
+                required
+                className="bg-[#111] border border-[#333] rounded-lg px-4 py-3 text-white placeholder-[#555] focus:border-[#DA7756] outline-none w-full text-sm"
+              />
+              <input
+                name="company"
+                placeholder="Company name"
+                required
+                className="bg-[#111] border border-[#333] rounded-lg px-4 py-3 text-white placeholder-[#555] focus:border-[#DA7756] outline-none w-full text-sm"
+              />
+            </div>
+            <input
+              name="email"
+              type="email"
+              placeholder="Work email"
+              required
+              className="bg-[#111] border border-[#333] rounded-lg px-4 py-3 text-white placeholder-[#555] focus:border-[#DA7756] outline-none w-full text-sm"
+            />
+            <select
+              name="team_size"
+              required
+              className="bg-[#111] border border-[#333] rounded-lg px-4 py-3 text-[#555] focus:border-[#DA7756] outline-none w-full text-sm"
+            >
+              <option value="">Team size</option>
+              <option value="1">Just me</option>
+              <option value="2-5">2–5 people</option>
+              <option value="6-20">6–20 people</option>
+              <option value="20+">20+ people</option>
+            </select>
+            <textarea
+              name="use_case"
+              placeholder="What marketing challenges are you trying to solve?"
+              rows={3}
+              className="bg-[#111] border border-[#333] rounded-lg px-4 py-3 text-white placeholder-[#555] focus:border-[#DA7756] outline-none w-full resize-none text-sm"
+            />
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full bg-[#DA7756] hover:bg-[#C4633F] disabled:opacity-60 text-white font-semibold py-3 rounded-lg transition-colors text-sm"
+            >
+              {submitting ? 'Submitting…' : 'Request Beta Access →'}
+            </button>
+          </form>
+        )}
       </div>
     </section>
   )
@@ -511,7 +581,7 @@ export default function LandingPage() {
       <HowItWorks />
       <Pricing />
       <Testimonials />
-      <FinalCTA />
+      <BetaForm />
       <Footer />
     </div>
   )

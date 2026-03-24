@@ -1,13 +1,20 @@
 import OpenAI from 'openai'
 
-const openai = new OpenAI({
-  baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: process.env.OPENROUTER_API_KEY,
-  defaultHeaders: {
-    'HTTP-Referer': process.env.NEXTAUTH_URL || 'http://localhost:3000',
-    'X-Title': 'Marvyn Marketing OS',
-  },
-})
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _openai: any = null
+function getOpenAI() {
+  if (!_openai) {
+    _openai = new OpenAI({
+      baseURL: 'https://openrouter.ai/api/v1',
+      apiKey: process.env.OPENROUTER_API_KEY || 'placeholder',
+      defaultHeaders: {
+        'HTTP-Referer': process.env.NEXTAUTH_URL || 'http://localhost:3000',
+        'X-Title': 'Marvyn Marketing OS',
+      },
+    })
+  }
+  return _openai
+}
 
 const models = {
   fast: 'minimax/minimax-m2.5',
@@ -28,7 +35,7 @@ export async function llm(
   system: string,
   complexity: Complexity = 'medium'
 ): Promise<string> {
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: models[complexity],
     messages: [
       { role: 'system', content: system },
@@ -44,7 +51,7 @@ export async function llmStream(
   system: string,
   complexity: Complexity = 'powerful'
 ) {
-  return openai.chat.completions.create({
+  return getOpenAI().chat.completions.create({
     model: models[complexity],
     messages: [
       { role: 'system', content: system },
@@ -55,4 +62,4 @@ export async function llmStream(
   })
 }
 
-export { openai }
+export { getOpenAI as openai }
