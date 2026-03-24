@@ -173,6 +173,11 @@ Be concise, specific, and actionable. Use bullet points when listing things. Alw
           console.error('[Agent] Failed to save response:', saveErr)
         }
 
+        await User.updateOne(
+          { _id: userId },
+          { $inc: { 'usage.totalAiCalls': 1 }, $set: { 'usage.lastActive': new Date() } }
+        ).catch(() => {})
+
         send({ type: 'done' })
         controller.close()
       } catch (err: unknown) {

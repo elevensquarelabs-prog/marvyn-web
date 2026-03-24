@@ -5,6 +5,7 @@ import { connectDB } from '@/lib/mongodb'
 import { llm } from '@/lib/llm'
 import SocialPost from '@/models/SocialPost'
 import Brand from '@/models/Brand'
+import User from '@/models/User'
 import { skills } from '@/lib/skills'
 
 export async function GET(req: NextRequest) {
@@ -67,6 +68,13 @@ Only return valid JSON.`
     } catch (e) {
       console.error('Social generation error:', e)
     }
+  }
+
+  if (posts.length > 0) {
+    await User.updateOne(
+      { _id: session.user.id },
+      { $inc: { 'usage.socialPostsGenerated': posts.length }, $set: { 'usage.lastActive': new Date() } }
+    ).catch(() => {})
   }
 
   return Response.json({ posts }, { status: 201 })

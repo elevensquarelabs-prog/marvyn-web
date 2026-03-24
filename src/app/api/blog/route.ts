@@ -5,6 +5,7 @@ import { connectDB } from '@/lib/mongodb'
 import { llm } from '@/lib/llm'
 import BlogPost from '@/models/BlogPost'
 import Brand from '@/models/Brand'
+import User from '@/models/User'
 import { skills } from '@/lib/skills'
 
 export async function GET(req: NextRequest) {
@@ -85,6 +86,11 @@ Only return valid JSON, no other text.`
   if (generatedPosts.length === 0) {
     return Response.json({ error: 'Generation failed — no posts were created. Check your OpenRouter API key and model availability.' }, { status: 500 })
   }
+
+  await User.updateOne(
+    { _id: session.user.id },
+    { $inc: { 'usage.blogPostsGenerated': generatedPosts.length }, $set: { 'usage.lastActive': new Date() } }
+  ).catch(() => {})
 
   return Response.json({ posts: generatedPosts }, { status: 201 })
 }

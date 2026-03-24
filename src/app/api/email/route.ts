@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { connectDB } from '@/lib/mongodb'
 import EmailSequence from '@/models/EmailSequence'
+import User from '@/models/User'
 
 export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -38,6 +39,11 @@ export async function POST(req: NextRequest) {
     emailCount,
     steps,
   })
+
+  await User.updateOne(
+    { _id: session.user.id },
+    { $inc: { 'usage.emailsGenerated': 1 }, $set: { 'usage.lastActive': new Date() } }
+  ).catch(() => {})
 
   return Response.json({ sequence })
 }

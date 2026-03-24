@@ -13,6 +13,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const sub = (session.user as { subscriptionStatus?: string })?.subscriptionStatus
   if (sub === 'expired') redirect('/billing')
+  if (sub === 'revoked') redirect('/login?error=revoked')
 
   try {
     await connectDB()

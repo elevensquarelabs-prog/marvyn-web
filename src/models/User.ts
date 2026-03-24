@@ -5,7 +5,7 @@ export interface IUser extends Document {
   email: string
   password: string
   subscription: {
-    status: 'trial' | 'active' | 'cancelled' | 'expired'
+    status: 'trial' | 'active' | 'cancelled' | 'expired' | 'revoked'
     trialEndsAt: Date
     razorpayCustomerId?: string
     razorpaySubscriptionId?: string
@@ -24,6 +24,12 @@ export interface IUser extends Document {
   usage: {
     tokensUsedThisMonth: number
     lastResetAt?: Date
+    totalAiCalls?: number
+    lastActive?: Date
+    blogPostsGenerated?: number
+    socialPostsGenerated?: number
+    emailsGenerated?: number
+    copyAssetsGenerated?: number
   }
   createdAt: Date
 }
@@ -33,7 +39,7 @@ const UserSchema = new Schema<IUser>({
   email: { type: String, unique: true, required: true, lowercase: true },
   password: { type: String, required: true },
   subscription: {
-    status: { type: String, enum: ['trial', 'active', 'cancelled', 'expired'], default: 'trial' },
+    status: { type: String, enum: ['trial', 'active', 'cancelled', 'expired', 'revoked'], default: 'trial' },
     trialEndsAt: { type: Date, default: () => new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) },
     razorpayCustomerId: String,
     razorpaySubscriptionId: String,
@@ -52,6 +58,12 @@ const UserSchema = new Schema<IUser>({
   usage: {
     tokensUsedThisMonth: { type: Number, default: 0 },
     lastResetAt: Date,
+    totalAiCalls: { type: Number, default: 0 },
+    lastActive: Date,
+    blogPostsGenerated: { type: Number, default: 0 },
+    socialPostsGenerated: { type: Number, default: 0 },
+    emailsGenerated: { type: Number, default: 0 },
+    copyAssetsGenerated: { type: Number, default: 0 },
   },
   createdAt: { type: Date, default: Date.now },
 })
