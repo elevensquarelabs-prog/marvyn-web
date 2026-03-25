@@ -2,7 +2,19 @@ import { NextRequest } from 'next/server'
 import { connectDB } from '@/lib/mongodb'
 import SocialPost from '@/models/SocialPost'
 import mongoose from 'mongoose'
+import axios from 'axios'
 import { publishToLinkedIn, publishToFacebook, publishToInstagram } from '@/lib/social-publish'
+
+// ── Config ────────────────────────────────────────────────────────────────────
+
+const MAX_RETRIES = 3
+const BATCH_SIZE = 50
+const STUCK_THRESHOLD_MINUTES = 10
+// Exponential backoff: retry 1 → 5min, retry 2 → 15min, retry 3 → 30min
+const BACKOFF_MINUTES: Record<number, number> = { 1: 5, 2: 15, 3: 30 }
+const INTER_CALL_DELAY_MS = 200
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 type UserConnections = {
   linkedin?: { accessToken?: string; profileId?: string; pageId?: string }
@@ -10,7 +22,7 @@ type UserConnections = {
   instagram?: { accountId?: string }
 }
 
-type DuePost = {
+type Candidate = {
   _id: mongoose.Types.ObjectId
   userId: mongoose.Types.ObjectId
   platform: string
@@ -19,45 +31,84 @@ type DuePost = {
   mediaUrl?: string
   mediaType?: string
   retryCount: number
+  platformPostId?: string
 }
 
-const MAX_RETRIES = 3
-const RETRY_BACKOFF_MINUTES = 5
-const BATCH_SIZE = 50
-const STUCK_PROCESSING_MINUTES = 10
+// ── Auth error detection ──────────────────────────────────────────────────────
+// Detects expired/invalid token errors from LinkedIn and Facebook/Instagram APIs.
+// Auth errors must NOT be retried — the token won't fix itself.
+
+function isAuthError(err: unknown): boolean {
+  if (!axios.isAxiosError(err)) return false
+  const status = err.response?.status
+  if (status === 401 || status === 403) return true
+  // Facebook / Instagram Graph API returns auth errors as HTTP 400 with error.code
+  const fbError = err.response?.data?.error as { code?: number; type?: string } | undefined
+  if (!fbError) return false
+  if (fbError.type === 'OAuthException') return true
+  if (fbError.code === 190 || fbError.code === 102 || fbError.code === 467) return true
+  return false
+}
+
+// ── Rate limiting helper ──────────────────────────────────────────────────────
+
+function delay(ms: number) {
+  return new Promise(r => setTimeout(r, ms))
+}
+
+// ── Main handler ──────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
-  // ── Auth: CRON_SECRET is mandatory, no fallback ──────────────────────────
+
+  // ── Auth ──────────────────────────────────────────────────────────────────
   const cronSecret = process.env.CRON_SECRET
   if (!cronSecret) {
-    console.error('[cron/publish-scheduled] CRON_SECRET env var not set — refusing to run')
+    console.error('[cron/publish-scheduled] CRON_SECRET not set — refusing to run')
     return Response.json({ error: 'Server misconfiguration' }, { status: 500 })
   }
-  const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${cronSecret}`) {
+  if (req.headers.get('authorization') !== `Bearer ${cronSecret}`) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   await connectDB()
 
   const now = new Date()
-  const stuckThreshold = new Date(now.getTime() - STUCK_PROCESSING_MINUTES * 60 * 1000)
+  const stuckThreshold = new Date(now.getTime() - STUCK_THRESHOLD_MINUTES * 60 * 1000)
 
-  // ── Step 1: Reset stuck processing posts ─────────────────────────────────
-  // A post stuck in "processing" for >10 min means the previous cron crashed.
-  // Reset to "scheduled" so it gets retried on the next run.
-  const stuckReset = await SocialPost.updateMany(
-    { status: 'processing', processingStartedAt: { $lte: stuckThreshold } },
-    { $set: { status: 'scheduled' } }
-  )
+  // ── Step 1: Unstick crashed posts ─────────────────────────────────────────
+  // Posts stuck in "processing" for >10min mean a previous cron crashed mid-run.
+  // If platformPostId is already set → the publish succeeded before the crash,
+  // so mark published. Otherwise reset to scheduled for retry.
+
+  const [stuckPublished, stuckReset] = await Promise.all([
+    SocialPost.updateMany(
+      {
+        status: 'processing',
+        processingStartedAt: { $lte: stuckThreshold },
+        platformPostId: { $exists: true, $ne: '' },
+      },
+      { $set: { status: 'published', publishedAt: now }, $unset: { processingStartedAt: '' } }
+    ),
+    SocialPost.updateMany(
+      {
+        status: 'processing',
+        processingStartedAt: { $lte: stuckThreshold },
+        $or: [{ platformPostId: { $exists: false } }, { platformPostId: '' }],
+      },
+      { $set: { status: 'scheduled' }, $unset: { processingStartedAt: '' } }
+    ),
+  ])
+
+  if (stuckPublished.modifiedCount > 0) {
+    console.log(JSON.stringify({ event: 'stuck_recovered_published', count: stuckPublished.modifiedCount, timestamp: now }))
+  }
   if (stuckReset.modifiedCount > 0) {
-    console.log(`[cron/publish-scheduled] reset ${stuckReset.modifiedCount} stuck processing posts`)
+    console.log(JSON.stringify({ event: 'stuck_reset_to_scheduled', count: stuckReset.modifiedCount, timestamp: now }))
   }
 
   // ── Step 2: Find candidates ───────────────────────────────────────────────
-  // Include:
-  //   - First-attempt posts: scheduled, no nextRetryAt, scheduledAt <= now
-  //   - Retry posts: scheduled, nextRetryAt <= now
+  // First-attempt posts: scheduled, no nextRetryAt, scheduledAt <= now
+  // Retry posts: scheduled, nextRetryAt <= now
   const candidates = await SocialPost.find(
     {
       status: 'scheduled',
@@ -66,16 +117,16 @@ export async function GET(req: NextRequest) {
         { nextRetryAt: { $lte: now } },
       ],
     },
-    { _id: 1, userId: 1, platform: 1, content: 1, hashtags: 1, mediaUrl: 1, mediaType: 1, retryCount: 1 }
+    { _id: 1, userId: 1, platform: 1, content: 1, hashtags: 1, mediaUrl: 1, mediaType: 1, retryCount: 1, platformPostId: 1 }
   )
     .limit(BATCH_SIZE)
-    .lean() as DuePost[]
+    .lean() as Candidate[]
 
   if (candidates.length === 0) {
-    return Response.json({ published: 0, retried: 0, failed: 0, message: 'No posts due' })
+    return Response.json({ published: 0, retried: 0, failed: 0, failedAuth: 0, message: 'No posts due' })
   }
 
-  // ── Step 3: Batch-fetch user connections ─────────────────────────────────
+  // ── Step 3: Batch-fetch user connections ──────────────────────────────────
   const userIds = [...new Set(candidates.map(p => p.userId.toString()))]
   const userDocs = await mongoose.connection.db!
     .collection('users')
@@ -91,88 +142,153 @@ export async function GET(req: NextRequest) {
   let published = 0
   let retried = 0
   let failed = 0
+  let failedAuth = 0
 
-  for (const post of candidates) {
-    // Atomic claim: only proceed if we're the one that moved it to "processing"
+  for (const candidate of candidates) {
+    const startTime = Date.now()
+    const isRetry = candidate.retryCount > 0
+    const logBase = {
+      postId: String(candidate._id),
+      platform: candidate.platform,
+      retryCount: candidate.retryCount,
+      isRetry,
+      timestamp: new Date().toISOString(),
+    }
+
+    // ── 4a: Atomic claim ────────────────────────────────────────────────────
+    // Only proceed if this execution is the one that moved the post to "processing".
+    // Prevents duplicate publishing from overlapping cron invocations.
     const claim = await SocialPost.updateOne(
-      { _id: post._id, status: 'scheduled' },
+      { _id: candidate._id, status: 'scheduled' },
       { $set: { status: 'processing', processingStartedAt: new Date() } }
     )
     if (claim.modifiedCount !== 1) {
-      // Another cron invocation already claimed this post — skip it
-      console.log(`[cron] skipped ${post._id} — already claimed`)
+      console.log(JSON.stringify({ ...logBase, event: 'skip', reason: 'already_claimed' }))
       continue
     }
 
-    const conn = connectionsByUser.get(post.userId.toString()) || {}
-    const logBase = { postId: post._id, platform: post.platform, retryCount: post.retryCount, timestamp: new Date().toISOString() }
+    // ── 4b: Safety check ────────────────────────────────────────────────────
+    // Re-fetch to confirm the post is still "processing" and get latest state.
+    // Also serves as the idempotency read: if platformPostId is already set,
+    // the publish already happened (we just didn't update status last time).
+    const post = await SocialPost.findOne(
+      { _id: candidate._id, status: 'processing' },
+      { platformPostId: 1, userId: 1 }
+    ).lean() as { platformPostId?: string; userId: mongoose.Types.ObjectId } | null
+
+    if (!post) {
+      console.log(JSON.stringify({ ...logBase, event: 'skip', reason: 'safety_check_failed' }))
+      continue
+    }
+
+    // ── 4c: Idempotency check ───────────────────────────────────────────────
+    // platformPostId is set → publish already succeeded on a previous attempt.
+    // The previous DB update to "published" must have failed. Fix the status now.
+    if (post.platformPostId) {
+      await SocialPost.findByIdAndUpdate(candidate._id, {
+        $set: { status: 'published', publishedAt: now },
+        $unset: { processingStartedAt: '' },
+      })
+      published++
+      console.log(JSON.stringify({ ...logBase, event: 'idempotent_recovery', platformPostId: post.platformPostId, durationMs: Date.now() - startTime }))
+      continue
+    }
+
+    // ── 4d: Rate limit protection: small delay between platform API calls ───
+    await delay(INTER_CALL_DELAY_MS)
+
+    const conn = connectionsByUser.get(candidate.userId.toString()) || {}
 
     try {
-      if (post.platform === 'linkedin') {
+      let platformPostId = ''
+
+      if (candidate.platform === 'linkedin') {
         const li = conn.linkedin
         if (!li?.accessToken || !li?.profileId) throw new Error('LinkedIn not connected')
-        await publishToLinkedIn(
-          { content: post.content, hashtags: post.hashtags },
+        const result = await publishToLinkedIn(
+          { content: candidate.content, hashtags: candidate.hashtags },
           li.accessToken,
           li.profileId,
           li.pageId || undefined
         )
-      } else if (post.platform === 'facebook') {
+        platformPostId = result.id
+      } else if (candidate.platform === 'facebook') {
         const fb = conn.facebook
         if (!fb?.pageAccessToken || !fb?.pageId) throw new Error('Facebook not connected')
-        await publishToFacebook(
-          { content: post.content, hashtags: post.hashtags },
+        const result = await publishToFacebook(
+          { content: candidate.content, hashtags: candidate.hashtags },
           fb.pageAccessToken,
           fb.pageId
         )
-      } else if (post.platform === 'instagram') {
+        platformPostId = result.id
+      } else if (candidate.platform === 'instagram') {
         const fb = conn.facebook
         const ig = conn.instagram
         if (!fb?.pageAccessToken || !ig?.accountId) throw new Error('Instagram not connected')
-        if (!post.mediaUrl) throw new Error('Instagram requires media URL')
-        await publishToInstagram(
-          { content: post.content, hashtags: post.hashtags, mediaUrl: post.mediaUrl, mediaType: post.mediaType },
+        if (!candidate.mediaUrl) throw new Error('Instagram requires media URL')
+        const result = await publishToInstagram(
+          { content: candidate.content, hashtags: candidate.hashtags, mediaUrl: candidate.mediaUrl, mediaType: candidate.mediaType },
           fb.pageAccessToken,
           ig.accountId
         )
+        platformPostId = result.id
       } else {
-        throw new Error(`Unsupported platform: ${post.platform}`)
+        throw new Error(`Unsupported platform: ${candidate.platform}`)
       }
 
-      // ── Success ──────────────────────────────────────────────────────────
-      await SocialPost.findByIdAndUpdate(post._id, {
-        $set: { status: 'published', publishedAt: new Date() },
+      // ── Success: save platformPostId FIRST, then mark published ────────────
+      // Two-step write: if the second update fails, platformPostId is already
+      // persisted so the next run's idempotency check skips the API call.
+      await SocialPost.findByIdAndUpdate(candidate._id, {
+        $set: { platformPostId },
+      })
+      await SocialPost.findByIdAndUpdate(candidate._id, {
+        $set: { status: 'published', publishedAt: now },
         $unset: { processingStartedAt: '', nextRetryAt: '', lastError: '' },
       })
 
       published++
-      console.log(JSON.stringify({ ...logBase, status: 'success' }))
+      console.log(JSON.stringify({ ...logBase, event: 'published', platformPostId, durationMs: Date.now() - startTime }))
+
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err)
-      const newRetryCount = (post.retryCount || 0) + 1
+      const errorMsg = axios.isAxiosError(err)
+        ? JSON.stringify(err.response?.data?.error || err.message)
+        : (err instanceof Error ? err.message : String(err))
 
-      console.error(JSON.stringify({ ...logBase, status: 'failure', error: errorMsg, newRetryCount }))
+      const durationMs = Date.now() - startTime
 
-      if (newRetryCount >= MAX_RETRIES) {
-        // ── Permanent failure ─────────────────────────────────────────────
-        await SocialPost.findByIdAndUpdate(post._id, {
-          $set: { status: 'failed', retryCount: newRetryCount, lastError: errorMsg },
+      if (isAuthError(err)) {
+        // ── Auth failure: no retry, mark failed_auth ──────────────────────
+        await SocialPost.findByIdAndUpdate(candidate._id, {
+          $set: { status: 'failed_auth', lastError: errorMsg },
           $unset: { processingStartedAt: '', nextRetryAt: '' },
         })
-        failed++
+        failedAuth++
+        console.error(JSON.stringify({ ...logBase, event: 'failed_auth', error: errorMsg, durationMs }))
+
       } else {
-        // ── Schedule retry with backoff ───────────────────────────────────
-        const nextRetryAt = new Date(now.getTime() + newRetryCount * RETRY_BACKOFF_MINUTES * 60 * 1000)
-        await SocialPost.findByIdAndUpdate(post._id, {
-          $set: {
-            status: 'scheduled',
-            retryCount: newRetryCount,
-            lastError: errorMsg,
-            nextRetryAt,
-          },
-          $unset: { processingStartedAt: '' },
-        })
-        retried++
+        const newRetryCount = candidate.retryCount + 1
+
+        if (newRetryCount >= MAX_RETRIES) {
+          // ── Permanent failure ───────────────────────────────────────────
+          await SocialPost.findByIdAndUpdate(candidate._id, {
+            $set: { status: 'failed', retryCount: newRetryCount, lastError: errorMsg },
+            $unset: { processingStartedAt: '', nextRetryAt: '' },
+          })
+          failed++
+          console.error(JSON.stringify({ ...logBase, event: 'failed_permanent', error: errorMsg, newRetryCount, durationMs }))
+
+        } else {
+          // ── Retry with exponential backoff ──────────────────────────────
+          const backoffMs = (BACKOFF_MINUTES[newRetryCount] ?? 30) * 60 * 1000
+          const nextRetryAt = new Date(now.getTime() + backoffMs)
+          await SocialPost.findByIdAndUpdate(candidate._id, {
+            $set: { status: 'scheduled', retryCount: newRetryCount, lastError: errorMsg, nextRetryAt },
+            $unset: { processingStartedAt: '' },
+          })
+          retried++
+          console.error(JSON.stringify({ ...logBase, event: 'retry_scheduled', error: errorMsg, newRetryCount, nextRetryAt, durationMs }))
+        }
       }
     }
   }
@@ -181,7 +297,9 @@ export async function GET(req: NextRequest) {
     published,
     retried,
     failed,
+    failedAuth,
     total: candidates.length,
     stuckReset: stuckReset.modifiedCount,
+    stuckRecovered: stuckPublished.modifiedCount,
   })
 }
