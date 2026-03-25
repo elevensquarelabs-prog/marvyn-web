@@ -55,6 +55,10 @@ export default function CookiePolicy() {
               collect information like browser type, device information, page views, clicks, session behavior, and
               conversion-related events.
             </p>
+            <ul className="list-disc list-inside space-y-2 mt-3">
+              <li>Microsoft Clarity</li>
+              <li>Google Analytics 4 and related Google tags where implemented</li>
+            </ul>
           </section>
 
           <section>
@@ -66,6 +70,10 @@ export default function CookiePolicy() {
             <p>
               These tools are distinct from customer-authorized third-party platform connections inside the Marvyn app.
             </p>
+            <ul className="list-disc list-inside space-y-2 mt-3">
+              <li>Meta Pixel</li>
+              <li>LinkedIn Insight Tag</li>
+            </ul>
           </section>
 
           <section>

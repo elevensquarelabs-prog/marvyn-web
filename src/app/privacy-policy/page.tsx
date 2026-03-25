@@ -131,6 +131,21 @@ export default function PrivacyPolicy() {
                   <li>Read Google Search Console site and query performance data.</li>
                   <li>Read GA4 property, session, channel, conversion, and landing-page analytics.</li>
                 </ul>
+                <div className="mt-4 p-4 rounded-xl border border-white/10 bg-white/[0.03]">
+                  <p className="text-sm font-medium text-white mb-2">How Google Data Is Displayed in the Product</p>
+                  <p className="text-sm">
+                    Data retrieved via Google APIs, including Google Ads, Google Search Console, and Google Analytics 4,
+                    is displayed within user-facing Marvyn product surfaces such as the Ads workspace, SEO workspace,
+                    Analytics dashboards, summaries, and reports. Users can view campaign metrics, traffic, engagement,
+                    query performance, landing-page performance, and conversion insights directly inside the application.
+                    We do not use Google user data outside these product features except as necessary for support,
+                    security, legal compliance, and service operations consistent with applicable law and Google&apos;s policies.
+                  </p>
+                </div>
+                <p className="mt-3">
+                  Marvyn&apos;s use and transfer of information received from Google APIs will adhere to the Google API
+                  Services User Data Policy, including the Limited Use requirements.
+                </p>
               </div>
               <div>
                 <h3 className="text-white font-medium mb-2">Meta</h3>
@@ -215,6 +230,11 @@ export default function PrivacyPolicy() {
               We retain data for as long as necessary to provide the service, comply with legal obligations, resolve
               disputes, and enforce agreements. When accounts are deleted or platform connections are removed, related
               data is deleted or deactivated according to operational and legal requirements.
+            </p>
+            <p>
+              We do not permit routine human review of individual connected-platform data, including Google user data,
+              except where access is necessary for support requested by the user, security investigation, fraud
+              prevention, legal compliance, or other internal operations permitted by applicable law and platform rules.
             </p>
           </section>
 
