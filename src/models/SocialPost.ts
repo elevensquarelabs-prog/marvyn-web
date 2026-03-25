@@ -33,5 +33,6 @@ const SocialPostSchema = new Schema<ISocialPost>({
 })
 
 SocialPostSchema.index({ userId: 1, platform: 1, status: 1 })
+SocialPostSchema.index({ status: 1, scheduledAt: 1 })
 
 export default mongoose.models.SocialPost || mongoose.model<ISocialPost>('SocialPost', SocialPostSchema)
