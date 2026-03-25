@@ -32,6 +32,7 @@ type Candidate = {
   mediaType?: string
   retryCount: number
   platformPostId?: string
+  publishAttemptId?: string
 }
 
 // ── Auth error detection ──────────────────────────────────────────────────────
@@ -95,7 +96,9 @@ export async function GET(req: NextRequest) {
         processingStartedAt: { $lte: stuckThreshold },
         $or: [{ platformPostId: { $exists: false } }, { platformPostId: '' }],
       },
-      { $set: { status: 'scheduled' }, $unset: { processingStartedAt: '' } }
+      // Also clear publishAttemptId: the previous attempt didn't confirm a publish,
+    // so the lock must be released to allow a new attempt on the next run.
+    { $set: { status: 'scheduled' }, $unset: { processingStartedAt: '', publishAttemptId: '' } }
     ),
   ])
 
@@ -117,7 +120,7 @@ export async function GET(req: NextRequest) {
         { nextRetryAt: { $lte: now } },
       ],
     },
-    { _id: 1, userId: 1, platform: 1, content: 1, hashtags: 1, mediaUrl: 1, mediaType: 1, retryCount: 1, platformPostId: 1 }
+    { _id: 1, userId: 1, platform: 1, content: 1, hashtags: 1, mediaUrl: 1, mediaType: 1, retryCount: 1, platformPostId: 1, publishAttemptId: 1 }
   )
     .limit(BATCH_SIZE)
     .lean() as Candidate[]
@@ -169,21 +172,20 @@ export async function GET(req: NextRequest) {
 
     // ── 4b: Safety check ────────────────────────────────────────────────────
     // Re-fetch to confirm the post is still "processing" and get latest state.
-    // Also serves as the idempotency read: if platformPostId is already set,
-    // the publish already happened (we just didn't update status last time).
+    // Retrieves platformPostId and publishAttemptId for the checks below.
     const post = await SocialPost.findOne(
       { _id: candidate._id, status: 'processing' },
-      { platformPostId: 1, userId: 1 }
-    ).lean() as { platformPostId?: string; userId: mongoose.Types.ObjectId } | null
+      { platformPostId: 1, publishAttemptId: 1, userId: 1 }
+    ).lean() as { platformPostId?: string; publishAttemptId?: string; userId: mongoose.Types.ObjectId } | null
 
     if (!post) {
       console.log(JSON.stringify({ ...logBase, event: 'skip', reason: 'safety_check_failed' }))
       continue
     }
 
-    // ── 4c: Idempotency check ───────────────────────────────────────────────
-    // platformPostId is set → publish already succeeded on a previous attempt.
-    // The previous DB update to "published" must have failed. Fix the status now.
+    // ── 4c: Post-publish idempotency check ──────────────────────────────────
+    // platformPostId set → the API call succeeded on a prior attempt but the
+    // status update to "published" failed. Recover without calling the API again.
     if (post.platformPostId) {
       await SocialPost.findByIdAndUpdate(candidate._id, {
         $set: { status: 'published', publishedAt: now },
@@ -194,7 +196,31 @@ export async function GET(req: NextRequest) {
       continue
     }
 
-    // ── 4d: Rate limit protection: small delay between platform API calls ───
+    // ── 4d: Pre-publish idempotency lock ─────────────────────────────────────
+    // Closes the gap between a successful platform API call and platformPostId
+    // being saved: if two cron invocations race here, only the one that sets
+    // publishAttemptId proceeds. The other sees modifiedCount=0 and skips.
+    //
+    // If publishAttemptId is already set on the post (a prior failed attempt),
+    // that attempt is still the active one — we reuse its ID and continue.
+    // The stuck reset (Step 1) is the only place that clears publishAttemptId,
+    // and only does so after 10 min have passed with no platformPostId saved,
+    // ensuring we never retry until the previous attempt is definitively over.
+    let publishAttemptId = post.publishAttemptId
+    if (!publishAttemptId) {
+      const newAttemptId = `${candidate._id}-${now.getTime()}`
+      const lock = await SocialPost.updateOne(
+        { _id: candidate._id, status: 'processing', publishAttemptId: null },
+        { $set: { publishAttemptId: newAttemptId } }
+      )
+      if (lock.modifiedCount !== 1) {
+        console.log(JSON.stringify({ ...logBase, event: 'skip', reason: 'publish_lock_not_acquired' }))
+        continue
+      }
+      publishAttemptId = newAttemptId
+    }
+
+    // ── 4e: Rate limit protection: small delay between platform API calls ───
     await delay(INTER_CALL_DELAY_MS)
 
     const conn = connectionsByUser.get(candidate.userId.toString()) || {}
@@ -248,7 +274,7 @@ export async function GET(req: NextRequest) {
       })
 
       published++
-      console.log(JSON.stringify({ ...logBase, event: 'published', platformPostId, durationMs: Date.now() - startTime }))
+      console.log(JSON.stringify({ ...logBase, publishAttemptId, event: 'published', platformPostId, durationMs: Date.now() - startTime }))
 
     } catch (err) {
       const errorMsg = axios.isAxiosError(err)
@@ -264,7 +290,7 @@ export async function GET(req: NextRequest) {
           $unset: { processingStartedAt: '', nextRetryAt: '' },
         })
         failedAuth++
-        console.error(JSON.stringify({ ...logBase, event: 'failed_auth', error: errorMsg, durationMs }))
+        console.error(JSON.stringify({ ...logBase, publishAttemptId, event: 'failed_auth', error: errorMsg, durationMs }))
 
       } else {
         const newRetryCount = candidate.retryCount + 1
@@ -276,7 +302,7 @@ export async function GET(req: NextRequest) {
             $unset: { processingStartedAt: '', nextRetryAt: '' },
           })
           failed++
-          console.error(JSON.stringify({ ...logBase, event: 'failed_permanent', error: errorMsg, newRetryCount, durationMs }))
+          console.error(JSON.stringify({ ...logBase, publishAttemptId, event: 'failed_permanent', error: errorMsg, newRetryCount, durationMs }))
 
         } else {
           // ── Retry with exponential backoff ──────────────────────────────
@@ -287,7 +313,7 @@ export async function GET(req: NextRequest) {
             $unset: { processingStartedAt: '' },
           })
           retried++
-          console.error(JSON.stringify({ ...logBase, event: 'retry_scheduled', error: errorMsg, newRetryCount, nextRetryAt, durationMs }))
+          console.error(JSON.stringify({ ...logBase, publishAttemptId, event: 'retry_scheduled', error: errorMsg, newRetryCount, nextRetryAt, durationMs }))
         }
       }
     }

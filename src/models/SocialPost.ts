@@ -11,7 +11,8 @@ export interface ISocialPost extends Document {
   status: 'draft' | 'pending_approval' | 'scheduled' | 'processing' | 'published' | 'failed' | 'failed_auth'
   scheduledAt?: Date
   publishedAt?: Date
-  platformPostId?: string   // ID returned by platform API — idempotency key
+  platformPostId?: string     // ID returned by platform API — post-publish idempotency key
+  publishAttemptId?: string   // set atomically BEFORE calling platform API — pre-publish idempotency lock
   retryCount: number
   lastError?: string
   nextRetryAt?: Date
@@ -35,6 +36,7 @@ const SocialPostSchema = new Schema<ISocialPost>({
   scheduledAt: Date,
   publishedAt: Date,
   platformPostId: String,
+  publishAttemptId: String,
   retryCount: { type: Number, default: 0 },
   lastError: String,
   nextRetryAt: Date,
@@ -53,5 +55,8 @@ SocialPostSchema.index({ status: 1, nextRetryAt: 1 })
 
 // Cron: stuck-processing detection
 SocialPostSchema.index({ status: 1, processingStartedAt: 1 })
+
+// Cron: pre-publish idempotency lock lookup
+SocialPostSchema.index({ publishAttemptId: 1 }, { sparse: true })
 
 export default mongoose.models.SocialPost || mongoose.model<ISocialPost>('SocialPost', SocialPostSchema)
