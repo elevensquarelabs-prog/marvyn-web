@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/shared/Button'
 
 const COPY_TYPES = [
+  { id: 'seo-brief', label: 'SEO Brief', icon: '🎯', description: 'Keyword, intent, outline, title, meta, CTA' },
   { id: 'landing', label: 'Landing Page', icon: '🏠', description: 'Full page with headline, sub, benefits, CTA' },
   { id: 'ad', label: 'Ad Copy', icon: '📣', description: 'Headlines + descriptions for Google/Meta Ads' },
   { id: 'product', label: 'Product Description', icon: '🛍️', description: 'Benefit-focused product copy' },
@@ -28,18 +30,32 @@ interface SavedAsset {
   createdAt: string
 }
 
+interface GeneratedDocument {
+  title?: string
+  summary?: string
+  sections?: Array<{ heading: string; points: string[] }>
+}
+
 export default function CopyPage() {
+  const searchParams = useSearchParams()
   const [copyType, setCopyType] = useState('landing')
   const [framework, setFramework] = useState('aida')
   const [product, setProduct] = useState('')
+  const [pageType, setPageType] = useState('landing-page')
+  const [searchIntent, setSearchIntent] = useState('commercial')
+  const [recommendedWordCount, setRecommendedWordCount] = useState('900-1400')
   const [audience, setAudience] = useState('')
   const [usp, setUsp] = useState('')
   const [tone, setTone] = useState('professional')
   const [generating, setGenerating] = useState(false)
+  const [generateError, setGenerateError] = useState('')
+  const [agentStatus, setAgentStatus] = useState('')
   const [output, setOutput] = useState('')
+  const [document, setDocument] = useState<GeneratedDocument | null>(null)
   const [savedAssets, setSavedAssets] = useState<SavedAsset[]>([])
   const [saving, setSaving] = useState(false)
   const [view, setView] = useState<'generate' | 'saved'>('generate')
+  const [pendingPrefillKey, setPendingPrefillKey] = useState('')
 
   const loadSaved = useCallback(async () => {
     const res = await fetch('/api/copy')
@@ -51,128 +67,92 @@ export default function CopyPage() {
 
   useEffect(() => { loadSaved() }, [loadSaved])
 
-  const generate = async () => {
+  useEffect(() => {
+    const topic = searchParams.get('topic')
+    const type = searchParams.get('type')
+    const intent = searchParams.get('intent')
+    const pageTypeParam = searchParams.get('pageType')
+    const wordCount = searchParams.get('wordCount')
+    if (type && COPY_TYPES.some(item => item.id === type)) setCopyType(type)
+    if (topic) setProduct(prev => prev || topic)
+    if (intent) setSearchIntent(intent)
+    if (pageTypeParam) setPageType(pageTypeParam)
+    if (wordCount) setRecommendedWordCount(wordCount)
+  }, [searchParams])
+
+  const saveGeneratedAsset = useCallback(async (content: string) => {
+    const assetLabel = COPY_TYPES.find(t => t.id === copyType)?.label || copyType
+    const name = `${assetLabel} — ${product.slice(0, 30)}`
+    await fetch('/api/copy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, copyType, framework, product, audience, content }),
+    })
+    await loadSaved()
+  }, [audience, copyType, framework, loadSaved, product])
+
+  const generate = useCallback(async () => {
     if (!product) return
     setGenerating(true)
+    setGenerateError('')
+    setAgentStatus('Preparing structured brief…')
     setOutput('')
+    setDocument(null)
 
-    const typeLabel = COPY_TYPES.find(t => t.id === copyType)?.label || copyType
-    const frameworkData = FRAMEWORKS.find(f => f.id === framework)
-
-    const prompts: Record<string, string> = {
-      landing: `Write a complete landing page copy for: "${product}".
-Target audience: ${audience || 'general'}. USP: ${usp || 'not specified'}. Tone: ${tone}.
-Framework: ${frameworkData?.label} (${frameworkData?.description}).
-
-Include:
-1. HEADLINE (power headline that grabs attention)
-2. SUB-HEADLINE (expand on the promise)
-3. HERO COPY (2-3 sentences, lead with biggest benefit)
-4. 3 KEY BENEFITS (each with title + 1-sentence description)
-5. SOCIAL PROOF PLACEHOLDER (what type of proof to include)
-6. PRIMARY CTA (button text + surrounding copy)
-7. SECONDARY CTA (for lower-intent visitors)
-8. OBJECTION CRUSHER (address top 1-2 objections)`,
-
-      ad: `Write 5 Google Ads + 3 Meta Ads for: "${product}".
-Audience: ${audience || 'general'}. Tone: ${tone}.
-
-Google Ads format (each):
-Headline 1 (30 chars max): ...
-Headline 2 (30 chars max): ...
-Headline 3 (30 chars max): ...
-Description 1 (90 chars max): ...
-Description 2 (90 chars max): ...
-
-Meta Ads format (each):
-Primary text (125 chars): ...
-Headline (40 chars): ...
-Description (30 chars): ...`,
-
-      product: `Write a product description for: "${product}".
-Audience: ${audience}. Framework: FAB (Features, Advantages, Benefits). Tone: ${tone}.
-
-Include:
-- Opening hook (1 line)
-- Main description (100-150 words, benefit-focused)
-- 4-5 bullet point features (each starting with benefit)
-- Closing CTA`,
-
-      headline: `Generate 10 headline variations for: "${product}".
-Audience: ${audience || 'general'}. USP: ${usp || ''}.
-
-Include variety:
-- 2 number-led headlines
-- 2 how-to headlines
-- 2 question headlines
-- 2 direct benefit headlines
-- 2 curiosity/intrigue headlines
-
-For each, also note the hook type.`,
-
-      cta: `Generate 15 CTA variations for: "${product}".
-
-Group by intent:
-- 5 High-intent (ready to buy): ...
-- 5 Mid-intent (interested, not ready): ...
-- 5 Low-intent (just browsing): ...
-
-Each CTA should be 2-6 words. Add a 1-line note on when to use each.`,
-
-      'value-prop': `Create a value proposition framework for: "${product}".
-Audience: ${audience || 'general'}. USP: ${usp || ''}.
-
-Deliver:
-1. PRIMARY TAGLINE (5-10 words, memorable)
-2. ELEVATOR PITCH (1 sentence, <30 words)
-3. THREE VALUE PILLARS (each with: pillar name, 1-line statement, 2-line expansion)
-4. PROOF HOOK (what proof would make this credible)`,
-    }
+    const statusFrames = [
+      'Analyzing input…',
+      'Selecting the right model…',
+      'Generating structured sections…',
+      'Finalizing output…',
+    ]
+    let frame = 0
+    const statusTimer = setInterval(() => {
+      frame = (frame + 1) % statusFrames.length
+      setAgentStatus(statusFrames[frame])
+    }, 900)
 
     try {
-      const prompt = prompts[copyType] || prompts.landing
-      const res = await fetch('/api/agent/run', {
+      const res = await fetch('/api/copy/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: prompt, skillId: 'copywriting' }),
+        body: JSON.stringify({
+          copyType,
+          framework,
+          product,
+          pageType,
+          searchIntent,
+          recommendedWordCount,
+          audience,
+          usp,
+          tone,
+        }),
       })
 
-      if (!res.body) return
-
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        const chunk = decoder.decode(value)
-        for (const line of chunk.split('\n')) {
-          if (!line.startsWith('data: ')) continue
-          try {
-            const data = JSON.parse(line.slice(6))
-            if (data.type === 'delta') {
-              setOutput(prev => prev + data.content)
-            }
-          } catch {}
-        }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Generation failed')
       }
+
+      const data = await res.json()
+      if (!data.content?.trim()) throw new Error('The generator returned an empty response')
+      setDocument(data.document ?? null)
+      setOutput(data.content)
+      await saveGeneratedAsset(data.content)
+      setAgentStatus('Saved to recent generations')
+    } catch (error) {
+      setGenerateError(error instanceof Error ? error.message : 'Generation failed')
+      setAgentStatus('')
     } finally {
+      clearInterval(statusTimer)
       setGenerating(false)
     }
-  }
+  }, [audience, copyType, framework, pageType, product, recommendedWordCount, saveGeneratedAsset, searchIntent, tone, usp])
 
   const saveAsset = async () => {
     if (!output) return
     setSaving(true)
     try {
-      const typeLabel = COPY_TYPES.find(t => t.id === copyType)?.label || copyType
-      const name = `${typeLabel} — ${product.slice(0, 30)}`
-      await fetch('/api/copy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, copyType, framework, product, audience, content: output }),
-      })
-      await loadSaved()
+      await saveGeneratedAsset(output)
     } finally {
       setSaving(false)
     }
@@ -185,17 +165,27 @@ Deliver:
 
   const loadAsset = (asset: SavedAsset) => {
     setOutput(asset.content)
+    setDocument(null)
     setProduct(asset.product || '')
     setCopyType(asset.copyType || 'landing')
     setView('generate')
   }
+
+  useEffect(() => {
+    const topic = searchParams.get('topic')
+    const type = searchParams.get('type')
+    if (!topic || !type) return
+    const key = `${type}:${topic}`
+    setPendingPrefillKey(key)
+    setView('generate')
+  }, [searchParams])
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
       <div className="px-6 py-4 border-b border-[#1E1E1E] flex items-center justify-between">
         <div>
           <h1 className="text-sm font-semibold text-white">Copywriting</h1>
-          <p className="text-xs text-[#555]">Conversion-focused copy generator</p>
+          <p className="text-xs text-[#555]">Conversion-focused copy generator · recent generations are saved automatically</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -287,14 +277,51 @@ Deliver:
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-[#555] block mb-1">Product / service *</label>
+                <label className="text-xs text-[#555] block mb-1">{copyType === 'seo-brief' ? 'Target keyword *' : 'Product / service *'}</label>
                 <input
                   value={product}
                   onChange={e => setProduct(e.target.value)}
-                  placeholder="e.g. AI email marketing tool"
+                  placeholder={copyType === 'seo-brief' ? 'e.g. institutional stock research' : 'e.g. AI email marketing tool'}
                   className="w-full bg-[#111] border border-[#1E1E1E] rounded-lg px-3 py-2 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/50"
                 />
               </div>
+              {copyType === 'seo-brief' && (
+                <>
+                  <div>
+                    <label className="text-xs text-[#555] block mb-1">Recommended page type</label>
+                    <select
+                      value={pageType}
+                      onChange={e => setPageType(e.target.value)}
+                      className="w-full bg-[#111] border border-[#1E1E1E] rounded-lg px-3 py-2 text-sm text-white outline-none"
+                    >
+                      {['landing-page', 'blog-post', 'feature-page', 'comparison-page', 'pillar-page'].map(type => (
+                        <option key={type} value={type} className="bg-[#111]">{type}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-[#555] block mb-1">Search intent</label>
+                    <select
+                      value={searchIntent}
+                      onChange={e => setSearchIntent(e.target.value)}
+                      className="w-full bg-[#111] border border-[#1E1E1E] rounded-lg px-3 py-2 text-sm text-white outline-none"
+                    >
+                      {['commercial', 'informational', 'transactional', 'navigational'].map(intent => (
+                        <option key={intent} value={intent} className="bg-[#111] capitalize">{intent}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-[#555] block mb-1">Recommended word count</label>
+                    <input
+                      value={recommendedWordCount}
+                      onChange={e => setRecommendedWordCount(e.target.value)}
+                      placeholder="e.g. 900-1400"
+                      className="w-full bg-[#111] border border-[#1E1E1E] rounded-lg px-3 py-2 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/50"
+                    />
+                  </div>
+                </>
+              )}
               <div>
                 <label className="text-xs text-[#555] block mb-1">Target audience</label>
                 <input
@@ -304,7 +331,7 @@ Deliver:
                   className="w-full bg-[#111] border border-[#1E1E1E] rounded-lg px-3 py-2 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/50"
                 />
               </div>
-              {['landing', 'headline', 'value-prop'].includes(copyType) && (
+              {['seo-brief', 'landing', 'headline', 'value-prop'].includes(copyType) && (
                 <div>
                   <label className="text-xs text-[#555] block mb-1">USP / key differentiator</label>
                   <input
@@ -330,8 +357,36 @@ Deliver:
             </div>
 
             <Button onClick={generate} loading={generating} disabled={!product} className="w-full">
-              Generate Copy
+              {copyType === 'seo-brief' ? 'Generate SEO Brief' : 'Generate Copy'}
             </Button>
+            {agentStatus && <p className="text-[11px] text-[#DA7756]">{agentStatus}</p>}
+            {generateError && <p className="text-[11px] text-red-400">{generateError}</p>}
+
+            {savedAssets.length > 0 && (
+              <div className="pt-2 border-t border-[#1E1E1E]">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-[#555]">Recent generations</p>
+                  <button
+                    onClick={() => setView('saved')}
+                    className="text-[11px] text-[#DA7756] hover:text-[#C4633F] transition-colors"
+                  >
+                    View all →
+                  </button>
+                </div>
+                <div className="space-y-1.5">
+                  {savedAssets.slice(0, 3).map(asset => (
+                    <button
+                      key={asset._id}
+                      onClick={() => loadAsset(asset)}
+                      className="w-full text-left px-3 py-2 rounded-lg border border-[#1E1E1E] bg-[#111] hover:border-[#2A2A2A] transition-colors"
+                    >
+                      <p className="text-xs font-medium text-white truncate">{asset.name}</p>
+                      <p className="text-[10px] text-[#555] mt-0.5">{new Date(asset.createdAt).toLocaleDateString()}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Output panel */}
@@ -343,8 +398,18 @@ Deliver:
                 </div>
                 <h2 className="text-base font-semibold text-white mb-2">Copy Generator</h2>
                 <p className="text-sm text-[#555] max-w-sm">
-                  Select a copy type, fill in your product details, and generate conversion-optimised copy using proven frameworks.
+                  Select a copy type, fill in your details, and generate copy or SEO briefs. Generated drafts are saved into Recent generations and the Saved tab.
                 </p>
+                {pendingPrefillKey && copyType === 'seo-brief' && product ? (
+                  <div className="mt-5 max-w-md bg-[#111] border border-[#1E1E1E] rounded-2xl p-4 text-left">
+                    <p className="text-sm font-semibold text-white">SEO brief ready</p>
+                    <p className="text-xs text-[#555] mt-1">Keyword: <span className="text-[#A0A0A0]">{product}</span></p>
+                    <p className="text-xs text-[#555] mt-1">{pageType} · {searchIntent} · {recommendedWordCount} words</p>
+                    <Button onClick={generate} className="w-full mt-4">
+                      Generate SEO Brief
+                    </Button>
+                  </div>
+                ) : null}
                 <div className="mt-6 grid grid-cols-2 gap-3 max-w-sm text-left">
                   {FRAMEWORKS.map(f => (
                     <div key={f.id} className="bg-[#111] border border-[#1E1E1E] rounded-lg p-3">
@@ -359,16 +424,21 @@ Deliver:
             {(output || generating) && (
               <div className="max-w-3xl mx-auto space-y-4">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-white">
-                      {COPY_TYPES.find(t => t.id === copyType)?.icon} {COPY_TYPES.find(t => t.id === copyType)?.label}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-white">
+                    {COPY_TYPES.find(t => t.id === copyType)?.icon} {COPY_TYPES.find(t => t.id === copyType)?.label}
+                  </span>
+                  {copyType === 'seo-brief' && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#DA7756]/15 text-[#DA7756] border border-[#DA7756]/20">
+                      {pageType} · {searchIntent}
                     </span>
-                    {generating && (
-                      <span className="flex items-center gap-1.5 text-xs text-[#DA7756]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#DA7756] animate-pulse" />
-                        Writing…
-                      </span>
-                    )}
+                  )}
+                  {generating && (
+                    <span className="flex items-center gap-1.5 text-xs text-[#DA7756]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#DA7756] animate-pulse" />
+                      {agentStatus || 'Generating…'}
+                    </span>
+                  )}
                   </div>
                   {output && !generating && (
                     <div className="flex gap-2">
@@ -382,14 +452,48 @@ Deliver:
                   )}
                 </div>
 
-                <div className="bg-[#111] border border-[#1E1E1E] rounded-xl p-6">
-                  <div className="prose prose-sm max-w-none">
-                    <pre className="text-sm text-[#C0C0C0] whitespace-pre-wrap font-sans leading-relaxed">
-                      {output}
-                      {generating && <span className="inline-block w-1.5 h-4 bg-[#DA7756] animate-pulse ml-0.5 align-middle" />}
-                    </pre>
+                {generating && !output && (
+                  <div className="bg-[#111] border border-[#1E1E1E] rounded-xl p-6">
+                    <div className="space-y-4 animate-pulse">
+                      <div className="h-4 w-48 rounded bg-[#1E1E1E]" />
+                      <div className="h-3 w-full rounded bg-[#1A1A1A]" />
+                      <div className="h-3 w-5/6 rounded bg-[#1A1A1A]" />
+                      <div className="h-24 rounded-xl bg-[#0D0D0D]" />
+                      <div className="h-24 rounded-xl bg-[#0D0D0D]" />
+                      <div className="h-24 rounded-xl bg-[#0D0D0D]" />
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {document ? (
+                  <div className="space-y-3">
+                    <div className="bg-[#111] border border-[#1E1E1E] rounded-xl p-5">
+                      <p className="text-lg font-semibold text-white">{document.title || 'Generated Draft'}</p>
+                      {document.summary ? <p className="text-sm text-[#A0A0A0] mt-1">{document.summary}</p> : null}
+                    </div>
+                    {(document.sections ?? []).map(section => (
+                      <div key={section.heading} className="bg-[#111] border border-[#1E1E1E] rounded-xl p-5">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-[#DA7756] mb-3">{section.heading}</p>
+                        <div className="space-y-2">
+                          {(section.points ?? []).map((point, index) => (
+                            <div key={`${section.heading}-${index}`} className="flex items-start gap-2">
+                              <span className="mt-1 w-1.5 h-1.5 rounded-full bg-[#DA7756] shrink-0" />
+                              <p className="text-sm text-[#C0C0C0] leading-relaxed">{point}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : output ? (
+                  <div className="bg-[#111] border border-[#1E1E1E] rounded-xl p-6">
+                    <div className="prose prose-sm max-w-none">
+                      <pre className="text-sm text-[#C0C0C0] whitespace-pre-wrap font-sans leading-relaxed">
+                        {output}
+                      </pre>
+                    </div>
+                  </div>
+                ) : null}
 
                 {output && !generating && (
                   <Button variant="ghost" size="sm" onClick={() => { setOutput(''); generate() }}>

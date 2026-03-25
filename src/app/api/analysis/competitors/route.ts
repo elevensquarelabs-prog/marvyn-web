@@ -5,6 +5,7 @@ import { connectDB } from '@/lib/mongodb'
 import Brand from '@/models/Brand'
 import { getDfsCredentials, crawlAndExtract, findCompetitors, getCompetitorData } from '@/lib/dataforseo'
 import { llm } from '@/lib/llm'
+import { buildLimitResponse, enforceAiBudget, estimateCostInr, estimateDataforSeoUsage, getModelNameFromComplexity, recordAiUsage } from '@/lib/ai-usage'
 import { skills } from '@/lib/skills'
 
 function sse(data: unknown): Uint8Array {
@@ -17,6 +18,10 @@ export async function POST(req: NextRequest) {
 
   const { domain, location = 'India' } = await req.json()
   if (!domain) return Response.json({ error: 'domain required' }, { status: 400 })
+  const budget = await enforceAiBudget(session.user.id, 'competitor_analysis')
+  if (!budget.allowed) {
+    return Response.json(buildLimitResponse(budget), { status: 429 })
+  }
 
   const cleanDomain = domain.replace(/^https?:\/\//, '').replace(/\/.*$/, '')
 
@@ -71,6 +76,18 @@ export async function POST(req: NextRequest) {
           )
         )
         send({ type: 'competitorDetails', data: competitorDetails })
+        const dfsUsage = estimateDataforSeoUsage('competitor_analysis_bundle')
+        await recordAiUsage({
+          userId: session.user.id,
+          feature: 'competitor_analysis',
+          provider: 'dataforseo',
+          operation: 'competitor_analysis_bundle',
+          model: 'dfs_bundle',
+          estimatedInputTokens: 0,
+          estimatedOutputTokens: 0,
+          estimatedCostUsd: dfsUsage.estimatedCostUsd,
+          creditsCharged: dfsUsage.creditsCharged,
+        })
 
         // Step 4: AI synthesis
         send({ type: 'progress', step: 4, message: 'Generating AI insights…' })
@@ -109,6 +126,19 @@ Return ONLY valid JSON, no markdown fences, no explanation:
 }`
 
         const raw = await llm(prompt, systemPrompt, 'powerful')
+        const usage = estimateCostInr({
+          model: getModelNameFromComplexity('powerful'),
+          inputText: `${systemPrompt}\n${prompt}`,
+          outputText: raw,
+        })
+        await recordAiUsage({
+          userId: session.user.id,
+          feature: 'competitor_analysis',
+          model: getModelNameFromComplexity('powerful'),
+          estimatedInputTokens: usage.inputTokens,
+          estimatedOutputTokens: usage.outputTokens,
+          estimatedCostInr: usage.estimatedCostInr,
+        })
         console.log('[competitors] AI raw (first 300):', raw.slice(0, 300))
 
         const jsonMatch = raw.match(/\{[\s\S]*\}/)

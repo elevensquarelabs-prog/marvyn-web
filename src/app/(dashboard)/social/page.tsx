@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { SocialPostCard } from '@/components/social/SocialPostCard'
 import { SocialCalendar } from '@/components/social/SocialCalendar'
 import { Composer } from '@/components/social/Composer'
@@ -26,6 +27,7 @@ const platformColor: Record<string, string> = {
 }
 
 export default function SocialPage() {
+  const searchParams = useSearchParams()
   const [posts, setPosts] = useState<SocialPost[]>([])
   const [loading, setLoading] = useState(true)
   const [composerOpen, setComposerOpen] = useState(false)
@@ -66,6 +68,13 @@ export default function SocialPage() {
   }, [])
 
   useEffect(() => { loadPosts() }, [loadPosts])
+
+  useEffect(() => {
+    const topic = searchParams.get('topic')
+    if (!topic) return
+    setPlannerTopic(prev => prev || topic)
+    setPlannerOpen(true)
+  }, [searchParams])
 
   const approvePost = async (post: SocialPost) => {
     setActionLoading(true)

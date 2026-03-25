@@ -7,6 +7,7 @@ export interface UserConnections {
   meta?: { accessToken?: string; accountId?: string; accountName?: string }
   google?: { accessToken?: string; refreshToken?: string; customerId?: string }
   searchConsole?: { accessToken?: string; refreshToken?: string; siteUrl?: string }
+  ga4?: { accessToken?: string; refreshToken?: string; propertyId?: string; propertyName?: string; accountName?: string; connectedAt?: Date }
   linkedin?: { accessToken?: string; profileId?: string; profileName?: string }
   facebook?: { pageAccessToken?: string; pageId?: string; pageName?: string; accessToken?: string }
   instagram?: { accountId?: string }
@@ -36,6 +37,7 @@ export type ConnectionErrorCode =
   | 'META_ACCOUNT_NOT_SELECTED'
   | 'GOOGLE_NOT_CONNECTED'
   | 'SEARCH_CONSOLE_NOT_CONNECTED'
+  | 'GA4_NOT_CONNECTED'
   | 'LINKEDIN_NOT_CONNECTED'
   | 'FACEBOOK_NOT_CONNECTED'
   | 'TOKEN_EXPIRED'
@@ -66,6 +68,11 @@ export const CONNECTION_ERRORS: Record<ConnectionErrorCode, Omit<ConnectionError
   SEARCH_CONSOLE_NOT_CONNECTED: {
     platform: 'searchConsole',
     message: 'Connect Google Search Console in Settings to sync keywords',
+    settingsUrl: '/settings',
+  },
+  GA4_NOT_CONNECTED: {
+    platform: 'ga4',
+    message: 'Connect Google Analytics 4 in Settings to see session and conversion data',
     settingsUrl: '/settings',
   },
   LINKEDIN_NOT_CONNECTED: {

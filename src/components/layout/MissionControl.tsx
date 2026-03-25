@@ -8,6 +8,13 @@ interface MCData {
   blogPending: number
   blogScheduled: number
   socialPending: number
+  credits?: {
+    monthlyCredits: number
+    creditsUsedThisMonth: number
+    extraCreditsBalance: number
+    totalCreditsAvailable: number
+    creditsRemaining: number
+  } | null
   recentSessions: { _id: string; title: string; updatedAt: string }[]
   agentStatus: 'idle' | 'running'
   activeTool: string | null
@@ -19,6 +26,7 @@ export function MissionControl({ agentStatus = 'idle', activeTool = null }: { ag
     blogPending: 0,
     blogScheduled: 0,
     socialPending: 0,
+    credits: null,
     recentSessions: [],
     agentStatus: 'idle',
     activeTool: null,
@@ -27,20 +35,23 @@ export function MissionControl({ agentStatus = 'idle', activeTool = null }: { ag
   useEffect(() => {
     async function load() {
       try {
-        const [brandRes, blogRes, socialRes] = await Promise.all([
+        const [brandRes, blogRes, socialRes, creditsRes] = await Promise.all([
           fetch('/api/settings/brand'),
           fetch('/api/blog?status=pending_approval'),
           fetch('/api/social?status=pending_approval'),
+          fetch('/api/user/credits'),
         ])
         const brandData = await brandRes.json()
         const blogData = await blogRes.json()
         const socialData = await socialRes.json()
+        const creditsData = await creditsRes.json()
 
         setData(prev => ({
           ...prev,
           brand: brandData.brand,
           blogPending: blogData.posts?.length || 0,
           socialPending: socialData.posts?.length || 0,
+          credits: creditsData.credits || null,
         }))
       } catch {
         // silent
@@ -80,6 +91,28 @@ export function MissionControl({ agentStatus = 'idle', activeTool = null }: { ag
             <span className="text-xs text-[#A0A0A0]">Competitors</span>
             <span className="text-xs text-[#A0A0A0]">{(data.brand?.competitors as unknown[])?.length || 0} tracked</span>
           </div>
+        </div>
+      </div>
+
+      {/* Credits */}
+      <div className="px-4 py-3 border-b border-[var(--border)]">
+        <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-2">Credits</p>
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[#A0A0A0]">Remaining</span>
+            <span className="text-xs text-white">{data.credits?.creditsRemaining ?? 0}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[#A0A0A0]">Used this month</span>
+            <span className="text-xs text-[#A0A0A0]">{data.credits?.creditsUsedThisMonth ?? 0}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[#A0A0A0]">Extra credits</span>
+            <span className="text-xs text-[#A0A0A0]">{data.credits?.extraCreditsBalance ?? 0}</span>
+          </div>
+          <Link href="/billing" className="text-xs text-[#DA7756] hover:underline pt-1 inline-block">
+            View plan and add credits
+          </Link>
         </div>
       </div>
 

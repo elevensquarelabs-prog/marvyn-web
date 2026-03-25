@@ -5,141 +5,102 @@ export const metadata = { title: 'Cookie Policy – Marvyn' }
 export default function CookiePolicy() {
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white">
-      {/* Nav */}
-      <nav className="px-6 py-4 border-b border-white/5 flex items-center justify-between max-w-4xl mx-auto">
-        <span className="font-bold text-lg tracking-tight">Marvyn</span>
+      <nav className="px-6 py-4 border-b border-white/5 flex items-center justify-between max-w-5xl mx-auto">
+        <Link href="/" className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-[#DA7756] flex items-center justify-center shrink-0">
+            <span className="text-white font-black text-sm leading-none">M</span>
+          </div>
+          <span className="text-white font-semibold text-base tracking-tight">Marvyn</span>
+        </Link>
         <Link href="/" className="text-sm text-[#555] hover:text-white transition-colors">← Back to home</Link>
       </nav>
 
-      <main className="max-w-4xl mx-auto px-6 py-12">
-        <h1 className="text-3xl font-bold mb-2">Cookie Policy</h1>
-        <p className="text-[#555] text-sm mb-10">Effective date: March 23, 2026</p>
+      <main className="max-w-5xl mx-auto px-6 py-12">
+        <div className="mb-10">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-[#666] mb-3">Marvyn · Legal</p>
+          <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-3">Cookie Policy</h1>
+          <p className="text-sm text-[#555]">Effective date: March 25, 2026</p>
+        </div>
 
-        <div className="prose prose-invert max-w-none space-y-8 text-[#A0A0A0] leading-relaxed">
-
+        <div className="space-y-10 text-[#A0A0A0] leading-relaxed">
           <section>
-            <h2 className="text-xl font-semibold text-white mb-3">1. What Are Cookies?</h2>
             <p>
-              Cookies are small text files placed on your device when you visit a website. They help websites
-              remember your preferences, keep you logged in, and collect analytics data. Marvyn, operated by
-              <strong className="text-white"> Eleven Square Labs</strong>, uses cookies and similar technologies
-              as described in this policy.
+              This Cookie Policy explains how Marvyn uses cookies, pixels, tags, and similar technologies on Marvyn’s
+              own website and application. It does not govern cookies or tracking used by third-party platforms you
+              connect inside Marvyn.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-white mb-3">2. Types of Cookies We Use</h2>
-
-            <div className="space-y-5 mt-3">
-              <div className="p-4 bg-[#111] border border-[#1E1E1E] rounded-xl">
-                <h3 className="text-white font-medium mb-1">Essential Cookies</h3>
-                <p className="text-sm">
-                  Required for the Platform to function. These include session cookies for authentication
-                  (keeping you logged in), CSRF protection tokens, and preference cookies. These cannot be
-                  disabled without breaking core functionality.
-                </p>
-                <p className="text-xs text-[#555] mt-2">Examples: <code className="text-[#888]">next-auth.session-token</code>, <code className="text-[#888]">next-auth.csrf-token</code></p>
-              </div>
-
-              <div className="p-4 bg-[#111] border border-[#1E1E1E] rounded-xl">
-                <h3 className="text-white font-medium mb-1">Analytics Cookies</h3>
-                <p className="text-sm">
-                  Help us understand how users interact with the Platform so we can improve it.
-                  We use aggregated, anonymised data only. If you have connected Microsoft Clarity,
-                  session recording cookies may also be set.
-                </p>
-                <p className="text-xs text-[#555] mt-2">Third party: Microsoft Clarity (if connected by you)</p>
-              </div>
-
-              <div className="p-4 bg-[#111] border border-[#1E1E1E] rounded-xl">
-                <h3 className="text-white font-medium mb-1">Preference Cookies</h3>
-                <p className="text-sm">
-                  Remember your settings and preferences within the Platform, such as selected date ranges,
-                  UI preferences, and dismissed banners.
-                </p>
-              </div>
-
-              <div className="p-4 bg-[#111] border border-[#1E1E1E] rounded-xl">
-                <h3 className="text-white font-medium mb-1">Third-Party Cookies</h3>
-                <p className="text-sm">
-                  Some third-party services we integrate with may set their own cookies when you authenticate
-                  or interact with their features (e.g., Google OAuth, Meta OAuth). These are governed by
-                  the respective third parties&apos; cookie policies.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-3">3. How Long Do Cookies Last?</h2>
-            <div className="overflow-x-auto mt-3">
-              <table className="w-full text-sm border border-[#1E1E1E] rounded-xl overflow-hidden">
-                <thead>
-                  <tr className="bg-[#111] border-b border-[#1E1E1E]">
-                    <th className="text-left px-4 py-3 text-white font-medium">Cookie</th>
-                    <th className="text-left px-4 py-3 text-white font-medium">Purpose</th>
-                    <th className="text-left px-4 py-3 text-white font-medium">Duration</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#1E1E1E]">
-                  {[
-                    ['next-auth.session-token', 'Authentication session', '30 days'],
-                    ['next-auth.csrf-token', 'Security (CSRF protection)', 'Session'],
-                    ['next-auth.callback-url', 'OAuth redirect handling', 'Session'],
-                    ['Clarity cookies', 'Session recording & heatmaps', 'Up to 1 year'],
-                  ].map(([name, purpose, duration]) => (
-                    <tr key={name} className="hover:bg-[#111]/50">
-                      <td className="px-4 py-3 font-mono text-xs text-[#888]">{name}</td>
-                      <td className="px-4 py-3">{purpose}</td>
-                      <td className="px-4 py-3 text-[#DA7756]">{duration}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-3">4. Managing Cookies</h2>
+            <h2 className="text-xl font-semibold text-white mb-3">1. Essential Cookies</h2>
             <p>
-              You can control and delete cookies through your browser settings. Note that disabling essential
-              cookies will prevent you from logging in and using the Platform. Here are links to cookie
-              management guides for common browsers:
+              These cookies are required for core functionality such as login, session continuity, CSRF protection, and
+              OAuth handshakes. Disabling them may prevent Marvyn from working properly.
             </p>
-            <ul className="list-disc list-inside space-y-2 mt-3">
-              <li>Google Chrome: Settings → Privacy and security → Cookies</li>
-              <li>Mozilla Firefox: Options → Privacy & Security → Cookies and Site Data</li>
-              <li>Safari: Preferences → Privacy → Manage Website Data</li>
-              <li>Microsoft Edge: Settings → Cookies and site permissions</li>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-white mb-3">2. Preference Cookies</h2>
+            <p>
+              These cookies remember product settings such as interface preferences, dismissed banners, or other
+              convenience choices so you do not need to reset them every visit.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-white mb-3">3. Analytics and Behavior Technologies</h2>
+            <p>
+              Marvyn may use analytics technologies such as Microsoft Clarity and Google analytics or tagging on its own
+              website and app to understand traffic, sessions, interactions, and user friction. These technologies may
+              collect information like browser type, device information, page views, clicks, session behavior, and
+              conversion-related events.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-white mb-3">4. Marketing and Advertising Technologies</h2>
+            <p>
+              Marvyn may use tools such as Meta Pixel and LinkedIn Insight Tag on its own marketing properties to
+              measure campaign effectiveness, conversion events, and remarketing performance for Marvyn’s own business.
+            </p>
+            <p>
+              These tools are distinct from customer-authorized third-party platform connections inside the Marvyn app.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-white mb-3">5. Consent</h2>
+            <p>
+              Essential cookies do not require consent where they are strictly necessary. For analytics, preference, and
+              marketing technologies, we seek consent where required by applicable law. If a consent banner is shown,
+              your selections will govern the relevant categories.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-white mb-3">6. Managing Cookies</h2>
+            <ul className="list-disc list-inside space-y-2">
+              <li>Browser settings let you block or delete cookies.</li>
+              <li>You may use provider opt-out tools where available.</li>
+              <li>Blocking essential cookies may impair authentication and core platform functions.</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-white mb-3">5. Do Not Track</h2>
+            <h2 className="text-xl font-semibold text-white mb-3">7. Third-Party Policies</h2>
             <p>
-              Some browsers offer a &quot;Do Not Track&quot; signal. We currently do not alter our data collection
-              practices in response to DNT signals, as there is no universal standard for interpreting them.
+              Data collected by external analytics and advertising tools is also subject to the respective provider’s
+              own policies, including those of Google, Meta, LinkedIn, and Microsoft.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-white mb-3">6. Changes to This Policy</h2>
+            <h2 className="text-xl font-semibold text-white mb-3">8. Contact</h2>
             <p>
-              We may update this Cookie Policy from time to time. We will post changes on this page with
-              a new effective date. Continued use of the Platform constitutes acceptance.
+              For cookie or privacy-related questions, contact{' '}
+              <a href="mailto:dataofficer@marvyn.tech" className="text-[#DA7756] hover:underline">dataofficer@marvyn.tech</a>.
             </p>
           </section>
-
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-3">7. Contact</h2>
-            <p>
-              Eleven Square Labs<br />
-              648/A OM Chambers, 4th Floor, Binnamangala 1st Stage,<br />
-              Indiranagar, Bangalore – 560038, India<br />
-              <a href="mailto:support@elevensquarelabs.com" className="text-[#DA7756] hover:underline">support@elevensquarelabs.com</a>
-            </p>
-          </section>
-
         </div>
       </main>
 

@@ -8,7 +8,8 @@ type RawConnections = {
   meta?: { accessToken?: string; accountId?: string; accountName?: string }
   google?: { accessToken?: string; customerId?: string; customerName?: string; connectedAt?: Date }
   searchConsole?: { accessToken?: string; siteUrl?: string; connectedAt?: Date }
-  linkedin?: { accessToken?: string; profileId?: string; profileName?: string }
+  ga4?: { accessToken?: string; propertyId?: string; propertyName?: string; accountName?: string; connectedAt?: Date }
+  linkedin?: { accessToken?: string; profileId?: string; profileName?: string; pageId?: string; pageName?: string; adAccountId?: string; adAccountName?: string }
   facebook?: { accessToken?: string; pageId?: string; pageName?: string }
   instagram?: { accountId?: string }
   clarity?: { projectId?: string; apiToken?: string; connectedAt?: Date }
@@ -50,8 +51,24 @@ export async function GET(_req: NextRequest) {
       connectedAt: c.searchConsole.connectedAt ? c.searchConsole.connectedAt.toISOString() : '',
     }
   }
+  if (c.ga4?.accessToken) {
+    safe.ga4 = {
+      connected: 'true',
+      propertyId: c.ga4.propertyId || '',
+      propertyName: c.ga4.propertyName || '',
+      accountName: c.ga4.accountName || '',
+      connectedAt: c.ga4.connectedAt ? c.ga4.connectedAt.toISOString() : '',
+    }
+  }
   if (c.linkedin?.profileId) {
-    safe.linkedin = { profileId: c.linkedin.profileId, profileName: c.linkedin.profileName || '' }
+    safe.linkedin = {
+      profileId: c.linkedin.profileId,
+      profileName: c.linkedin.profileName || '',
+      pageId: c.linkedin.pageId || '',
+      pageName: c.linkedin.pageName || '',
+      adAccountId: c.linkedin.adAccountId || '',
+      adAccountName: c.linkedin.adAccountName || '',
+    }
   }
   if (c.facebook?.pageId) {
     safe.facebook = { pageId: c.facebook.pageId, pageName: c.facebook.pageName || '' }
@@ -75,7 +92,7 @@ export async function DELETE(req: NextRequest) {
 
   await connectDB()
   const { platform } = await req.json()
-  const validPlatforms = ['meta', 'google', 'searchConsole', 'linkedin', 'facebook', 'instagram']
+  const validPlatforms = ['meta', 'google', 'searchConsole', 'ga4', 'linkedin', 'facebook', 'instagram']
   if (!validPlatforms.includes(platform)) {
     return Response.json({ error: 'Invalid platform' }, { status: 400 })
   }

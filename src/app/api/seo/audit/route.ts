@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { llm } from '@/lib/llm'
+import { buildLimitResponse, enforceAiBudget, estimateCostInr, estimateDataforSeoUsage, getModelNameFromComplexity, recordAiUsage } from '@/lib/ai-usage'
 import { skills } from '@/lib/skills'
 import axios from 'axios'
 
@@ -153,12 +154,36 @@ export async function POST(req: NextRequest) {
           if (progress === 'finished') {
             const normalised = normaliseDfsResult(raw!)
             console.log('[SEO Audit] DFS finished — score:', normalised.score, 'issues:', normalised.issues.length)
+            const dfsUsage = estimateDataforSeoUsage('seo_audit_onpage')
+            await recordAiUsage({
+              userId: session.user.id,
+              feature: 'seo_audit',
+              provider: 'dataforseo',
+              operation: 'seo_audit_onpage',
+              model: 'on_page',
+              estimatedInputTokens: 0,
+              estimatedOutputTokens: 0,
+              estimatedCostUsd: dfsUsage.estimatedCostUsd,
+              creditsCharged: dfsUsage.creditsCharged,
+            })
             return Response.json({ source: 'dataforseo', data: normalised })
           }
           if (attempt === 17) {
             // Timeout — return whatever we have
             if (raw) {
               const normalised = normaliseDfsResult(raw)
+              const dfsUsage = estimateDataforSeoUsage('seo_audit_onpage')
+              await recordAiUsage({
+                userId: session.user.id,
+                feature: 'seo_audit',
+                provider: 'dataforseo',
+                operation: 'seo_audit_onpage',
+                model: 'on_page',
+                estimatedInputTokens: 0,
+                estimatedOutputTokens: 0,
+                estimatedCostUsd: dfsUsage.estimatedCostUsd,
+                creditsCharged: dfsUsage.creditsCharged,
+              })
               return Response.json({ source: 'dataforseo', data: normalised })
             }
           }
@@ -168,6 +193,10 @@ export async function POST(req: NextRequest) {
 
     // Fallback: AI-based audit
     console.log('[SEO Audit] falling back to AI for:', url)
+    const budget = await enforceAiBudget(session.user.id, 'seo_audit')
+    if (!budget.allowed) {
+      return Response.json(buildLimitResponse(budget), { status: 429 })
+    }
     const system = skills.seoAudit
     const prompt = `Perform a detailed SEO audit for: ${url}
 
@@ -189,6 +218,19 @@ Return ONLY valid JSON, no markdown, no explanation:
 }`
 
     const raw = await llm(prompt, system, 'medium')
+    const usage = estimateCostInr({
+      model: getModelNameFromComplexity('medium'),
+      inputText: `${system}\n${prompt}`,
+      outputText: raw,
+    })
+    await recordAiUsage({
+      userId: session.user.id,
+      feature: 'seo_audit',
+      model: getModelNameFromComplexity('medium'),
+      estimatedInputTokens: usage.inputTokens,
+      estimatedOutputTokens: usage.outputTokens,
+      estimatedCostInr: usage.estimatedCostInr,
+    })
     console.log('[SEO Audit] AI raw (first 300):', raw.slice(0, 300))
     const jsonMatch = raw.match(/\{[\s\S]*\}/)
     const data = jsonMatch ? JSON.parse(jsonMatch[0]) : { score: 0, issues: [] }

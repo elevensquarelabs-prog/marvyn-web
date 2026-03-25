@@ -20,7 +20,7 @@ type GoogleConnField = { accessToken?: string; refreshToken?: string }
 
 export async function getValidGoogleToken(
   userId: string,
-  connectionType: 'google' | 'searchConsole'
+  connectionType: 'google' | 'searchConsole' | 'ga4'
 ): Promise<string | null> {
   await connectDB()
   // Use raw driver to bypass Mongoose schema cache
@@ -28,14 +28,15 @@ export async function getValidGoogleToken(
     .collection('users')
     .findOne(
       { _id: new mongoose.Types.ObjectId(userId) },
-      { projection: { 'connections.google': 1, 'connections.searchConsole': 1 } }
-    ) as { connections?: { google?: GoogleConnField; searchConsole?: GoogleConnField } } | null
+      { projection: { 'connections.google': 1, 'connections.searchConsole': 1, 'connections.ga4': 1 } }
+    ) as { connections?: { google?: GoogleConnField; searchConsole?: GoogleConnField; ga4?: GoogleConnField } } | null
 
   if (!doc) return null
 
   // Try requested type first, fall back to the other (tokens are identical — both saved in callback)
   const primary = doc.connections?.[connectionType]
-  const fallback = doc.connections?.[connectionType === 'searchConsole' ? 'google' : 'searchConsole']
+  const fallbackKey = connectionType === 'searchConsole' ? 'google' : connectionType === 'google' ? 'searchConsole' : 'google'
+  const fallback = doc.connections?.[fallbackKey]
   const conn: GoogleConnField | undefined = primary?.accessToken ? primary : fallback?.accessToken ? fallback : undefined
 
   if (!conn?.accessToken) return null
@@ -51,6 +52,7 @@ export async function getValidGoogleToken(
           [`connections.${connectionType}.accessToken`]: newToken,
           'connections.google.accessToken': newToken,
           'connections.searchConsole.accessToken': newToken,
+          'connections.ga4.accessToken': newToken,
         },
       }
     )

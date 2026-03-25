@@ -41,7 +41,39 @@ export async function PATCH(req: NextRequest) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
   await connectDB()
-  const { id, action } = await req.json()
+  const body = await req.json()
+  const { id, action, monthlyCredits, extraCredits } = body
+
+  if (action === 'set_monthly_credits') {
+    await mongoose.connection.db!.collection('users').updateOne(
+      { _id: new mongoose.Types.ObjectId(id) },
+      { $set: { 'usage.monthlyCredits': Number(monthlyCredits) } }
+    )
+    return Response.json({ success: true, monthlyCredits: Number(monthlyCredits) })
+  }
+
+  if (action === 'add_extra_credits') {
+    await mongoose.connection.db!.collection('users').updateOne(
+      { _id: new mongoose.Types.ObjectId(id) },
+      { $inc: { 'usage.extraCreditsBalance': Number(extraCredits || 0) } }
+    )
+    return Response.json({ success: true })
+  }
+
+  if (action === 'reset_usage_cycle') {
+    await mongoose.connection.db!.collection('users').updateOne(
+      { _id: new mongoose.Types.ObjectId(id) },
+      {
+        $set: {
+          'usage.estimatedCostUsdThisMonth': 0,
+          'usage.tokensUsedThisMonth': 0,
+          'usage.creditsUsedThisMonth': 0,
+          'usage.lastCreditsResetAt': new Date(),
+        },
+      }
+    )
+    return Response.json({ success: true })
+  }
 
   const status = action === 'revoke' ? 'revoked' : 'trial'
   await mongoose.connection.db!.collection('users').updateOne(

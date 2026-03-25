@@ -16,6 +16,7 @@ export interface IUser extends Document {
     meta?: { accessToken?: string; accountId?: string; accountName?: string }
     google?: { accessToken?: string; refreshToken?: string; customerId?: string }
     searchConsole?: { accessToken?: string; refreshToken?: string; siteUrl?: string }
+    ga4?: { accessToken?: string; refreshToken?: string; propertyId?: string; propertyName?: string; accountName?: string; connectedAt?: Date }
     linkedin?: { accessToken?: string; profileId?: string; profileName?: string; pageId?: string; pageName?: string; adAccountId?: string; adAccountName?: string }
     facebook?: { accessToken?: string; pageId?: string; pageName?: string; pageAccessToken?: string }
     instagram?: { accountId?: string }
@@ -66,6 +67,7 @@ const UserSchema = new Schema<IUser>({
     meta: { accessToken: String, accountId: String, accountName: String },
     google: { accessToken: String, refreshToken: String, customerId: String },
     searchConsole: { accessToken: String, refreshToken: String, siteUrl: String },
+    ga4: { accessToken: String, refreshToken: String, propertyId: String, propertyName: String, accountName: String, connectedAt: Date },
     linkedin: { accessToken: String, profileId: String, profileName: String, pageId: String, pageName: String, adAccountId: String, adAccountName: String },
     facebook: { accessToken: String, pageId: String, pageName: String, pageAccessToken: String },
     instagram: { accountId: String },

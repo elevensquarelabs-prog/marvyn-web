@@ -387,8 +387,8 @@ function Pricing() {
 
         <p className="text-center text-[#333] text-sm mt-8">
           Questions?{' '}
-          <a href="mailto:support@elevensquarelabs.com" className="text-[#555] hover:text-[#888] transition-colors underline underline-offset-2">
-            support@elevensquarelabs.com
+          <a href="mailto:support@marvyn.tech" className="text-[#555] hover:text-[#888] transition-colors underline underline-offset-2">
+            support@marvyn.tech
           </a>
         </p>
       </div>

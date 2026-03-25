@@ -25,9 +25,9 @@ const models = {
 export type Complexity = 'fast' | 'medium' | 'powerful'
 
 const maxTokens: Record<Complexity, number> = {
-  fast: 500,
-  medium: 800,
-  powerful: 1200,
+  fast: 1500,
+  medium: 3000,
+  powerful: 6000,
 }
 
 export async function llm(

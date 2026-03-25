@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { connectDB } from '@/lib/mongodb'
 import { llm } from '@/lib/llm'
+import { buildLimitResponse, enforceAiBudget, estimateCostInr, getModelNameFromComplexity, recordAiUsage } from '@/lib/ai-usage'
 import SocialPost from '@/models/SocialPost'
 import Brand from '@/models/Brand'
 import User from '@/models/User'
@@ -38,6 +39,10 @@ export async function POST(req: NextRequest) {
 
   const { platform, topic, tone = 'professional', count = 1 } = body
   const brand = await Brand.findOne({ userId: session.user.id })
+  const budget = await enforceAiBudget(session.user.id, 'social_generate')
+  if (!budget.allowed) {
+    return Response.json(buildLimitResponse(budget), { status: 429 })
+  }
 
   const avoidWords = brand?.avoidWords ? `\nWords/phrases to NEVER use: ${brand.avoidWords}.` : ''
   const system = `${skills.socialContent}\n\nBrand: ${brand?.name || 'Brand'}. Product: ${brand?.product || 'product'}. Audience: ${brand?.audience || 'general audience'}. Tone: ${tone || brand?.tone || 'professional'}. USP: ${brand?.usp || ''}. Website: ${brand?.websiteUrl || ''}.${avoidWords}`
@@ -46,6 +51,9 @@ export async function POST(req: NextRequest) {
   const limit = platformLimits[platform] || 3000
 
   const posts = []
+  let totalInputTokens = 0
+  let totalOutputTokens = 0
+  let totalEstimatedCostInr = 0
   for (let i = 0; i < Math.min(count, 5); i++) {
     const prompt = `Create a ${platform} post about: "${topic}". Max ${limit} chars.
 Return JSON: { "content": "...", "hashtags": ["tag1","tag2","tag3"] }
@@ -53,6 +61,14 @@ Only return valid JSON.`
 
     try {
       const raw = await llm(prompt, system, 'fast')
+      const usage = estimateCostInr({
+        model: getModelNameFromComplexity('fast'),
+        inputText: `${system}\n${prompt}`,
+        outputText: raw,
+      })
+      totalInputTokens += usage.inputTokens
+      totalOutputTokens += usage.outputTokens
+      totalEstimatedCostInr += usage.estimatedCostInr
       const jsonMatch = raw.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
         const data = JSON.parse(jsonMatch[0])
@@ -76,6 +92,16 @@ Only return valid JSON.`
       { $inc: { 'usage.socialPostsGenerated': posts.length }, $set: { 'usage.lastActive': new Date() } }
     ).catch(() => {})
   }
+
+  await recordAiUsage({
+    userId: session.user.id,
+    feature: 'social_generate',
+    model: getModelNameFromComplexity('fast'),
+    estimatedInputTokens: totalInputTokens,
+    estimatedOutputTokens: totalOutputTokens,
+    estimatedCostInr: Number(totalEstimatedCostInr.toFixed(4)),
+    status: posts.length > 0 ? 'success' : 'failed',
+  })
 
   return Response.json({ posts }, { status: 201 })
 }

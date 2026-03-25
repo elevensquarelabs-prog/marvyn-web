@@ -4,13 +4,15 @@ import { authOptions } from '@/lib/auth'
 import { connectDB } from '@/lib/mongodb'
 import SEOAudit from '@/models/SEOAudit'
 import Brand from '@/models/Brand'
-import { getDfsCredentials, crawlAndLighthouse, findCompetitors, getCompetitorData, getDomainRankOverview, type PageData } from '@/lib/dataforseo'
+import { getDfsCredentials, crawlAndLighthouse, findCompetitors, getCompetitorData, getDomainRankOverview, getKeywordOpportunities, type PageData } from '@/lib/dataforseo'
 import { llm } from '@/lib/llm'
+import { buildLimitResponse, enforceAiBudget, estimateCostInr, estimateDataforSeoUsage, getModelNameFromComplexity, recordAiUsage } from '@/lib/ai-usage'
 import { skills } from '@/lib/skills'
+import { MAX_COMPETITORS, getCompetitorDomain, getCompetitorUrl, normalizeAuditCompetitors, normalizeBrandCompetitors, removeAuditCompetitor, removeBrandCompetitor, upsertAuditCompetitor, upsertBrandCompetitor } from '@/lib/competitors'
 import Keyword from '@/models/Keyword'
 import AuditRun from '@/models/AuditRun'
 import mongoose from 'mongoose'
-import type { IIssue, IPageKeyword, IAuditAction } from '@/models/SEOAudit'
+import type { IIssue, IPageKeyword, IAuditAction, ICrawlSummary, ICrawledPage } from '@/models/SEOAudit'
 
 function sse(data: unknown): Uint8Array {
   return new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`)
@@ -93,6 +95,20 @@ function extractPageKeywords(pageData: { h1: string; keywords: string; headings:
   return result.slice(0, 25)
 }
 
+function enrichKeywordOpportunities(existing: IPageKeyword[], opportunities: IPageKeyword[]): IPageKeyword[] {
+  const merged = [...existing]
+  const seen = new Set(existing.map(keyword => keyword.keyword.toLowerCase()))
+
+  for (const opportunity of opportunities) {
+    const normalized = opportunity.keyword.toLowerCase()
+    if (seen.has(normalized)) continue
+    seen.add(normalized)
+    merged.push(opportunity)
+  }
+
+  return merged.slice(0, 40)
+}
+
 const MONTHLY_AUDIT_LIMIT = 10
 
 export async function POST(req: NextRequest) {
@@ -102,10 +118,21 @@ export async function POST(req: NextRequest) {
   const { domain, location = 'India', city } = await req.json()
   if (!domain) return Response.json({ error: 'domain required' }, { status: 400 })
 
-  const cleanDomain = domain.replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+  // Normalize: strip protocol, query strings, paths, trailing slashes, spaces
+  const cleanDomain = domain
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/[?#].*$/, '')
+    .replace(/\/.*$/, '')
+    .replace(/\s+/g, '')
+    .toLowerCase()
 
   // ── Rate limit: max 10 full audit runs per calendar month ─────────
   await connectDB()
+  const budget = await enforceAiBudget(session.user.id, 'seo_run')
+  if (!budget.allowed) {
+    return Response.json(buildLimitResponse(budget), { status: 429 })
+  }
   const monthStart = new Date()
   monthStart.setDate(1)
   monthStart.setHours(0, 0, 0, 0)
@@ -139,31 +166,62 @@ export async function POST(req: NextRequest) {
         const defaultPageData: PageData = { title: cleanDomain, h1: cleanDomain, description: '', keywords: '', onpageScore: 0, checks: {}, headings: { h2: [], h3: [] } }
         let pageData: PageData = defaultPageData
         let performance = { score: 0, mobile: false }
+        let crawledPages: ICrawledPage[] = []
+        let crawlSummary: ICrawlSummary = { pagesRequested: 0, pagesCrawled: 0, pagesReturned: 0, renderedMode: true, screenshotUrl: undefined }
         let issues: IIssue[] = []
-        let criticalCount = 0, warningCount = 0, passedCount = 0, score = 50
+        let criticalCount = 0, warningCount = 0, passedCount = 0
+        let score: number | null = null
+        let scoreSource: 'dataforseo_onpage' | undefined
+        let crawlFailed = false
 
         try {
           const result = await crawlAndLighthouse(cleanDomain, credentials)
           pageData = result.pageData
           performance = result.performance
-          ;({ issues, criticalCount, warningCount, passedCount, score } = buildIssues(pageData.checks))
+          crawledPages = result.pages
+          crawlSummary = result.crawlSummary
+
+          if (pageData.onpageScore > 0) {
+            score = Math.round(pageData.onpageScore)
+            scoreSource = 'dataforseo_onpage'
+            const built = buildIssues(pageData.checks)
+            issues = built.issues
+            criticalCount = built.criticalCount
+            warningCount = built.warningCount
+            passedCount = built.passedCount
+          } else if (Object.keys(pageData.checks).length > 0) {
+            const built = buildIssues(pageData.checks)
+            issues = built.issues
+            criticalCount = built.criticalCount
+            warningCount = built.warningCount
+            passedCount = built.passedCount
+          } else {
+            // Crawl returned empty — site may be unreachable
+            crawlFailed = true
+            issues = [{ severity: 'critical', category: 'Technical', title: 'Site could not be fully crawled', recommendation: 'Ensure your site is publicly accessible and returns a 200 status code.' }]
+            criticalCount = 1
+            console.warn('[seo/run] crawl returned empty checks — site may be blocking crawlers')
+          }
         } catch (e) {
           console.error('[seo/run] crawl/lighthouse failed:', e)
+          crawlFailed = true
+          issues = [{ severity: 'critical', category: 'Technical', title: 'Site could not be crawled', recommendation: 'Check that your site is live and publicly accessible.' }]
+          criticalCount = 1
         }
-        send({ type: 'step', step: 1, status: 'done', message: 'Website crawled' })
+        send({ type: 'step', step: 1, status: crawlFailed ? 'warning' : 'done', message: crawlFailed ? 'Could not fully crawl site' : 'Website crawled' })
 
         // ── Step 2: Competitors (SERP) ────────────────────────────────
         send({ type: 'step', step: 2, status: 'running', message: 'Finding competitors on Google…' })
         let competitors: Awaited<ReturnType<typeof findCompetitors>> = []
         try {
-          competitors = await findCompetitors(pageData.h1, pageData.description, location, credentials)
+          competitors = await findCompetitors(pageData.h1, pageData.description, location, credentials, cleanDomain)
         } catch (e) {
           console.error('[seo/run] SERP failed:', e)
         }
         send({ type: 'step', step: 2, status: 'done', message: `Found ${competitors.length} competitors` })
 
         // ── Step 3: Traffic data (user domain + all competitors, parallel) ──
-        send({ type: 'step', step: 3, status: 'running', message: 'Fetching traffic data…' })
+        send({ type: 'step', step: 3, status: 'running', message: 'Fetching traffic and keyword data…' })
 
         // Sum real GSC clicks from synced keywords — this is exact data, not an estimate
         const gscAgg = await Keyword.aggregate([
@@ -175,11 +233,16 @@ export async function POST(req: NextRequest) {
 
         console.log(`[seo/run] GSC data: clicks=${gscClicks} keywords=${gscKeywords}`)
 
-        const [domainMetrics, competitorDetails] = await Promise.all([
+        const [domainMetrics, keywordOpportunities, competitorDetails] = await Promise.all([
           getDomainRankOverview(cleanDomain, location, credentials).catch(() => ({})),
+          getKeywordOpportunities(cleanDomain, location, credentials).catch(() => []),
           Promise.all(
             competitors.map(c => {
               const normDomain = c.domain.replace(/^www\./, '')
+              // Skip extra API call if competitors_domain already bundled traffic data
+              if (c.organicTraffic !== undefined || c.organicKeywords !== undefined) {
+                return Promise.resolve({ ...c, domain: normDomain })
+              }
               return getCompetitorData(normDomain, location, credentials)
                 .then(d => ({ ...c, ...d, domain: normDomain }))
                 .catch(() => ({ ...c, domain: normDomain }))
@@ -210,7 +273,19 @@ export async function POST(req: NextRequest) {
 
         console.log(`[seo/run] isSubdomain=${isSubdomain} gscClicks=${gscClicks} dfsEtv=${dfsTraffic} → finalTraffic=${finalOrganicTraffic} source=${trafficSource}`)
 
-        send({ type: 'step', step: 3, status: 'done', message: 'Traffic data fetched' })
+        send({ type: 'step', step: 3, status: 'done', message: 'Traffic and keyword data fetched' })
+        const dfsUsage = estimateDataforSeoUsage('seo_run_bundle')
+        await recordAiUsage({
+          userId: session.user.id,
+          feature: 'seo_run',
+          provider: 'dataforseo',
+          operation: 'seo_run_bundle',
+          model: 'dfs_bundle',
+          estimatedInputTokens: 0,
+          estimatedOutputTokens: 0,
+          estimatedCostUsd: dfsUsage.estimatedCostUsd,
+          creditsCharged: dfsUsage.creditsCharged,
+        })
 
         // ── Step 4: AI Actions ────────────────────────────────────────
         send({ type: 'step', step: 4, status: 'running', message: 'Generating recommendations…' })
@@ -220,7 +295,7 @@ export async function POST(req: NextRequest) {
           const prompt = `You are an SEO expert. Generate prioritised action items for this website audit.
 
 Domain: ${cleanDomain} (${location})
-SEO Score: ${score}/100
+SEO Score: ${score != null ? `${score}/100` : 'Unavailable (crawl score not returned)'}
 Critical issues: ${criticalCount}, Warnings: ${warningCount}
 Page title: "${pageData.title}"
 H1: "${pageData.h1}"
@@ -231,6 +306,7 @@ Top issues found:
 ${issues.slice(0, 8).map(i => `- [${i.severity}] ${i.title}`).join('\n')}
 
 Top competitors: ${competitorDetails.slice(0, 3).map(c => c.domain).join(', ')}
+High-opportunity keywords: ${keywordOpportunities.slice(0, 5).map(k => `${k.keyword} (${k.searchVolume ?? 0}/mo)`).join(', ') || 'none'}
 
 Return ONLY valid JSON, no markdown:
 {
@@ -249,6 +325,19 @@ Return ONLY valid JSON, no markdown:
 Generate 6-8 actions. Mix of technical, content, keyword, and competitor types.`
 
           const raw = await llm(prompt, skills.seoAudit, 'powerful')
+          const usage = estimateCostInr({
+            model: getModelNameFromComplexity('powerful'),
+            inputText: `${skills.seoAudit}\n${prompt}`,
+            outputText: raw,
+          })
+          await recordAiUsage({
+            userId: session.user.id,
+            feature: 'seo_run',
+            model: getModelNameFromComplexity('powerful'),
+            estimatedInputTokens: usage.inputTokens,
+            estimatedOutputTokens: usage.outputTokens,
+            estimatedCostInr: usage.estimatedCostInr,
+          })
           const match = raw.match(/\{[\s\S]*\}/)
           if (match) {
             const parsed = JSON.parse(match[0])
@@ -261,41 +350,62 @@ Generate 6-8 actions. Mix of technical, content, keyword, and competitor types.`
         send({ type: 'step', step: 4, status: 'done', message: `${aiActions.length} recommendations ready` })
 
         // ── Save & complete ───────────────────────────────────────────
-        const pageKeywords = extractPageKeywords(pageData)
+        const extractedKeywords = extractPageKeywords(pageData)
+        const opportunityKeywords = keywordOpportunities.map(keyword => ({
+          keyword: keyword.keyword,
+          source: 'opportunity',
+          searchVolume: keyword.searchVolume,
+          difficulty: keyword.difficulty,
+        }))
+        const pageKeywords = enrichKeywordOpportunities(extractedKeywords, opportunityKeywords)
 
-        const audit = await SEOAudit.findOneAndUpdate(
-          { userId: session.user.id },
-          { $set: {
-            userId: session.user.id,
-            domain: cleanDomain,
-            location,
-            city,
-            score,
-            criticalCount,
-            warningCount,
-            passedCount,
-            organicTraffic: finalOrganicTraffic,
-            organicKeywords: finalOrganicKeywords,
-            trafficSource,
-            pageData: {
-              title: pageData.title,
-              h1: pageData.h1,
-              description: pageData.description,
-              keywords: pageData.keywords,
-              onpageScore: pageData.onpageScore,
-              headings: [...(pageData.headings.h2 || []), ...(pageData.headings.h3 || [])],
-            },
-            issues,
-            competitors: competitorDetails,
-            performance,
-            aiActions,
-            pageKeywords,
-            status: 'complete',
-            createdAt: new Date(),
-            completedAt: new Date(),
-          } },
-          { upsert: true, new: true }
-        )
+        // Use raw MongoDB driver to bypass Mongoose schema casting on complex nested arrays
+        const auditDoc = {
+          userId: session.user.id,
+          domain: cleanDomain,
+          location,
+          city,
+          score,
+          scoreSource,
+          criticalCount,
+          warningCount,
+          passedCount,
+          organicTraffic: finalOrganicTraffic,
+          organicKeywords: finalOrganicKeywords,
+          trafficSource,
+          estimatedMetrics: {
+            organicTraffic: dfsTraffic,
+            organicKeywords: dfsKeywords,
+            source: 'dataforseo_labs',
+          },
+          pageData: {
+            title: pageData.title,
+            h1: pageData.h1,
+            description: pageData.description,
+            keywords: pageData.keywords,
+            onpageScore: pageData.onpageScore,
+            headings: [...(pageData.headings.h2 || []), ...(pageData.headings.h3 || [])],
+          },
+          crawlSummary,
+          crawledPages,
+          issues,
+          competitors: competitorDetails,
+          performance,
+          aiActions,
+          pageKeywords,
+          keywordOpportunities,
+          status: 'complete',
+          createdAt: new Date(),
+          completedAt: new Date(),
+        }
+
+        const rawResult = await mongoose.connection.db!
+          .collection('seoaudits')
+          .findOneAndUpdate(
+            { userId: session.user.id },
+            { $set: auditDoc },
+            { upsert: true, returnDocument: 'after' }
+          )
 
         // ── Sync competitors → Brand knowledge base ───────────────────
         // So Settings > Competitors and the AI agent context stay up to date
@@ -327,7 +437,7 @@ Generate 6-8 actions. Mix of technical, content, keyword, and competitor types.`
         // Log this run for rate limiting
         await AuditRun.create({ userId: session.user.id, domain: cleanDomain }).catch(() => {})
 
-        send({ type: 'complete', audit: audit.toObject() })
+        send({ type: 'complete', audit: auditDoc })
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         console.error('[seo/run]', msg)
@@ -390,12 +500,13 @@ export async function PATCH(req: NextRequest) {
 
   // Add competitor
   if (body.op === 'add_competitor') {
-    const existing = await SEOAudit.findOne({ userId: session.user.id }, { competitors: 1 }).lean() as { competitors?: { domain: string }[] } | null
-    if ((existing?.competitors?.length ?? 0) >= 5) {
-      return Response.json({ error: 'Competitor limit reached (max 5)' }, { status: 400 })
+    const auditDoc = await SEOAudit.findOne({ userId: session.user.id })
+    if (!auditDoc) return Response.json({ error: 'Audit not found' }, { status: 404 })
+    const existing = normalizeAuditCompetitors(auditDoc.competitors || [])
+    const cleanDomain = getCompetitorDomain(body.domain as string)
+    if (!existing.some(item => item.domain === cleanDomain) && existing.length >= MAX_COMPETITORS) {
+      return Response.json({ error: `Competitor limit reached (max ${MAX_COMPETITORS})` }, { status: 400 })
     }
-
-    const cleanDomain = (body.domain as string).replace(/^www\./, '')
 
     // Fetch live metrics for the new competitor
     const credentials = getDfsCredentials()
@@ -411,36 +522,41 @@ export async function PATCH(req: NextRequest) {
       tag: body.tag ?? 'unset',
       added: true,
       title: '',
-      url: '',
+      url: getCompetitorUrl(cleanDomain),
       description: '',
       organicTraffic: metrics.organicTraffic,
       organicKeywords: metrics.organicKeywords,
     }
 
-    await SEOAudit.findOneAndUpdate(
-      { userId: session.user.id },
-      { $push: { competitors: newEntry } }
-    )
-    // Sync to Brand knowledge base (skip if already there)
-    await Brand.findOneAndUpdate(
-      { userId: session.user.id, 'competitors.url': { $ne: `https://${cleanDomain}` } },
-      { $push: { competitors: { url: `https://${cleanDomain}`, name: cleanDomain, status: 'analyzed', analyzedAt: new Date() } } }
-    ).catch(() => {})
+    auditDoc.competitors = upsertAuditCompetitor(existing, newEntry)
+    await auditDoc.save()
+
+    const brand = await Brand.findOne({ userId: session.user.id })
+    if (brand) {
+      brand.competitors = upsertBrandCompetitor(normalizeBrandCompetitors(brand.competitors || []), {
+        url: getCompetitorUrl(cleanDomain),
+        name: cleanDomain,
+        status: 'analyzed',
+        analyzedAt: new Date(),
+      })
+      await brand.save()
+    }
     return Response.json({ ok: true, competitor: newEntry })
   }
 
   // Delete competitor
   if (body.op === 'delete_competitor') {
-    const cleanDomain = (body.domain as string).replace(/^www\./, '')
-    await SEOAudit.findOneAndUpdate(
-      { userId: session.user.id },
-      { $pull: { competitors: { domain: body.domain } } }
-    )
-    // Sync removal to Brand knowledge base
-    await Brand.findOneAndUpdate(
-      { userId: session.user.id },
-      { $pull: { competitors: { url: `https://${cleanDomain}` } } }
-    ).catch(() => {})
+    const cleanDomain = getCompetitorDomain(body.domain as string)
+    const auditDoc = await SEOAudit.findOne({ userId: session.user.id })
+    if (auditDoc) {
+      auditDoc.competitors = removeAuditCompetitor(auditDoc.competitors || [], cleanDomain)
+      await auditDoc.save()
+    }
+    const brand = await Brand.findOne({ userId: session.user.id })
+    if (brand) {
+      brand.competitors = removeBrandCompetitor(brand.competitors || [], cleanDomain)
+      await brand.save()
+    }
     return Response.json({ ok: true })
   }
 

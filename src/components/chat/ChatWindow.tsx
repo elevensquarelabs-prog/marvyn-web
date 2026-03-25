@@ -42,6 +42,8 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId ?? null)
   const [streaming, setStreaming] = useState(false)
   const [activeSkill, setActiveSkill] = useState<string | null>(null)
+  const [toolLabel, setToolLabel] = useState<string | null>(null)
+  const [completedTools, setCompletedTools] = useState<string[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -64,6 +66,8 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
     setInput('')
     setLoading(true)
     setStreaming(true)
+    setToolLabel(null)
+    setCompletedTools([])
     onAgentStatusChange?.('running', 'Thinking…')
 
     // Reset textarea height
@@ -101,7 +105,14 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
                 onSessionCreated?.(data.sessionId, text.slice(0, 60))
                 firstMessage = false
               }
+            } else if (data.type === 'tool_call') {
+              setToolLabel(data.label || data.tool)
+              onAgentStatusChange?.('running', data.label)
+            } else if (data.type === 'tool_result') {
+              setCompletedTools(prev => [...prev, data.summary])
+              setToolLabel(null)
             } else if (data.type === 'delta') {
+              setToolLabel(null)
               assistantContent += data.content
               if (!assistantMsgAdded) {
                 setMessages(prev => [...prev, { role: 'assistant', content: assistantContent }])
@@ -114,6 +125,8 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
                 })
               }
             } else if (data.type === 'done') {
+              setToolLabel(null)
+              setCompletedTools([])
               onAgentStatusChange?.('idle')
             }
           } catch {
@@ -128,6 +141,8 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
     } finally {
       setLoading(false)
       setStreaming(false)
+      setToolLabel(null)
+      setCompletedTools([])
     }
   }, [loading, sessionId, activeSkill, messages.length, onAgentStatusChange, onSessionCreated])
 
@@ -216,9 +231,26 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
           <MessageBubble key={i} role={msg.role} content={msg.content} />
         ))}
 
-        {streaming && messages[messages.length - 1]?.role !== 'assistant' && (
+        {/* Completed tool calls shown as subtle pills */}
+        {completedTools.length > 0 && (
+          <div className="flex flex-col gap-1 mb-2 ml-10">
+            {completedTools.map((summary, i) => (
+              <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 bg-[#0F1A0F] border border-[#1E3A1E] rounded-full w-fit">
+                <svg className="w-3 h-3 text-green-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+                <span className="text-[11px] text-green-400">{summary}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Active tool call spinner */}
+        {toolLabel && <ToolCallIndicator tool={toolLabel} />}
+
+        {/* Initial thinking state (before first tool or delta) */}
+        {streaming && !toolLabel && completedTools.length === 0 && messages[messages.length - 1]?.role !== 'assistant' && (
           <ToolCallIndicator tool="Thinking…" />
         )}
+
         <div ref={bottomRef} />
       </div>
 

@@ -5,144 +5,110 @@ export const metadata = { title: 'Refund Policy – Marvyn' }
 export default function RefundPolicy() {
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white">
-      {/* Nav */}
-      <nav className="px-6 py-4 border-b border-white/5 flex items-center justify-between max-w-4xl mx-auto">
-        <span className="font-bold text-lg tracking-tight">Marvyn</span>
+      <nav className="px-6 py-4 border-b border-white/5 flex items-center justify-between max-w-5xl mx-auto">
+        <Link href="/" className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-[#DA7756] flex items-center justify-center shrink-0">
+            <span className="text-white font-black text-sm leading-none">M</span>
+          </div>
+          <span className="text-white font-semibold text-base tracking-tight">Marvyn</span>
+        </Link>
         <Link href="/" className="text-sm text-[#555] hover:text-white transition-colors">← Back to home</Link>
       </nav>
 
-      <main className="max-w-4xl mx-auto px-6 py-12">
-        <h1 className="text-3xl font-bold mb-2">Refund Policy</h1>
-        <p className="text-[#555] text-sm mb-10">Effective date: March 23, 2026</p>
+      <main className="max-w-5xl mx-auto px-6 py-12">
+        <div className="mb-10">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-[#666] mb-3">Marvyn · Legal</p>
+          <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-3">Refund Policy</h1>
+          <p className="text-sm text-[#555]">Effective date: March 25, 2026</p>
+        </div>
 
-        <div className="prose prose-invert max-w-none space-y-8 text-[#A0A0A0] leading-relaxed">
-
+        <div className="space-y-10 text-[#A0A0A0] leading-relaxed">
           <section>
             <p>
-              This Refund Policy applies to all subscriptions purchased on the Marvyn platform, operated by{' '}
-              <strong className="text-white">Eleven Square Labs</strong> (648/A OM Chambers, 4th Floor,
-              Binnamangala 1st Stage, Indiranagar, Bangalore – 560038, India).
+              This Refund Policy applies to paid Marvyn subscriptions and credit top-up purchases made through Eleven
+              Square Labs. Because Marvyn relies on paid AI and third-party data providers, refunds are handled carefully
+              and not all purchases are refundable.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-white mb-3">1. Free Trial</h2>
+            <h2 className="text-xl font-semibold text-white mb-3">1. Subscription Refunds</h2>
             <p>
-              Marvyn offers a <strong className="text-white">14-day free trial</strong> to all new users.
-              No payment information is required during the trial period. You can explore all features
-              before committing to a paid subscription. We strongly encourage you to use the trial period
-              to evaluate the platform before purchasing.
+              Monthly subscription fees are generally non-refundable once the billing period has started. If you believe
+              you were charged in error or experienced a verified critical service failure, email{' '}
+              <a href="mailto:support@marvyn.tech" className="text-[#DA7756] hover:underline">support@marvyn.tech</a>{' '}
+              within 7 days of the charge and we will review the request.
+            </p>
+            <p>
+              For annual subscriptions, refund requests made within 7 days of the initial purchase may be reviewed if
+              the account has not made substantial use of paid features such as AI generation, data fetches, or publishing.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-white mb-3">2. Subscription Plans</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-              <div className="p-4 bg-[#111] border border-[#1E1E1E] rounded-xl">
-                <p className="text-white font-semibold text-lg">₹699 / month</p>
-                <p className="text-sm mt-1">Monthly subscription. Billed every 30 days. Cancel anytime.</p>
-              </div>
-              <div className="p-4 bg-[#111] border border-[#1E1E1E] rounded-xl">
-                <p className="text-white font-semibold text-lg">₹4,999 / year</p>
-                <p className="text-sm mt-1">Annual subscription. Billed once per year. Save ~40% vs monthly.</p>
-              </div>
+            <h2 className="text-xl font-semibold text-white mb-3">2. Credit Top-Ups</h2>
+            <p>
+              Purchased credit packs are generally non-refundable once purchased. Credits are consumed by actions that
+              trigger real provider costs, including AI generation and certain data operations.
+            </p>
+            <div className="p-4 rounded-xl border border-white/10 bg-white/[0.03]">
+              <p className="text-sm text-[#C8C8D4]">
+                Credit consumption may represent upstream costs paid by Marvyn to AI and data providers. Once those
+                operations occur, that spend is not reversible.
+              </p>
             </div>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-white mb-3">3. Refund Eligibility</h2>
-            <p>We offer refunds under the following conditions:</p>
-            <ul className="list-disc list-inside space-y-3 mt-3">
-              <li>
-                <strong className="text-white">Monthly plans:</strong> Refunds are available within{' '}
-                <strong className="text-white">7 days</strong> of the billing date if you have not
-                significantly used the platform during that period (fewer than 5 audit runs, fewer than
-                10 AI content generations).
-              </li>
-              <li>
-                <strong className="text-white">Annual plans:</strong> Refunds are available within{' '}
-                <strong className="text-white">14 days</strong> of the initial purchase date, subject
-                to the same usage limits above. Partial refunds (pro-rated for unused months) may be
-                considered on a case-by-case basis after the 14-day window.
-              </li>
-              <li>
-                <strong className="text-white">Technical failure:</strong> If you experience a critical
-                technical issue that renders the platform unusable and we are unable to resolve it within
-                72 hours, you are entitled to a full refund regardless of usage.
-              </li>
-            </ul>
+            <h2 className="text-xl font-semibold text-white mb-3">3. Renewal Charges</h2>
+            <p>
+              Subscriptions renew automatically. If you intended to cancel but were charged on renewal, contact support
+              within 48 hours. We may consider a goodwill refund if little or no paid usage occurred in the renewed period.
+            </p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold text-white mb-3">4. Non-Refundable Situations</h2>
-            <p>Refunds will not be issued in the following cases:</p>
-            <ul className="list-disc list-inside space-y-2 mt-3">
-              <li>You changed your mind after using the platform beyond the usage limits stated above.</li>
-              <li>Your account was suspended or terminated due to a violation of our Terms of Service.</li>
-              <li>You did not use your free trial before purchasing.</li>
-              <li>Requests made after the refund window has expired (beyond 7 days for monthly, 14 days for annual).</li>
-              <li>Disruptions caused by third-party services (Meta, Google, LinkedIn) that are outside our control.</li>
+            <ul className="list-disc list-inside space-y-2">
+              <li>Heavy use of AI generation, data fetches, or publishing before the refund request.</li>
+              <li>Requests based solely on third-party platform outages, API restrictions, or policy changes.</li>
+              <li>Account suspension caused by misuse, abuse, or policy violations.</li>
+              <li>Consumed credit packs or materially used billing periods.</li>
             </ul>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold text-white mb-3">5. How to Request a Refund</h2>
-            <p>To request a refund:</p>
-            <ol className="list-decimal list-inside space-y-2 mt-3">
-              <li>
-                Email us at{' '}
-                <a href="mailto:support@elevensquarelabs.com" className="text-[#DA7756] hover:underline">
-                  support@elevensquarelabs.com
-                </a>{' '}
-                with the subject line <strong className="text-white">&quot;Refund Request – [Your Email]&quot;</strong>.
-              </li>
-              <li>Include your registered email address, the date of purchase, and the reason for your request.</li>
-              <li>We will respond within <strong className="text-white">3 business days</strong>.</li>
-              <li>
-                Approved refunds are processed back to your original payment method within{' '}
-                <strong className="text-white">7–10 business days</strong>, depending on your bank or card issuer.
-              </li>
-            </ol>
+            <ul className="list-disc list-inside space-y-2">
+              <li>Email <a href="mailto:support@marvyn.tech" className="text-[#DA7756] hover:underline">support@marvyn.tech</a> with the subject line “Refund Request”.</li>
+              <li>Include your registered email, charge date, amount, and reason for the request.</li>
+              <li>We aim to respond within 5 business days.</li>
+            </ul>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-white mb-3">6. Cancellations</h2>
+            <h2 className="text-xl font-semibold text-white mb-3">6. Cancellation vs Refund</h2>
             <p>
-              You can cancel your subscription at any time from your account settings. Cancellation stops
-              future billing but does not automatically trigger a refund for the current billing period.
-              Your access continues until the end of the paid period.
+              Cancelling a subscription stops future renewals. It does not automatically create a refund for the current
+              billing period or for previously purchased credits.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-white mb-3">7. Currency and Taxes</h2>
+            <h2 className="text-xl font-semibold text-white mb-3">7. Privacy and Deletion Requests</h2>
             <p>
-              All transactions are in Indian Rupees (INR). Refunds will be issued in INR. Eleven Square Labs
-              is not responsible for any currency conversion losses or bank charges incurred during the
-              refund process.
+              Refund requests are separate from privacy or deletion requests. For deletion or data-rights requests,
+              contact <a href="mailto:dataofficer@marvyn.tech" className="text-[#DA7756] hover:underline">dataofficer@marvyn.tech</a>.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-white mb-3">8. Changes to This Policy</h2>
+            <h2 className="text-xl font-semibold text-white mb-3">8. Contact</h2>
             <p>
-              We reserve the right to update this Refund Policy at any time. Changes will be posted on this
-              page with a new effective date. The policy in effect at the time of your purchase governs
-              your refund eligibility.
+              Billing and refund support: <a href="mailto:support@marvyn.tech" className="text-[#DA7756] hover:underline">support@marvyn.tech</a><br />
+              Privacy and deletion requests: <a href="mailto:dataofficer@marvyn.tech" className="text-[#DA7756] hover:underline">dataofficer@marvyn.tech</a>
             </p>
           </section>
-
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-3">9. Contact Us</h2>
-            <p>For refund requests or billing questions:</p>
-            <p className="mt-3">
-              Eleven Square Labs<br />
-              648/A OM Chambers, 4th Floor, Binnamangala 1st Stage,<br />
-              Indiranagar, Bangalore – 560038, India<br />
-              <a href="mailto:support@elevensquarelabs.com" className="text-[#DA7756] hover:underline">support@elevensquarelabs.com</a>
-            </p>
-          </section>
-
         </div>
       </main>
 

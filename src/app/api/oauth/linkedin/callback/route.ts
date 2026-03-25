@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { connectDB } from '@/lib/mongodb'
-import User from '@/models/User'
+import mongoose from 'mongoose'
 import axios from 'axios'
 
 const BASE_URL = () => (process.env.NEXTAUTH_URL || '').trim()
@@ -33,13 +33,24 @@ export async function GET(req: NextRequest) {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
 
-    const profileId = profileRes.data.sub
+    const profileId = profileRes.data.sub || profileRes.data.id || 'linkedin-user'
     const profileName = profileRes.data.name || profileRes.data.email || 'LinkedIn User'
 
+    console.log('[linkedin/callback] profileId:', profileId, 'profileName:', profileName, 'userId:', userId)
+
     await connectDB()
-    await User.findByIdAndUpdate(userId, {
-      'connections.linkedin': { accessToken, profileId, profileName },
-    })
+    // Use raw driver to bypass Mongoose strict mode / schema cache issues
+    const result = await mongoose.connection.db!.collection('users').updateOne(
+      { _id: new mongoose.Types.ObjectId(userId) },
+      {
+        $set: {
+          'connections.linkedin.accessToken': accessToken,
+          'connections.linkedin.profileId': profileId,
+          'connections.linkedin.profileName': profileName,
+        },
+      }
+    )
+    console.log('[linkedin/callback] DB update:', result.matchedCount, 'matched,', result.modifiedCount, 'modified')
 
     return Response.redirect(`${BASE_URL()}/settings?connected=linkedin`)
   } catch (err) {

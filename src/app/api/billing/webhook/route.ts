@@ -20,18 +20,27 @@ export async function POST(req: NextRequest) {
     const notes = event.payload.payment.entity.notes || {}
     const userId = notes.userId
     const plan = notes.plan
+    const orderType = notes.orderType
+    const credits = Number(notes.credits || 0)
 
     if (userId) {
-      const periodEnd = plan === 'yearly'
-        ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
-        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      if (orderType === 'credits_topup') {
+        await User.findByIdAndUpdate(userId, {
+          $inc: { 'usage.extraCreditsBalance': credits },
+          $set: { 'subscription.razorpayCustomerId': event.payload.payment.entity.customer_id || '' },
+        })
+      } else {
+        const periodEnd = plan === 'yearly'
+          ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
 
-      await User.findByIdAndUpdate(userId, {
-        'subscription.status': 'active',
-        'subscription.plan': plan,
-        'subscription.currentPeriodEnd': periodEnd,
-        'subscription.razorpayCustomerId': event.payload.payment.entity.customer_id || '',
-      })
+        await User.findByIdAndUpdate(userId, {
+          'subscription.status': 'active',
+          'subscription.plan': plan,
+          'subscription.currentPeriodEnd': periodEnd,
+          'subscription.razorpayCustomerId': event.payload.payment.entity.customer_id || '',
+        })
+      }
     }
   }
 

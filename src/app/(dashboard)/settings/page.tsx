@@ -37,6 +37,7 @@ interface AdAccount {
 
 const PROVIDER_LABELS: Record<string, string> = {
   google: 'Google Ads + Search Console',
+  ga4: 'Google Analytics 4',
   meta: 'Meta',
   linkedin: 'LinkedIn',
 }
@@ -69,6 +70,10 @@ export default function SettingsPage() {
   const [googleSites, setGoogleSites] = useState<{ url: string; permissionLevel: string }[]>([])
   const [loadingGoogleSites, setLoadingGoogleSites] = useState(false)
   const [savingGoogleSite, setSavingGoogleSite] = useState(false)
+  // GA4 selectors
+  const [ga4Properties, setGa4Properties] = useState<{ propertyId: string; propertyName: string; accountName: string }[]>([])
+  const [loadingGa4Properties, setLoadingGa4Properties] = useState(false)
+  const [savingGa4Property, setSavingGa4Property] = useState(false)
   const [changingGSCSite, setChangingGSCSite] = useState(false)
   // LinkedIn pages & ad accounts
   const [linkedinPages, setLinkedinPages] = useState<{ id: string; name: string }[]>([])
@@ -375,7 +380,7 @@ export default function SettingsPage() {
   }
 
   const addCompetitor = async () => {
-    if (!newCompUrl) return
+    if (!newCompUrl || (brand.competitors?.length || 0) >= 5) return
     setAddingComp(true)
     try {
       const res = await fetch('/api/settings/competitors', {
@@ -384,7 +389,11 @@ export default function SettingsPage() {
         body: JSON.stringify({ url: newCompUrl, analyze: true }),
       })
       const data = await res.json()
-      setBrand(b => ({ ...b, competitors: [...(b.competitors || []), data.competitor] }))
+      if (!res.ok) {
+        alert(data.error || 'Unable to add competitor')
+        return
+      }
+      setBrand(b => ({ ...b, competitors: data.competitors || (data.competitor ? [...(b.competitors || []), data.competitor] : (b.competitors || [])) }))
       setNewCompUrl('')
     } finally {
       setAddingComp(false)
@@ -392,12 +401,13 @@ export default function SettingsPage() {
   }
 
   const removeCompetitor = async (url: string) => {
-    await fetch('/api/settings/competitors', {
+    const res = await fetch('/api/settings/competitors', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url }),
     })
-    setBrand(b => ({ ...b, competitors: (b.competitors || []).filter(c => c.url !== url) }))
+    const data = await res.json()
+    setBrand(b => ({ ...b, competitors: data.competitors || (b.competitors || []).filter(c => c.url !== url) }))
   }
 
   const connectClarity = async () => {
@@ -432,7 +442,47 @@ export default function SettingsPage() {
     setConnections(prev => { const n = { ...prev }; delete n.clarity; return n })
   }
 
-  const connectOAuth = async (provider: 'meta' | 'google' | 'linkedin') => {
+  const loadGa4Properties = async () => {
+    setLoadingGa4Properties(true)
+    try {
+      const res = await fetch('/api/oauth/ga4/properties')
+      const data = await res.json()
+      setGa4Properties(data.properties || [])
+    } finally {
+      setLoadingGa4Properties(false)
+    }
+  }
+
+  const selectGa4Property = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const propertyId = e.target.value
+    if (!propertyId) return
+    const property = ga4Properties.find((item) => item.propertyId === propertyId)
+    if (!property) return
+    setSavingGa4Property(true)
+    try {
+      await fetch('/api/oauth/ga4/properties', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(property),
+      })
+      setConnections(prev => ({
+        ...prev,
+        ga4: {
+          ...prev.ga4,
+          connected: 'true',
+          propertyId: property.propertyId,
+          propertyName: property.propertyName,
+          accountName: property.accountName,
+          connectedAt: new Date().toISOString(),
+        },
+      }))
+      setGa4Properties([])
+    } finally {
+      setSavingGa4Property(false)
+    }
+  }
+
+  const connectOAuth = async (provider: 'meta' | 'google' | 'linkedin' | 'ga4') => {
     const res = await fetch(`/api/oauth/${provider}`)
     const data = await res.json()
     if (data.authUrl) window.location.href = data.authUrl
@@ -499,6 +549,13 @@ export default function SettingsPage() {
     { id: 'alerts', label: 'Alerts' },
   ] as const
 
+  const contentWidthClass =
+    section === 'billing'
+      ? 'max-w-5xl'
+      : section === 'connections'
+        ? 'max-w-4xl'
+        : 'max-w-3xl'
+
   return (
     <div className="flex flex-col h-full overflow-y-auto">
       {successBanner && (
@@ -531,7 +588,8 @@ export default function SettingsPage() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 p-6 max-w-2xl">
+        <div className="flex-1 min-w-0 p-6">
+          <div className={contentWidthClass}>
           {/* Brand Profile */}
           {section === 'brand' && (
             <div className="space-y-4">
@@ -587,10 +645,11 @@ export default function SettingsPage() {
                   placeholder="https://competitor.com"
                   className="flex-1 bg-[#111] border border-[#1E1E1E] rounded-lg px-3 py-2 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/50"
                 />
-                <Button size="sm" onClick={addCompetitor} loading={addingComp}>
+                <Button size="sm" onClick={addCompetitor} loading={addingComp} disabled={(brand.competitors?.length || 0) >= 5}>
                   Add & Analyze
                 </Button>
               </div>
+              <p className="text-xs text-[#555]">Max 5 competitors. Removing one frees a slot immediately across SEO, Settings, and Mission Control.</p>
               <div className="space-y-2">
                 {(brand.competitors || []).map(c => (
                   <div key={c.url} className="flex items-start justify-between p-3 bg-[#111] border border-[#1E1E1E] rounded-lg">
@@ -899,6 +958,108 @@ export default function SettingsPage() {
                         setGoogleAdsManualEntry(false)
                         setGoogleAdsManualId('')
                         setChangingGSCSite(false)
+                      }}
+                    >
+                      Disconnect
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Google Analytics 4 */}
+              <div className="p-4 bg-[#111] border border-[#1E1E1E] rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-white">Google Analytics 4</p>
+                    <p className="text-xs text-[#555]">
+                      {connections.ga4?.propertyId
+                        ? `${connections.ga4.propertyName || connections.ga4.propertyId}${connections.ga4.accountName ? ` · ${connections.ga4.accountName}` : ''}`
+                        : connections.ga4?.connected
+                          ? 'Token saved · Property not selected yet'
+                          : 'Sessions, channels, landing pages & conversions'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {connections.ga4?.connected && (
+                      <Badge variant="success">Connected</Badge>
+                    )}
+                    <Button size="sm" variant="secondary" onClick={() => connectOAuth('ga4')}>
+                      {connections.ga4?.connected ? 'Reconnect' : 'Connect'}
+                    </Button>
+                  </div>
+                </div>
+
+                {connections.ga4?.connected && (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1A1A1A] border border-[#2A2A2A] text-[#888]">GA4 Reporting</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1A1A1A] border border-[#2A2A2A] text-[#888]">Traffic Attribution</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1A1A1A] border border-[#2A2A2A] text-[#888]">Landing Pages</span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-[#555]">GA4 Property</label>
+                      {connections.ga4.propertyId && ga4Properties.length === 0 ? (
+                        <div className="flex items-center gap-2 px-3 py-2 bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg">
+                          <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
+                          <span className="text-xs text-white">{connections.ga4.propertyName || connections.ga4.propertyId}</span>
+                          {connections.ga4.accountName && (
+                            <span className="text-[10px] text-[#888]">{connections.ga4.accountName}</span>
+                          )}
+                          <button onClick={loadGa4Properties} disabled={loadingGa4Properties} className="ml-auto text-[10px] text-[#555] hover:text-white">
+                            {loadingGa4Properties ? '…' : 'Change'}
+                          </button>
+                        </div>
+                      ) : ga4Properties.length > 0 ? (
+                        <div className="relative">
+                          <select
+                            value={connections.ga4.propertyId || ''}
+                            onChange={selectGa4Property}
+                            disabled={savingGa4Property}
+                            className="w-full bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[#DA7756]/50 appearance-none pr-8"
+                          >
+                            <option value="">Select GA4 property…</option>
+                            {ga4Properties.map((property) => (
+                              <option key={property.propertyId} value={property.propertyId} className="bg-[#0D0D0D]">
+                                {property.propertyName} {property.accountName ? `(${property.accountName})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#555]">▾</span>
+                          {savingGa4Property && <p className="text-xs text-[#555] mt-1">Saving…</p>}
+                        </div>
+                      ) : (
+                        <button
+                          onClick={loadGa4Properties}
+                          disabled={loadingGa4Properties}
+                          className="text-xs text-[#DA7756] hover:underline disabled:opacity-50"
+                        >
+                          {loadingGa4Properties ? 'Loading properties…' : 'Load GA4 properties'}
+                        </button>
+                      )}
+                    </div>
+
+                    {connections.ga4?.connectedAt && (
+                      <p className="text-[10px] text-[#555]">
+                        Connected {new Date(connections.ga4.connectedAt).toLocaleDateString()}
+                      </p>
+                    )}
+
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={async () => {
+                        await fetch('/api/settings/connections', {
+                          method: 'DELETE',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ platform: 'ga4' }),
+                        })
+                        setConnections(prev => {
+                          const n = { ...prev }
+                          delete n.ga4
+                          return n
+                        })
+                        setGa4Properties([])
                       }}
                     >
                       Disconnect
@@ -1267,6 +1428,7 @@ export default function SettingsPage() {
               </Button>
             </div>
           )}
+          </div>
         </div>
       </div>
     </div>

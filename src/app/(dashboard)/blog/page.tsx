@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { BlogCalendar } from '@/components/blog/BlogCalendar'
 import { PostCard } from '@/components/blog/PostCard'
 import { PostEditor } from '@/components/blog/PostEditor'
@@ -23,6 +24,7 @@ interface Post {
 }
 
 export default function BlogPage() {
+  const searchParams = useSearchParams()
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
@@ -61,6 +63,14 @@ export default function BlogPage() {
   }, [])
 
   useEffect(() => { loadPosts() }, [loadPosts])
+
+  useEffect(() => {
+    const keyword = searchParams.get('keyword')
+    if (!keyword) return
+    setTopics(prev => prev || keyword)
+    setCount(1)
+    setGenerateOpen(true)
+  }, [searchParams])
 
   const generate = async () => {
     setGenerating(true)

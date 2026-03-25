@@ -11,6 +11,36 @@ interface Recommendation {
   action: string
 }
 
+interface ClarityContext {
+  overview?: {
+    totalSessions: number
+    avgScrollDepth: number
+    deadClickRate: number
+    rageClickRate: number
+  }
+  byDevice?: Array<{
+    label: string
+    sessions: number
+    scrollDepth: number
+    engagementSecs: number
+    deadClickRate: number
+  }>
+  byBrowser?: Array<{
+    label: string
+    sessions: number
+    scrollDepth: number
+    engagementSecs: number
+    deadClickRate: number
+  }>
+  aiInsights?: Array<{
+    severity: 'high' | 'medium' | 'low'
+    headline: string
+    evidence: string
+    whyItMatters: string
+    fix: string
+  }>
+}
+
 // ─── Parser ───────────────────────────────────────────────────────────────────
 // Looks for INSIGHT_START ... INSIGHT_END blocks in Claude's response.
 // Falls back to numbered/bulleted list parsing if blocks aren't present.
@@ -59,7 +89,13 @@ function parseRecs(text: string): Recommendation[] {
 
 // ─── Prompt ───────────────────────────────────────────────────────────────────
 
-function buildPrompt(campaigns: CampaignInsight[], spend: number, roas: number | null, symbol: string): string {
+function buildPrompt(
+  campaigns: CampaignInsight[],
+  spend: number,
+  roas: number | null,
+  symbol: string,
+  clarity?: ClarityContext | null
+): string {
   const withSpend = campaigns.filter(c => c.spend > 0)
   const topPerformers = [...withSpend]
     .sort((a, b) => (b.roas ?? 0) - (a.roas ?? 0))
@@ -98,16 +134,29 @@ function buildPrompt(campaigns: CampaignInsight[], spend: number, roas: number |
     })),
   }
 
+  const claritySection = clarity?.overview ? `
+
+Landing Page Behavior Context from Microsoft Clarity:
+${JSON.stringify({
+  overview: clarity.overview,
+  topDeviceRows: clarity.byDevice?.slice(0, 3) || [],
+  topBrowserRows: clarity.byBrowser?.slice(0, 3) || [],
+  uxIssues: clarity.aiInsights?.slice(0, 3) || [],
+}, null, 2)}
+` : ''
+
   return `Analyze these Meta Ads campaign results and provide specific actionable recommendations:
 
 Campaign Data:
 ${JSON.stringify(campaignData, null, 2)}
+${claritySection}
 
 Focus on:
 1. Budget reallocation between campaigns
 2. Audience optimization suggestions
 3. Creative fatigue indicators
 4. Specific actions to improve ROAS
+5. Use landing-page behavior issues from Clarity when relevant. If Clarity shows dead clicks, rage clicks, or poor engagement, mention the UX fix explicitly instead of only changing campaign settings.
 
 Return EXACTLY 4 recommendations in this structured format (do not deviate from it):
 
@@ -166,7 +215,16 @@ export function AIInsights({ campaigns, spend, roas, symbol }: Props) {
     let fullText = ''
 
     try {
-      const prompt = buildPrompt(campaigns, spend, roas, symbol)
+      let clarityContext: ClarityContext | null = null
+      try {
+        const clarityRes = await fetch('/api/analytics/clarity')
+        const clarityData = await clarityRes.json()
+        if (clarityRes.ok && clarityData?.connected && !clarityData?.error && clarityData?.overview) {
+          clarityContext = clarityData
+        }
+      } catch {}
+
+      const prompt = buildPrompt(campaigns, spend, roas, symbol, clarityContext)
       console.log('[AIInsights] Sending prompt, length:', prompt.length)
 
       const res = await fetch('/api/agent/run', {

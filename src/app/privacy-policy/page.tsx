@@ -5,136 +5,261 @@ export const metadata = { title: 'Privacy Policy – Marvyn' }
 export default function PrivacyPolicy() {
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white">
-      {/* Nav */}
-      <nav className="px-6 py-4 border-b border-white/5 flex items-center justify-between max-w-4xl mx-auto">
-        <span className="font-bold text-lg tracking-tight">Marvyn</span>
+      <nav className="px-6 py-4 border-b border-white/5 flex items-center justify-between max-w-5xl mx-auto">
+        <Link href="/" className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-[#DA7756] flex items-center justify-center shrink-0">
+            <span className="text-white font-black text-sm leading-none">M</span>
+          </div>
+          <span className="text-white font-semibold text-base tracking-tight">Marvyn</span>
+        </Link>
         <Link href="/" className="text-sm text-[#555] hover:text-white transition-colors">← Back to home</Link>
       </nav>
 
-      <main className="max-w-4xl mx-auto px-6 py-12">
-        <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
-        <p className="text-[#555] text-sm mb-10">Effective date: March 23, 2026</p>
+      <main className="max-w-5xl mx-auto px-6 py-12">
+        <div className="mb-10">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-[#666] mb-3">Marvyn · Legal</p>
+          <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-3">Privacy Policy</h1>
+          <p className="text-sm text-[#555]">Effective date: March 25, 2026</p>
+        </div>
 
-        <div className="prose prose-invert max-w-none space-y-8 text-[#A0A0A0] leading-relaxed">
+        <div className="space-y-10 text-[#A0A0A0] leading-relaxed">
+          <section>
+            <p>
+              This Privacy Policy explains how Marvyn, operated by <strong className="text-white">Eleven Square Labs</strong>,
+              collects, uses, stores, and shares information when you use our website, application, and connected
+              integrations. By using Marvyn, you agree to the practices described here.
+            </p>
+          </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-white mb-3">1. About Us</h2>
+            <h2 className="text-xl font-semibold text-white mb-3">1. Who We Are</h2>
             <p>
-              Marvyn is an AI Marketing OS SaaS product developed and operated by <strong className="text-white">Eleven Square Labs</strong>,
-              a company registered in India with its office at 648/A OM Chambers, 4th Floor, Binnamangala 1st Stage,
-              Indiranagar, Bangalore – 560038, India. You can reach us at{' '}
-              <a href="mailto:support@elevensquarelabs.com" className="text-[#DA7756] hover:underline">support@elevensquarelabs.com</a>.
+              Marvyn is an AI-powered marketing workspace operated by Eleven Square Labs, 648/A OM Chambers, 4th Floor,
+              Binnamangala 1st Stage, Indiranagar, Bangalore – 560038, India.
+            </p>
+            <p>
+              General support: <a href="mailto:support@marvyn.tech" className="text-[#DA7756] hover:underline">support@marvyn.tech</a><br />
+              Privacy and data requests: <a href="mailto:dataofficer@marvyn.tech" className="text-[#DA7756] hover:underline">dataofficer@marvyn.tech</a>
             </p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold text-white mb-3">2. Information We Collect</h2>
-            <p>We collect the following categories of information:</p>
-            <ul className="list-disc list-inside space-y-2 mt-3">
-              <li><strong className="text-white">Account information:</strong> Name, email address, and password when you register.</li>
-              <li><strong className="text-white">Billing information:</strong> Payment details processed securely via Razorpay. We do not store card numbers.</li>
-              <li><strong className="text-white">Connected platform data:</strong> When you connect Meta Ads, Google Ads, Google Search Console, or LinkedIn, we store OAuth tokens and fetch campaign/analytics data on your behalf.</li>
-              <li><strong className="text-white">Brand profile data:</strong> Business name, product descriptions, competitors, and preferences you enter in the app.</li>
-              <li><strong className="text-white">Usage data:</strong> Pages visited, features used, and interactions within the platform.</li>
-              <li><strong className="text-white">Log data:</strong> IP address, browser type, device information, and timestamps.</li>
-            </ul>
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-white font-medium mb-2">Account and authentication data</h3>
+                <ul className="list-disc list-inside space-y-2">
+                  <li>Name, email address, and password when you register directly.</li>
+                  <li>OAuth identity and profile metadata when you connect supported third-party platforms.</li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="text-white font-medium mb-2">Billing and usage data</h3>
+                <ul className="list-disc list-inside space-y-2">
+                  <li>Subscription status, plan, credit balances, top-ups, and usage records.</li>
+                  <li>Payment references from Razorpay. We do not store full card or bank details.</li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="text-white font-medium mb-2">Workspace and brand data</h3>
+                <p>
+                  Brand profile information, competitor lists, generated content, campaign notes, SEO data, analytics
+                  preferences, alert settings, and any content you create or upload inside Marvyn.
+                </p>
+              </div>
+              <div>
+                <h3 className="text-white font-medium mb-2">Connected platform data</h3>
+                <p>
+                  When you connect Google, Meta, LinkedIn, Microsoft Clarity, or other supported services, we store
+                  access tokens, refresh tokens where applicable, and operational metadata such as account IDs, page IDs,
+                  customer IDs, site URLs, and GA4 property IDs.
+                </p>
+              </div>
+              <div>
+                <h3 className="text-white font-medium mb-2">Usage, logs, and support data</h3>
+                <ul className="list-disc list-inside space-y-2">
+                  <li>Feature usage, request logs, diagnostics, browser/device data, timestamps, and IP-related logs.</li>
+                  <li>Support communications and account-related notifications.</li>
+                  <li>Session and behavior analytics on Marvyn’s own website and app, as described below.</li>
+                </ul>
+              </div>
+            </div>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-white mb-3">3. How We Use Your Information</h2>
+            <h2 className="text-xl font-semibold text-white mb-3">3. How We Use Information</h2>
             <ul className="list-disc list-inside space-y-2">
-              <li>To provide and operate the Marvyn platform and its features.</li>
-              <li>To generate AI-powered marketing insights, content, and recommendations.</li>
-              <li>To process payments and manage your subscription.</li>
-              <li>To send transactional emails (receipts, alerts, account notifications).</li>
-              <li>To improve our product through aggregated, anonymised analytics.</li>
-              <li>To respond to support requests and communicate with you.</li>
-              <li>To comply with applicable legal obligations.</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-3">4. Third-Party Services</h2>
-            <p>We integrate with and share limited data with the following third-party services to deliver our product:</p>
-            <ul className="list-disc list-inside space-y-2 mt-3">
-              <li><strong className="text-white">Anthropic (Claude AI):</strong> Used to generate marketing content and insights. Prompts may include your brand data.</li>
-              <li><strong className="text-white">Google APIs:</strong> Google Ads and Google Search Console data is fetched using your authorised OAuth tokens.</li>
-              <li><strong className="text-white">Meta APIs:</strong> Facebook and Instagram Ads data is fetched using your authorised access tokens.</li>
-              <li><strong className="text-white">Razorpay:</strong> Payment processing for subscriptions.</li>
-              <li><strong className="text-white">MongoDB Atlas:</strong> Database hosting for your account and platform data.</li>
-              <li><strong className="text-white">DataForSEO:</strong> SEO data and crawling services.</li>
-              <li><strong className="text-white">Microsoft Clarity:</strong> Session recordings and heatmaps for product improvement (if connected).</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-3">5. Data Retention</h2>
-            <p>
-              We retain your data for as long as your account is active or as needed to provide the service.
-              If you cancel your subscription or delete your account, your personal data is deleted within 30 days,
-              except where retention is required by law.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-3">6. Data Security</h2>
-            <p>
-              We use industry-standard security measures including encrypted connections (HTTPS), hashed passwords,
-              and access controls to protect your data. OAuth tokens are stored encrypted and never shared with
-              third parties beyond what is necessary to provide the service.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-3">7. Your Rights</h2>
-            <p>Depending on your jurisdiction, you may have the right to:</p>
-            <ul className="list-disc list-inside space-y-2 mt-3">
-              <li>Access the personal data we hold about you.</li>
-              <li>Request correction of inaccurate data.</li>
-              <li>Request deletion of your data (&quot;right to be forgotten&quot;).</li>
-              <li>Withdraw consent for data processing at any time.</li>
-              <li>Export your data in a portable format.</li>
+              <li>To operate, secure, and improve the Marvyn platform.</li>
+              <li>To authenticate users, manage subscriptions, and administer credits.</li>
+              <li>To connect to third-party platforms you authorize and fetch or publish data on your behalf.</li>
+              <li>To generate AI-powered outputs using your prompts, workspace context, and connected data.</li>
+              <li>To send transactional notifications, billing communications, and support responses.</li>
+              <li>To diagnose incidents, prevent abuse, and comply with legal obligations.</li>
             </ul>
             <p className="mt-3">
-              To exercise any of these rights, email us at{' '}
-              <a href="mailto:support@elevensquarelabs.com" className="text-[#DA7756] hover:underline">support@elevensquarelabs.com</a>.
+              We do not sell your personal data. We also do not use your connected platform data for our own advertising
+              targeting beyond the actions you explicitly authorize inside Marvyn.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-white mb-3">8. Cookies</h2>
+            <h2 className="text-xl font-semibold text-white mb-3">4. AI Processing and Model Providers</h2>
             <p>
-              We use cookies and similar technologies for authentication, preferences, and analytics.
-              See our <Link href="/cookie-policy" className="text-[#DA7756] hover:underline">Cookie Policy</Link> for full details.
+              Marvyn routes AI requests through <strong className="text-white">OpenRouter</strong>, which may dispatch
+              requests to downstream model providers such as Anthropic and Minimax. Prompts and relevant workspace context
+              may be transmitted to OpenRouter and the selected model provider to generate outputs.
             </p>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-3">9. Children&apos;s Privacy</h2>
             <p>
-              Marvyn is not intended for use by individuals under the age of 18. We do not knowingly collect
-              personal data from children.
+              We do not describe this as a direct single-provider integration because model routing may change over time.
+              You remain responsible for reviewing all AI-generated outputs before publication, distribution, or business use.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-white mb-3">10. Changes to This Policy</h2>
+            <h2 className="text-xl font-semibold text-white mb-3">5. Third-Party Platform Connections</h2>
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-white font-medium mb-2">Google</h3>
+                <p className="mb-2">Marvyn uses the following Google scopes when authorized by you:</p>
+                <div className="flex flex-wrap gap-2 mb-3 text-xs">
+                  {['adwords', 'webmasters.readonly', 'analytics.readonly'].map(scope => (
+                    <span key={scope} className="px-2 py-1 rounded border border-white/10 bg-white/5 text-[#888]">{scope}</span>
+                  ))}
+                </div>
+                <ul className="list-disc list-inside space-y-2">
+                  <li>Read Google Ads performance and selected customer-account data.</li>
+                  <li>Read Google Search Console site and query performance data.</li>
+                  <li>Read GA4 property, session, channel, conversion, and landing-page analytics.</li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="text-white font-medium mb-2">Meta</h3>
+                <p className="mb-2">Marvyn uses these Meta permissions when authorized by you:</p>
+                <div className="flex flex-wrap gap-2 mb-3 text-xs">
+                  {['ads_read', 'ads_management', 'business_management'].map(scope => (
+                    <span key={scope} className="px-2 py-1 rounded border border-white/10 bg-white/5 text-[#888]">{scope}</span>
+                  ))}
+                </div>
+                <ul className="list-disc list-inside space-y-2">
+                  <li>Fetch ad accounts, campaign insights, and page metadata.</li>
+                  <li>Identify Instagram business accounts attached to connected Facebook pages.</li>
+                  <li>Publish Facebook posts and Instagram posts or reels when initiated by you.</li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="text-white font-medium mb-2">LinkedIn</h3>
+                <p className="mb-2">Marvyn uses these LinkedIn scopes when authorized by you:</p>
+                <div className="flex flex-wrap gap-2 mb-3 text-xs">
+                  {['openid', 'profile', 'email', 'w_member_social', 'r_ads'].map(scope => (
+                    <span key={scope} className="px-2 py-1 rounded border border-white/10 bg-white/5 text-[#888]">{scope}</span>
+                  ))}
+                </div>
+                <ul className="list-disc list-inside space-y-2">
+                  <li>Identify your profile and save basic profile metadata.</li>
+                  <li>Fetch LinkedIn ad accounts where available.</li>
+                  <li>Publish LinkedIn UGC posts when you initiate publishing in Marvyn.</li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="text-white font-medium mb-2">Microsoft Clarity</h3>
+                <p>
+                  If you connect Clarity, Marvyn reads project-level behavioral analytics including sessions, scroll depth,
+                  dead clicks, rage clicks, and device/browser breakdowns.
+                </p>
+              </div>
+              <div>
+                <h3 className="text-white font-medium mb-2">DataForSEO</h3>
+                <p>
+                  Marvyn uses DataForSEO for SEO crawl, keyword, competitor, and SERP-related analysis. Domains, URLs,
+                  and search-analysis inputs you submit may be sent to DataForSEO for processing.
+                </p>
+              </div>
+            </div>
+            <p className="mt-4">
+              You can disconnect supported platforms from Settings. You may also revoke access directly from the provider’s
+              own security or app-permissions controls.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-white mb-3">6. Analytics and Tracking on Marvyn’s Own Website and App</h2>
             <p>
-              We may update this policy from time to time. We will notify you of significant changes by email
-              or via an in-app notice. Continued use of the platform after changes constitutes acceptance.
+              Separate from customer-connected accounts, Marvyn may use first-party analytics and advertising technologies
+              on its own website and application, including Microsoft Clarity, Google analytics or tagging, Meta Pixel,
+              and LinkedIn Insight Tag, to understand product usage, measure campaigns, and improve the service.
+            </p>
+            <p>
+              These tools may collect browser, device, interaction, page-view, and conversion-related information on
+              Marvyn-owned properties. They do not grant us access to your third-party business accounts unless you
+              separately connect those accounts inside the product.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-white mb-3">11. Contact</h2>
+            <h2 className="text-xl font-semibold text-white mb-3">7. Cookies and Similar Technologies</h2>
+            <p>
+              We use cookies, local storage, pixels, tags, and similar technologies for authentication, preferences,
+              analytics, and marketing measurement. See our{' '}
+              <Link href="/cookie-policy" className="text-[#DA7756] hover:underline">Cookie Policy</Link> for details.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-white mb-3">8. Storage, Security, and Retention</h2>
+            <p>
+              Marvyn stores account, workspace, and integration data in infrastructure that includes MongoDB and other
+              supporting service providers. OAuth tokens and operational credentials are stored with access controls and
+              used only to provide the features you authorize.
+            </p>
+            <p>
+              We retain data for as long as necessary to provide the service, comply with legal obligations, resolve
+              disputes, and enforce agreements. When accounts are deleted or platform connections are removed, related
+              data is deleted or deactivated according to operational and legal requirements.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-white mb-3">9. Your Rights and Data Deletion</h2>
+            <p>You may request access, correction, deletion, or export-related assistance for your personal data.</p>
+            <ul className="list-disc list-inside space-y-2 mt-3">
+              <li>General support: <a href="mailto:support@marvyn.tech" className="text-[#DA7756] hover:underline">support@marvyn.tech</a></li>
+              <li>Privacy and deletion requests: <a href="mailto:dataofficer@marvyn.tech" className="text-[#DA7756] hover:underline">dataofficer@marvyn.tech</a></li>
+            </ul>
+            <p className="mt-3">
+              Disconnecting a platform from Settings removes Marvyn’s active access for that integration. Some provider-side
+              permissions may also need to be revoked directly from the provider dashboard.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-white mb-3">10. International Processing</h2>
+            <p>
+              Some of our processors and integrated platforms may process data outside India. By using Marvyn and
+              connecting third-party services, you understand that information may be transferred internationally as
+              necessary to provide the service.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-white mb-3">11. Changes to This Policy</h2>
+            <p>
+              We may update this Privacy Policy from time to time. Material changes will be communicated through the
+              app, email, or both. Continued use of Marvyn after an update takes effect means you accept the revised policy.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-white mb-3">12. Contact</h2>
             <p>
               Eleven Square Labs<br />
               648/A OM Chambers, 4th Floor, Binnamangala 1st Stage,<br />
-              Indiranagar, Bangalore – 560038, India<br />
-              <a href="mailto:support@elevensquarelabs.com" className="text-[#DA7756] hover:underline">support@elevensquarelabs.com</a>
+              Indiranagar, Bangalore – 560038, India
+            </p>
+            <p>
+              Support: <a href="mailto:support@marvyn.tech" className="text-[#DA7756] hover:underline">support@marvyn.tech</a><br />
+              Data protection and deletion: <a href="mailto:dataofficer@marvyn.tech" className="text-[#DA7756] hover:underline">dataofficer@marvyn.tech</a>
             </p>
           </section>
-
         </div>
       </main>
 
