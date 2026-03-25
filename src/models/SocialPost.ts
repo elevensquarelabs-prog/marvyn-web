@@ -8,9 +8,14 @@ export interface ISocialPost extends Document {
   mediaKey?: string
   mediaType?: string
   mediaUrl?: string
-  status: 'draft' | 'pending_approval' | 'scheduled' | 'published' | 'failed'
+  status: 'draft' | 'pending_approval' | 'scheduled' | 'processing' | 'published' | 'failed'
   scheduledAt?: Date
   publishedAt?: Date
+  // Retry fields
+  retryCount: number
+  lastError?: string
+  nextRetryAt?: Date
+  processingStartedAt?: Date
   createdAt: Date
 }
 
@@ -24,15 +29,28 @@ const SocialPostSchema = new Schema<ISocialPost>({
   mediaUrl: String,
   status: {
     type: String,
-    enum: ['draft', 'pending_approval', 'scheduled', 'published', 'failed'],
+    enum: ['draft', 'pending_approval', 'scheduled', 'processing', 'published', 'failed'],
     default: 'draft',
   },
   scheduledAt: Date,
   publishedAt: Date,
+  retryCount: { type: Number, default: 0 },
+  lastError: String,
+  nextRetryAt: Date,
+  processingStartedAt: Date,
   createdAt: { type: Date, default: Date.now },
 })
 
+// User-facing queries (dashboard, social workspace)
 SocialPostSchema.index({ userId: 1, platform: 1, status: 1 })
+
+// Cron: find scheduled posts due for first attempt
 SocialPostSchema.index({ status: 1, scheduledAt: 1 })
+
+// Cron: find retry posts due after backoff
+SocialPostSchema.index({ status: 1, nextRetryAt: 1 })
+
+// Cron: find stuck processing posts
+SocialPostSchema.index({ status: 1, processingStartedAt: 1 })
 
 export default mongoose.models.SocialPost || mongoose.model<ISocialPost>('SocialPost', SocialPostSchema)
