@@ -6,13 +6,19 @@ type AuditData = {
   domain: string
   location: string
   city?: string
-  score: number
+  score: number | null
+  scoreSource?: 'dataforseo_onpage'
   criticalCount: number
   warningCount: number
   passedCount: number
   organicTraffic?: number
   organicKeywords?: number
-  trafficSource?: 'gsc' | 'estimated'
+  trafficSource?: 'gsc' | 'estimated' | null
+  estimatedMetrics?: {
+    organicTraffic?: number
+    organicKeywords?: number
+    source: 'dataforseo_labs'
+  }
   pageData: {
     title: string
     h1: string
@@ -21,6 +27,27 @@ type AuditData = {
     onpageScore: number
     headings: string[]
   }
+  crawlSummary?: {
+    pagesRequested: number
+    pagesCrawled: number
+    pagesReturned: number
+    renderedMode: boolean
+    screenshotUrl?: string
+  }
+  crawledPages?: Array<{
+    url: string
+    title?: string
+    statusCode?: number
+    level?: number
+    wordCount?: number
+    contentLength?: number
+    internalLinks?: number
+    externalLinks?: number
+    brokenResources?: number
+    onpageScore?: number
+    issuesCount?: number
+    isHomepage?: boolean
+  }>
   issues: Array<{ severity: string; category: string; title: string; recommendation: string }>
   competitors: Array<{
     domain: string
@@ -43,7 +70,8 @@ type AuditData = {
     mobile: boolean
   }
   aiActions: Array<{ priority: string; effort: string; impact: string; title: string; instructions: string[]; type: string; done: boolean }>
-  pageKeywords: Array<{ keyword: string; source: string; searchVolume?: number; difficulty?: number; position?: number }>
+  pageKeywords: Array<{ keyword: string; source: string; searchVolume?: number; impressions?: number; difficulty?: number; position?: number }>
+  keywordOpportunities?: Array<{ keyword: string; searchVolume?: number; difficulty?: number; cpc?: number; competitionLevel?: string; intent?: string }>
   createdAt: Date
   completedAt?: Date
   status: string
@@ -71,7 +99,16 @@ function scoreLabel(s: number): string {
 
 // ─── Score Arc Gauge ──────────────────────────────────────────────────────────
 
-function ScoreArc({ score }: { score: number }) {
+function ScoreArc({ score }: { score: number | null }) {
+  if (score == null) {
+    return (
+      <div className="w-[144px] h-[130px] flex flex-col items-center justify-center">
+        <p className="text-4xl font-bold text-[#555]">—</p>
+        <p className="text-[11px] text-[#555] mt-1">Unavailable</p>
+      </div>
+    )
+  }
+
   const R = 52
   const cx = 72
   const cy = 72
@@ -147,20 +184,6 @@ function CheckIcon({ pass }: { pass: boolean }) {
   )
 }
 
-// ─── Lock overlay ──────────────────────────────────────────────────────────────
-
-function LockedOverlay() {
-  return (
-    <div className="absolute inset-0 backdrop-blur-[3px] bg-[var(--surface-2)]/80 rounded-xl flex flex-col items-center justify-center gap-1 z-10">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <rect x="2.5" y="7" width="11" height="8" rx="2" fill="#555" />
-        <path d="M5 7V5.5a3 3 0 016 0V7" stroke="#555" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-      <span className="text-[10px] text-[#555] font-medium">Pro</span>
-    </div>
-  )
-}
-
 // ─── Favicon ──────────────────────────────────────────────────────────────────
 
 function Favicon({ domain }: { domain: string }) {
@@ -199,19 +222,44 @@ function fmtNum(n?: number | null): string {
   return Math.round(n).toLocaleString()
 }
 
+function fmtMoney(n?: number | null): string {
+  if (!n || n <= 0) return '—'
+  if (n >= 1000) return `$${(n / 1000).toFixed(1)}K`
+  return `$${n.toFixed(2)}`
+}
+
+function trimUrl(url: string): string {
+  return url.replace(/^https?:\/\//, '').replace(/\/$/, '')
+}
+
 export default function AuditOverview({ audit, onSwitchTab, gscStats }: Props) {
   const pd = audit.pageData
   const perf = audit.performance
+  const score = audit.score
+  const crawlSummary = audit.crawlSummary
+  const crawledPages = audit.crawledPages ?? []
+  const topPages = crawledPages
+    .slice()
+    .sort((a, b) => (a.issuesCount ?? 0) - (b.issuesCount ?? 0) || (b.wordCount ?? 0) - (a.wordCount ?? 0))
+    .slice(0, 5)
+  const keywordOpportunities = audit.keywordOpportunities ?? []
 
   // User's own domain traffic
   const orgTraffic = audit.organicTraffic && audit.organicTraffic > 0 ? audit.organicTraffic : null
   const orgKeywords = audit.organicKeywords && audit.organicKeywords > 0 ? audit.organicKeywords : null
+  const estimatedTraffic = audit.estimatedMetrics?.organicTraffic && audit.estimatedMetrics.organicTraffic > 0
+    ? audit.estimatedMetrics.organicTraffic
+    : null
+  const estimatedKeywords = audit.estimatedMetrics?.organicKeywords && audit.estimatedMetrics.organicKeywords > 0
+    ? audit.estimatedMetrics.organicKeywords
+    : null
+  const pagesCrawledValue = crawlSummary?.pagesCrawled || crawlSummary?.pagesReturned || 0
 
   // Website health metrics — treat 0 as missing for performance
   const perfScore = perf?.score && perf.score > 0 ? perf.score : null
   const healthMetrics = [
     { label: 'Performance',   score: perfScore ?? 0,          display: perfScore != null ? String(perfScore) : '—',                    locked: false },
-    { label: 'SEO (On-Page)', score: audit.score,             display: String(audit.score),                                            locked: false },
+    { label: 'SEO (On-Page)', score: score ?? 0,              display: score != null ? String(score) : '—',                           locked: false },
     { label: 'Accessibility', score: perf.accessibility ?? 0, display: perf.accessibility ? String(perf.accessibility) : '—',         locked: !perf.accessibility },
     { label: 'Best Practices', score: perf.bestPractices ?? 0, display: perf.bestPractices ? String(perf.bestPractices) : '—',        locked: !perf.bestPractices },
   ]
@@ -221,7 +269,6 @@ export default function AuditOverview({ audit, onSwitchTab, gscStats }: Props) {
     { label: 'Title Tag', value: pd.title ? pd.title.slice(0, 60) + (pd.title.length > 60 ? '…' : '') : 'Missing', pass: !!pd.title },
     { label: 'Meta Description', value: pd.description ? pd.description.slice(0, 80) + (pd.description.length > 80 ? '…' : '') : 'Missing', pass: !!pd.description },
     { label: 'H1 Heading', value: pd.h1 ? pd.h1.slice(0, 60) + (pd.h1.length > 60 ? '…' : '') : 'Missing', pass: !!pd.h1 },
-    { label: 'Viewport Meta', value: 'Present', pass: true },
   ]
 
   // Target keyword
@@ -229,17 +276,21 @@ export default function AuditOverview({ audit, onSwitchTab, gscStats }: Props) {
 
   // Passed checks — derive from what's NOT in issues
   const issueTitlesLower = new Set(audit.issues.map(i => i.title.toLowerCase()))
+  const hasViewportAudit = !issueTitlesLower.has('missing viewport meta') && !issueTitlesLower.has('viewport meta missing')
+  onPageRows.push({ label: 'Viewport Meta', value: hasViewportAudit ? 'Present' : 'Missing', pass: hasViewportAudit })
   const WELL_KNOWN: Array<{ title: string; sub: string; issueKey: string }> = [
     { title: 'HTTPS Enabled', sub: 'Secure connection active', issueKey: 'page served over http' },
     { title: 'Title Tag Present', sub: 'Visible in search results', issueKey: 'missing title tag' },
     { title: 'Meta Description', sub: 'Snippet shows in SERP', issueKey: 'missing meta description' },
     { title: 'H1 Tag Present', sub: 'Primary keyword heading', issueKey: 'no h1 heading found' },
-    { title: 'Viewport Tag', sub: 'Mobile-friendly layout', issueKey: '__never__' },
+    { title: 'Viewport Tag', sub: 'Mobile-friendly layout', issueKey: 'missing viewport meta' },
     { title: 'No Redirect Chains', sub: 'Direct URLs only', issueKey: 'redirect chain detected' },
     { title: 'Charset Declared', sub: 'UTF-8 meta present', issueKey: 'missing charset meta tag' },
     { title: 'No Broken Links', sub: 'All links returning 200', issueKey: 'page returns error' },
   ]
   const passedItems = WELL_KNOWN.filter(w => !issueTitlesLower.has(w.issueKey)).slice(0, 6)
+  const seriousPages = crawledPages.filter(page => (page.statusCode && page.statusCode >= 400) || (page.issuesCount ?? 0) >= 3).length
+  const renderedLabel = crawlSummary?.renderedMode ? 'JS + browser rendering enabled' : 'HTML crawl only'
 
   return (
     <div className="space-y-4 w-full">
@@ -252,7 +303,7 @@ export default function AuditOverview({ audit, onSwitchTab, gscStats }: Props) {
         <Card className="row-span-2 p-6 flex flex-col items-center gap-5">
           <div className="text-center">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-[#555] mb-3">Overall SEO Score</p>
-            <ScoreArc score={audit.score} />
+            <ScoreArc score={score} />
           </div>
           <div className="w-full grid grid-cols-3 gap-2 pt-1 border-t border-[#1E1E1E]">
             {[
@@ -299,31 +350,33 @@ export default function AuditOverview({ audit, onSwitchTab, gscStats }: Props) {
           </p>
         </Card>
 
-        {/* Ranked Keywords — col 2, row 2 */}
+        {/* Estimated Traffic — col 2, row 2 */}
         <Card className="col-start-2 row-start-2 p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#555]">Ranked Keywords</p>
-            {gscStats && <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-green-900/30 text-green-400">GSC</span>}
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#555]">Est. Organic Traffic</p>
+            <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-amber-500/10 text-amber-400">Estimate</span>
           </div>
-          <p className="text-4xl font-bold mt-2" style={{ color: gscStats?.keywords ? '#DA7756' : orgKeywords ? '#DA7756' : '#555' }}>
-            {gscStats?.keywords ? fmtNum(gscStats.keywords) : orgKeywords ? fmtNum(orgKeywords) : '—'}
+          <p className="text-4xl font-bold mt-2" style={{ color: estimatedTraffic ? '#DA7756' : '#555' }}>
+            {fmtNum(estimatedTraffic)}
           </p>
           <p className="text-[10px] text-[#555] mt-1">
-            {gscStats ? 'Queries with impressions' : 'Sync GSC to see real data'}
+            DataForSEO Labs estimated monthly traffic
           </p>
         </Card>
 
-        {/* Avg Position — col 3, row 2 */}
+        {/* Tracked Keywords — col 3, row 2 */}
         <Card className="col-start-3 row-start-2 p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#555]">Avg. Position</p>
-            {gscStats && <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-green-900/30 text-green-400">GSC</span>}
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#555]">Tracked Keywords</p>
+            <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${gscStats ? 'bg-green-900/30 text-green-400' : 'bg-amber-500/10 text-amber-400'}`}>
+              {gscStats ? 'GSC' : 'Estimate'}
+            </span>
           </div>
-          <p className="text-4xl font-bold mt-2" style={{ color: gscStats?.avgPosition ? (gscStats.avgPosition <= 10 ? '#22c55e' : gscStats.avgPosition <= 30 ? '#f59e0b' : '#ef4444') : '#555' }}>
-            {gscStats?.avgPosition ? `#${gscStats.avgPosition}` : '—'}
+          <p className="text-4xl font-bold mt-2" style={{ color: gscStats?.keywords || orgKeywords || estimatedKeywords ? '#22c55e' : '#555' }}>
+            {gscStats?.keywords ? fmtNum(gscStats.keywords) : fmtNum(orgKeywords ?? estimatedKeywords)}
           </p>
           <p className="text-[10px] text-[#555] mt-1">
-            {gscStats ? 'Average Google ranking' : 'Sync GSC to see real data'}
+            {gscStats ? 'Queries with impressions in Search Console' : 'Estimated ranking footprint from DataForSEO'}
           </p>
         </Card>
 
@@ -374,6 +427,109 @@ export default function AuditOverview({ audit, onSwitchTab, gscStats }: Props) {
         </div>
       </Card>
 
+      <div className="grid grid-cols-2 gap-4">
+        <Card>
+          <CardHeader title="Audit Coverage" sub="How much of the site was actually reviewed" />
+          <div className="p-5 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: 'Pages requested', value: crawlSummary?.pagesRequested ?? 0 },
+                { label: 'Pages crawled', value: pagesCrawledValue },
+                { label: 'Pages surfaced', value: crawlSummary?.pagesReturned ?? 0 },
+                { label: 'Pages needing attention', value: seriousPages },
+              ].map(item => (
+                <div key={item.label} className="rounded-xl border border-[#1E1E1E] bg-[#0D0D0D] px-4 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[#555]">{item.label}</p>
+                  <p className="text-2xl font-bold text-white mt-2">{item.value || '—'}</p>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-xl border border-[#1E1E1E] bg-[#0D0D0D] px-4 py-3 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-[#555]">Render mode</p>
+                <p className="text-sm font-semibold text-white mt-2">{renderedLabel}</p>
+                <p className="text-[11px] text-[#555] mt-1">Modern JS-heavy pages are audited with rendered HTML, not just raw source.</p>
+              </div>
+              <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${crawlSummary?.renderedMode ? 'bg-green-500/10 text-green-400' : 'bg-[#2A2A2A] text-[#A0A0A0]'}`}>
+                {crawlSummary?.renderedMode ? 'Rendered' : 'HTML only'}
+              </span>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title="Audit Proof" sub="Visual confirmation of the rendered page" />
+          <div className="p-5">
+            {crawlSummary?.screenshotUrl ? (
+              <div className="space-y-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={crawlSummary.screenshotUrl}
+                  alt={`Screenshot of ${audit.domain}`}
+                  className="w-full h-44 object-cover rounded-xl border border-[#1E1E1E] bg-[#0D0D0D]"
+                />
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-[#A0A0A0]">Rendered homepage screenshot captured during the crawl.</p>
+                  <a
+                    href={crawlSummary.screenshotUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs font-semibold text-[#DA7756] hover:text-[#C4633F] transition-colors whitespace-nowrap"
+                  >
+                    Open full image →
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <div className="h-44 rounded-xl border border-dashed border-[#2A2A2A] bg-[#0D0D0D] flex flex-col items-center justify-center text-center px-6">
+                <p className="text-sm font-medium text-[#A0A0A0]">No screenshot captured</p>
+                <p className="text-xs text-[#555] mt-1">The crawl still ran in rendered mode, but no screenshot URL was returned by DataForSEO.</p>
+              </div>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      {topPages.length > 0 && (
+        <Card>
+          <CardHeader title="Top Crawled Pages" sub="Best available page-level signals from the audit" />
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-[var(--border)]">
+                  {['Page', 'Status', 'Words', 'Links', 'Issues', 'Score'].map(header => (
+                    <th key={header} className="text-left px-5 py-3 text-[#555] font-semibold uppercase tracking-wide text-[10px]">{header}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {topPages.map(page => (
+                  <tr key={page.url} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-2)] transition-colors">
+                    <td className="px-5 py-3">
+                      <div className="max-w-[320px]">
+                        <p className="font-semibold text-white truncate">{page.title || trimUrl(page.url)}</p>
+                        <p className="text-[#555] text-[10px] truncate">{trimUrl(page.url)}</p>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${page.statusCode && page.statusCode >= 400 ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'}`}>
+                        {page.statusCode ?? '—'}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-[#A0A0A0]">{fmtNum(page.wordCount)}</td>
+                    <td className="px-5 py-3 text-[#A0A0A0]">{fmtNum((page.internalLinks ?? 0) + (page.externalLinks ?? 0))}</td>
+                    <td className="px-5 py-3 text-[#A0A0A0]">{fmtNum(page.issuesCount)}</td>
+                    <td className="px-5 py-3 font-semibold" style={{ color: scoreColor(page.onpageScore ?? 0) }}>
+                      {page.onpageScore ? Math.round(page.onpageScore) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
       {/* ── Competitor Table ──────────────────────────────────────────────────── */}
       {audit.competitors.length > 0 && (
         <Card>
@@ -384,9 +540,11 @@ export default function AuditOverview({ audit, onSwitchTab, gscStats }: Props) {
                 <span className="text-[10px] bg-[#DA7756]/10 text-[#DA7756] px-2 py-1 rounded-full font-medium border border-[#DA7756]/20">
                   🔍 {targetKeyword}
                 </span>
-                <span className="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-1 rounded-full font-medium border border-amber-500/20">
-                  Difficulty: Medium
-                </span>
+                {estimatedKeywords ? (
+                  <span className="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-1 rounded-full font-medium border border-amber-500/20">
+                    Est. footprint: {fmtNum(estimatedKeywords)} keywords
+                  </span>
+                ) : null}
               </div>
             </div>
           </div>
@@ -427,6 +585,39 @@ export default function AuditOverview({ audit, onSwitchTab, gscStats }: Props) {
                         ? fmtNum(c.organicKeywords)
                         : <span className="text-[#555]">—</span>}
                     </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {keywordOpportunities.length > 0 && (
+        <Card>
+          <CardHeader title="Keyword Opportunities" sub="DataForSEO Labs ideas for additional reach" />
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-[var(--border)]">
+                  {['Keyword', 'Search Volume', 'Difficulty', 'CPC', 'Intent'].map(header => (
+                    <th key={header} className="text-left px-5 py-3 text-[#555] font-semibold uppercase tracking-wide text-[10px]">{header}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {keywordOpportunities.slice(0, 8).map(item => (
+                  <tr key={item.keyword} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-2)] transition-colors">
+                    <td className="px-5 py-3">
+                      <p className="font-semibold text-white">{item.keyword}</p>
+                      {item.competitionLevel ? <p className="text-[10px] text-[#555] mt-0.5">Competition: {item.competitionLevel}</p> : null}
+                    </td>
+                    <td className="px-5 py-3 text-[#A0A0A0]">{fmtNum(item.searchVolume)}</td>
+                    <td className="px-5 py-3">
+                      <span className="text-[#A0A0A0]">{item.difficulty != null ? `${item.difficulty}` : '—'}</span>
+                    </td>
+                    <td className="px-5 py-3 text-[#A0A0A0]">{fmtMoney(item.cpc)}</td>
+                    <td className="px-5 py-3 text-[#A0A0A0]">{item.intent ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>

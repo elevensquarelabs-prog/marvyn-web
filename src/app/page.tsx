@@ -235,7 +235,7 @@ function Features() {
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight mb-4">
-            Everything you need.<br />Nothing you don't.
+            Everything you need.<br />Nothing you don&apos;t.
           </h2>
           <p className="text-[#606060] text-lg max-w-xl mx-auto">Six intelligent workspaces that actually talk to each other.</p>
         </div>
@@ -432,7 +432,7 @@ function Testimonials() {
                   <span key={i} className="text-[#DA7756] text-sm">★</span>
                 ))}
               </div>
-              <p className="text-[#888] text-sm leading-relaxed mb-5">"{t.quote}"</p>
+              <p className="text-[#888] text-sm leading-relaxed mb-5">&quot;{t.quote}&quot;</p>
               <div>
                 <p className="text-white text-sm font-medium">{t.name}</p>
                 <p className="text-[#444] text-xs mt-0.5">{t.role}</p>

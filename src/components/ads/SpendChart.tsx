@@ -53,6 +53,25 @@ interface Props {
   symbol: string
 }
 
+function renderTooltip(symbol: string) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return function TooltipContent({ active, payload, label }: any) {
+    if (!active || !payload?.length) return null
+    return (
+      <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg p-3 text-xs shadow-xl">
+        <p className="text-[#A0A0A0] mb-2">{label}</p>
+        {payload.map((p: { color: string; name: string; value: number }) => (
+          <div key={p.name} className="flex items-center gap-2 mb-1">
+            <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+            <span className="text-[#A0A0A0]">{p.name}:</span>
+            <span className="text-white font-medium">{fmtCurrency(p.value, symbol)}</span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+}
+
 export function SpendChart({ dailySpend, platformBreakdown, loading, symbol }: Props) {
   const totalSpend = platformBreakdown.meta.spend + platformBreakdown.google.spend
   const hasMeta = platformBreakdown.meta.spend > 0
@@ -63,26 +82,6 @@ export function SpendChart({ dailySpend, platformBreakdown, loading, symbol }: P
     Meta: parseFloat(d.meta.toFixed(2)),
     Google: parseFloat(d.google.toFixed(2)),
   }))
-
-  const CustomTooltip = ({ active, payload, label }: {
-    active?: boolean
-    payload?: Array<{ color: string; name: string; value: number }>
-    label?: string
-  }) => {
-    if (!active || !payload?.length) return null
-    return (
-      <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg p-3 text-xs shadow-xl">
-        <p className="text-[#A0A0A0] mb-2">{label}</p>
-        {payload.map(p => (
-          <div key={p.name} className="flex items-center gap-2 mb-1">
-            <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
-            <span className="text-[#A0A0A0]">{p.name}:</span>
-            <span className="text-white font-medium">{fmtCurrency(p.value, symbol)}</span>
-          </div>
-        ))}
-      </div>
-    )
-  }
 
   return (
     <div className="grid grid-cols-5 gap-3">
@@ -134,7 +133,7 @@ export function SpendChart({ dailySpend, platformBreakdown, loading, symbol }: P
                 tickLine={false}
                 tickFormatter={v => symbol + (v >= 1000 ? (v / 1000).toFixed(0) + 'K' : v)}
               />
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip content={renderTooltip(symbol)} />
               <Legend
                 wrapperStyle={{ fontSize: '11px', color: '#555' }}
                 iconType="circle"

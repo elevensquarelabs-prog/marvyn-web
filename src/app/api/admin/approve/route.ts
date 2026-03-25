@@ -6,7 +6,7 @@ import BetaRequest from '@/models/BetaRequest'
 import User from '@/models/User'
 import { randomBytes } from 'crypto'
 import bcrypt from 'bcryptjs'
-import { sendWelcomeEmail } from '@/lib/email'
+import { sendWelcomeEmail, sendTempPasswordEmail } from '@/lib/email'
 
 const SUPER_ADMIN_EMAIL = 'raayed32@gmail.com'
 const BETA_EXPIRY = new Date('2099-12-31')
@@ -37,12 +37,12 @@ export async function POST(req: NextRequest) {
       'subscription.currentPeriodEnd': BETA_EXPIRY,
     })
     await BetaRequest.findByIdAndUpdate(betaRequestId, { status: 'approved' })
-    console.log(`[admin/approve] Upgraded existing user ${betaReq.email} — temp password: ${temporaryPassword}`)
+    console.log(`[admin/approve] Upgraded existing user ${betaReq.email}`)
+    sendTempPasswordEmail(betaReq.email, betaReq.name, temporaryPassword).catch(() => {})
     return Response.json({
       success: true,
       userId: existing._id,
       email: betaReq.email,
-      temporaryPassword,
     })
   }
 
@@ -59,13 +59,13 @@ export async function POST(req: NextRequest) {
   })
 
   await BetaRequest.findByIdAndUpdate(betaRequestId, { status: 'approved' })
-  console.log(`[admin/approve] Approved ${betaReq.email} — temp password: ${temporaryPassword}`)
+  console.log(`[admin/approve] Approved ${betaReq.email}`)
   sendWelcomeEmail(betaReq.email, betaReq.name).catch(() => {})
+  sendTempPasswordEmail(betaReq.email, betaReq.name, temporaryPassword).catch(() => {})
 
   return Response.json({
     success: true,
     userId: user._id,
     email: betaReq.email,
-    temporaryPassword,
   })
 }

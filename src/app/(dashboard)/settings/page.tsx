@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/shared/Button'
 import { Badge } from '@/components/shared/Badge'
 import { useSession } from 'next-auth/react'
+import { buildTimezoneOptions } from '@/lib/timezone-list'
+import { BillingCreditsPanel } from '@/components/settings/BillingCreditsPanel'
 
 interface Brand {
   name?: string
@@ -42,7 +44,7 @@ const PROVIDER_LABELS: Record<string, string> = {
 export default function SettingsPage() {
   const { data: session } = useSession()
   const searchParams = useSearchParams()
-  const [section, setSection] = useState<'brand' | 'competitors' | 'connections' | 'billing' | 'account'>('brand')
+  const [section, setSection] = useState<'brand' | 'competitors' | 'connections' | 'billing' | 'account' | 'alerts'>('brand')
   const [successBanner, setSuccessBanner] = useState('')
   const [brand, setBrand] = useState<Brand>({})
   const [saving, setSaving] = useState(false)
@@ -68,12 +70,29 @@ export default function SettingsPage() {
   const [loadingGoogleSites, setLoadingGoogleSites] = useState(false)
   const [savingGoogleSite, setSavingGoogleSite] = useState(false)
   const [changingGSCSite, setChangingGSCSite] = useState(false)
+  // LinkedIn pages & ad accounts
+  const [linkedinPages, setLinkedinPages] = useState<{ id: string; name: string }[]>([])
+  const [loadingLinkedinPages, setLoadingLinkedinPages] = useState(false)
+  const [linkedinAdAccounts, setLinkedinAdAccounts] = useState<{ id: string; name: string; currency: string }[]>([])
+  const [loadingLinkedinAdAccounts, setLoadingLinkedinAdAccounts] = useState(false)
   // Clarity
   const [clarityProjectId, setClarityProjectId] = useState('')
   const [clarityToken, setClarityToken] = useState('')
   const [clarityTokenVisible, setClarityTokenVisible] = useState(false)
   const [connectingClarity, setConnectingClarity] = useState(false)
   const [clarityError, setClarityError] = useState('')
+  // Alert preferences state
+  const [alertPrefs, setAlertPrefs] = useState({
+    weeklyDigest: true,
+    trafficDrop: true,
+    contentGap: true,
+    frequency: 'weekly' as 'daily' | 'weekly' | 'manual',
+    preferredDay: 1,
+    preferredHour: 9,
+  })
+  const [alertTimezone, setAlertTimezone] = useState('UTC')
+  const [savingAlerts, setSavingAlerts] = useState(false)
+  const [alertsSaved, setAlertsSaved] = useState(false)
 
   const fetchConnections = async () => {
     const [connRes, clarityRes] = await Promise.all([
@@ -92,12 +111,26 @@ export default function SettingsPage() {
   useEffect(() => {
     fetch('/api/settings/brand').then(r => r.json()).then(d => setBrand(d.brand || {}))
     fetchConnections()
+    fetch('/api/user/alert-preferences').then(r => r.json()).then(d => {
+      if (d.alertPreferences) setAlertPrefs(p => ({ ...p, ...d.alertPreferences }))
+      // Use saved timezone, or fall back to browser-detected timezone
+      const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
+      setAlertTimezone(d.timezone && d.timezone !== 'UTC' ? d.timezone : (detected || 'UTC'))
+    }).catch(() => {
+      // If API fails, still auto-detect
+      const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
+      if (detected) setAlertTimezone(detected)
+    })
   }, [])
 
   // Handle ?connected=X or ?error=X after OAuth redirect
   useEffect(() => {
     const connected = searchParams.get('connected')
     const error = searchParams.get('error')
+    const sectionParam = searchParams.get('section')
+    if (sectionParam && ['brand', 'competitors', 'connections', 'billing', 'account', 'alerts'].includes(sectionParam)) {
+      setSection(sectionParam as 'brand' | 'competitors' | 'connections' | 'billing' | 'account' | 'alerts')
+    }
     if (connected) {
       const label = PROVIDER_LABELS[connected] || connected
       setSuccessBanner(`${label} connected successfully!`)
@@ -250,6 +283,60 @@ export default function SettingsPage() {
     }
   }
 
+  const loadLinkedinPages = async () => {
+    setLoadingLinkedinPages(true)
+    try {
+      const res = await fetch('/api/oauth/linkedin/pages')
+      const data = await res.json()
+      setLinkedinPages(data.pages || [])
+    } finally {
+      setLoadingLinkedinPages(false)
+    }
+  }
+
+  const selectLinkedinPage = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const pageId = e.target.value
+    const page = linkedinPages.find(p => p.id === pageId)
+    await fetch('/api/oauth/linkedin/pages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pageId: pageId || '', pageName: page?.name || '' }),
+    })
+    setConnections(prev => ({
+      ...prev,
+      linkedin: { ...prev.linkedin, pageId: pageId || '', pageName: page?.name || '' },
+    }))
+    setLinkedinPages([])
+  }
+
+  const loadLinkedinAdAccounts = async () => {
+    setLoadingLinkedinAdAccounts(true)
+    try {
+      const res = await fetch('/api/oauth/linkedin/adaccounts')
+      const data = await res.json()
+      setLinkedinAdAccounts(data.accounts || [])
+    } finally {
+      setLoadingLinkedinAdAccounts(false)
+    }
+  }
+
+  const selectLinkedinAdAccount = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const accountId = e.target.value
+    if (!accountId) return
+    const account = linkedinAdAccounts.find(a => a.id === accountId)
+    if (!account) return
+    await fetch('/api/oauth/linkedin/adaccounts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId: account.id, accountName: account.name }),
+    })
+    setConnections(prev => ({
+      ...prev,
+      linkedin: { ...prev.linkedin, adAccountId: account.id, adAccountName: account.name },
+    }))
+    setLinkedinAdAccounts([])
+  }
+
   const selectMetaPage = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const pageId = e.target.value
     if (!pageId) return
@@ -351,6 +438,21 @@ export default function SettingsPage() {
     if (data.authUrl) window.location.href = data.authUrl
   }
 
+  const saveAlertPrefs = async () => {
+    setSavingAlerts(true)
+    try {
+      await fetch('/api/user/alert-preferences', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timezone: alertTimezone, alertPreferences: alertPrefs }),
+      })
+      setAlertsSaved(true)
+      setTimeout(() => setAlertsSaved(false), 3000)
+    } finally {
+      setSavingAlerts(false)
+    }
+  }
+
   const startSubscription = async () => {
     setSubscribing(true)
     try {
@@ -385,12 +487,16 @@ export default function SettingsPage() {
 
   const sub = (session?.user as { subscriptionStatus?: string })?.subscriptionStatus
 
+  // Build timezone dropdown options once per mount — ~400 IANA zones sorted by offset
+  const timezoneOptions = useMemo(() => buildTimezoneOptions(), [])
+
   const sections = [
     { id: 'brand', label: 'Brand Profile' },
     { id: 'competitors', label: 'Competitors' },
     { id: 'connections', label: 'Connections' },
     { id: 'billing', label: 'Billing' },
     { id: 'account', label: 'Account' },
+    { id: 'alerts', label: 'Alerts' },
   ] as const
 
   return (
@@ -802,21 +908,120 @@ export default function SettingsPage() {
               </div>
 
               {/* LinkedIn */}
-              <div className="flex items-center justify-between p-4 bg-[#111] border border-[#1E1E1E] rounded-xl">
-                <div>
-                  <p className="text-sm font-medium text-white">LinkedIn</p>
-                  <p className="text-xs text-[#555]">
-                    {connections.linkedin?.profileName || 'LinkedIn posting & analytics'}
-                  </p>
+              <div className="p-4 bg-[#111] border border-[#1E1E1E] rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-white">LinkedIn</p>
+                    <p className="text-xs text-[#555]">
+                      {connections.linkedin?.profileName || 'LinkedIn posting & analytics'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {connections.linkedin?.profileId && (
+                      <Badge variant="success">Connected</Badge>
+                    )}
+                    <Button size="sm" variant="secondary" onClick={() => connectOAuth('linkedin')}>
+                      {connections.linkedin?.profileId ? 'Reconnect' : 'Connect'}
+                    </Button>
+                    {connections.linkedin?.profileId && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={async () => {
+                          await fetch('/api/settings/connections', {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ platform: 'linkedin' }),
+                          })
+                          setConnections(prev => { const n = { ...prev }; delete n.linkedin; return n })
+                          setLinkedinPages([])
+                          setLinkedinAdAccounts([])
+                        }}
+                      >
+                        Disconnect
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {connections.linkedin?.profileId && (
-                    <Badge variant="success">Connected</Badge>
-                  )}
-                  <Button size="sm" variant="secondary" onClick={() => connectOAuth('linkedin')}>
-                    {connections.linkedin?.profileId ? 'Reconnect' : 'Connect'}
-                  </Button>
-                </div>
+
+                {connections.linkedin?.profileId && (
+                  <>
+                    {/* Post as */}
+                    <div className="space-y-1">
+                      <p className="text-xs text-[#555]">Post as</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Personal pill — always shown */}
+                        <button
+                          onClick={async () => {
+                            await fetch('/api/oauth/linkedin/pages', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ pageId: '', pageName: '' }),
+                            })
+                            setConnections(prev => ({
+                              ...prev,
+                              linkedin: { ...prev.linkedin, pageId: '', pageName: '' },
+                            }))
+                          }}
+                          className={`px-3 py-1 rounded-full text-xs border transition-colors ${
+                            !connections.linkedin?.pageId
+                              ? 'bg-[#DA7756]/20 border-[#DA7756]/60 text-[#DA7756]'
+                              : 'bg-[#1A1A1A] border-[#2A2A2A] text-[#888] hover:border-[#444]'
+                          }`}
+                        >
+                          {connections.linkedin?.profileName || 'Personal profile'}
+                        </button>
+
+                        {/* Selected page pill */}
+                        {connections.linkedin?.pageId && connections.linkedin?.pageName && (
+                          <span className="px-3 py-1 rounded-full text-xs border bg-[#DA7756]/20 border-[#DA7756]/60 text-[#DA7756]">
+                            {connections.linkedin.pageName}
+                          </span>
+                        )}
+
+                        <span className="px-2 py-0.5 rounded text-[10px] border border-[#2A2A2A] text-[#555] bg-[#1A1A1A]">
+                          Pages coming soon
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Ad Account */}
+                    <div className="space-y-1">
+                      <p className="text-xs text-[#555]">Ad Account</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {connections.linkedin?.adAccountId && connections.linkedin?.adAccountName && (
+                          <span className="px-3 py-1 rounded-full text-xs border bg-[#1A1A1A] border-[#2A2A2A] text-[#aaa]">
+                            {connections.linkedin.adAccountName}
+                          </span>
+                        )}
+
+                        {linkedinAdAccounts.length > 0 ? (
+                          <div className="relative">
+                            <select
+                              value={connections.linkedin?.adAccountId || ''}
+                              onChange={selectLinkedinAdAccount}
+                              className="bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:border-[#DA7756]/50 appearance-none pr-7"
+                            >
+                              <option value="">Select account…</option>
+                              {linkedinAdAccounts.map(a => (
+                                <option key={a.id} value={a.id} className="bg-[#0D0D0D]">{a.name} ({a.currency})</option>
+                              ))}
+                            </select>
+                            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[#555] text-[10px]">▾</span>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={loadLinkedinAdAccounts}
+                            disabled={loadingLinkedinAdAccounts}
+                            className="text-xs text-[#DA7756] hover:underline disabled:opacity-50"
+                          >
+                            {loadingLinkedinAdAccounts ? 'Loading accounts…' : 'Load ad accounts'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Microsoft Clarity */}
@@ -945,6 +1150,8 @@ export default function SettingsPage() {
                   </div>
                 )}
               </div>
+
+              <BillingCreditsPanel embedded />
             </div>
           )}
 
@@ -962,6 +1169,102 @@ export default function SettingsPage() {
                   <p className="text-sm text-white">{session?.user?.email}</p>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Alerts */}
+          {section === 'alerts' && (
+            <div className="space-y-5">
+              <h2 className="text-base font-semibold text-white">Alert Preferences</h2>
+
+              {/* Frequency */}
+              <div className="p-4 bg-[#111] border border-[#1E1E1E] rounded-xl space-y-4">
+                <p className="text-xs font-semibold text-[#777] uppercase tracking-wider">Schedule</p>
+
+                <div>
+                  <label className="text-xs text-[#555] block mb-1">Frequency</label>
+                  <select
+                    value={alertPrefs.frequency}
+                    onChange={e => setAlertPrefs(p => ({ ...p, frequency: e.target.value as 'daily' | 'weekly' | 'manual' }))}
+                    className="w-full bg-[#0A0A0A] border border-[#1E1E1E] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[#DA7756]/50"
+                  >
+                    <option value="weekly">Weekly</option>
+                    <option value="daily">Daily</option>
+                    <option value="manual">Manual (off)</option>
+                  </select>
+                </div>
+
+                {alertPrefs.frequency === 'weekly' && (
+                  <div>
+                    <label className="text-xs text-[#555] block mb-1">Preferred day</label>
+                    <select
+                      value={alertPrefs.preferredDay}
+                      onChange={e => setAlertPrefs(p => ({ ...p, preferredDay: Number(e.target.value) }))}
+                      className="w-full bg-[#0A0A0A] border border-[#1E1E1E] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[#DA7756]/50"
+                    >
+                      {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((d, i) => (
+                        <option key={i} value={i}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-xs text-[#555] block mb-1">Preferred hour (your local time)</label>
+                  <select
+                    value={alertPrefs.preferredHour}
+                    onChange={e => setAlertPrefs(p => ({ ...p, preferredHour: Number(e.target.value) }))}
+                    className="w-full bg-[#0A0A0A] border border-[#1E1E1E] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[#DA7756]/50"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <option key={i} value={i}>
+                        {i === 0 ? '12:00 AM' : i < 12 ? `${i}:00 AM` : i === 12 ? '12:00 PM' : `${i - 12}:00 PM`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs text-[#555] block mb-1">Timezone</label>
+                  <select
+                    value={alertTimezone}
+                    onChange={e => setAlertTimezone(e.target.value)}
+                    className="w-full bg-[#0A0A0A] border border-[#1E1E1E] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[#DA7756]/50"
+                  >
+                    {timezoneOptions.map(tz => (
+                      <option key={tz.value} value={tz.value}>{tz.label}</option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-[#444] mt-1">Auto-detected from your browser · stores IANA name only</p>
+                </div>
+              </div>
+
+              {/* Alert types */}
+              <div className="p-4 bg-[#111] border border-[#1E1E1E] rounded-xl space-y-3">
+                <p className="text-xs font-semibold text-[#777] uppercase tracking-wider">Alert Types</p>
+                {([
+                  { key: 'weeklyDigest', label: 'Weekly digest', desc: 'Performance recap + content recommendations every week' },
+                  { key: 'trafficDrop', label: 'Traffic drop', desc: 'Alert when organic clicks fall more than 20%' },
+                  { key: 'contentGap', label: 'Content gaps', desc: 'Keywords and topics you\'re missing vs competitors' },
+                ] as const).map(({ key, label, desc }) => (
+                  <div key={key} className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs text-white font-medium">{label}</p>
+                      <p className="text-[11px] text-[#555] mt-0.5">{desc}</p>
+                    </div>
+                    <button
+                      onClick={() => setAlertPrefs(p => ({ ...p, [key]: !p[key] }))}
+                      className={`relative shrink-0 w-9 h-5 rounded-full transition-colors ${alertPrefs[key] ? 'bg-[#DA7756]' : 'bg-[#2A2A2A]'}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${alertPrefs[key] ? 'translate-x-4' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <Button onClick={saveAlertPrefs} loading={savingAlerts} className="w-full">
+                {alertsSaved ? 'Saved ✓' : 'Save preferences'}
+              </Button>
             </div>
           )}
         </div>

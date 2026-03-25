@@ -64,7 +64,7 @@ export default function CookiePolicy() {
                 <p className="text-sm">
                   Some third-party services we integrate with may set their own cookies when you authenticate
                   or interact with their features (e.g., Google OAuth, Meta OAuth). These are governed by
-                  the respective third parties' cookie policies.
+                  the respective third parties&apos; cookie policies.
                 </p>
               </div>
             </div>
@@ -117,7 +117,7 @@ export default function CookiePolicy() {
           <section>
             <h2 className="text-xl font-semibold text-white mb-3">5. Do Not Track</h2>
             <p>
-              Some browsers offer a "Do Not Track" signal. We currently do not alter our data collection
+              Some browsers offer a &quot;Do Not Track&quot; signal. We currently do not alter our data collection
               practices in response to DNT signals, as there is no universal standard for interpreting them.
             </p>
           </section>

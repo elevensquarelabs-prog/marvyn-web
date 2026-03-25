@@ -280,7 +280,7 @@ export default function IssuesPanel({
 
                 {!isLoading && !fixText && (
                   <div className="text-center py-4">
-                    <p className="text-xs text-[#555]">Click "Apply Fix" to generate instructions</p>
+                    <p className="text-xs text-[#555]">Click &quot;Apply Fix&quot; to generate instructions</p>
                   </div>
                 )}
               </div>

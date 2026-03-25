@@ -350,7 +350,7 @@ export function Composer({ open, onClose, onSaved }: ComposerProps) {
               <>
                 <p>• Best time: Tue–Thu 8–10 AM</p>
                 <p>• Use 3–5 hashtags</p>
-                <p>• First 150 chars shown before "…more"</p>
+                <p>• First 150 chars shown before &quot;…more&quot;</p>
               </>
             )}
             {platform === 'facebook' && (

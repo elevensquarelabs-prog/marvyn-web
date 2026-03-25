@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Button } from '@/components/shared/Button'
 
 export default function LoginPage() {
@@ -81,7 +82,7 @@ export default function LoginPage() {
 
         <p className="text-center text-xs text-[#555] mt-6">
           Want to join?{' '}
-          <a href="/#beta-form" className="text-[#DA7756] hover:underline">Request beta access</a>
+          <Link href="/#beta-form" className="text-[#DA7756] hover:underline">Request beta access</Link>
         </p>
         <p className="text-center text-[11px] text-[#555] mt-2">
           <a href="/forgot-password" className="hover:text-[#DA7756] transition-colors">Forgot password?</a>

@@ -5,6 +5,7 @@ import { connectDB } from '@/lib/mongodb'
 import User from '@/models/User'
 import { randomBytes } from 'crypto'
 import bcrypt from 'bcryptjs'
+import { sendTempPasswordEmail } from '@/lib/email'
 
 const SUPER_ADMIN_EMAIL = 'raayed32@gmail.com'
 
@@ -28,11 +29,11 @@ export async function POST(req: NextRequest) {
     mustResetPassword: true,
   })
 
-  console.log(`[admin/reset-password] Reset password for ${user.email} — temp: ${temporaryPassword}`)
+  console.log(`[admin/reset-password] Reset password for ${user.email}`)
+  sendTempPasswordEmail(user.email, user.name, temporaryPassword).catch(() => {})
 
   return Response.json({
     success: true,
     email: user.email,
-    temporaryPassword,
   })
 }

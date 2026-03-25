@@ -20,7 +20,7 @@ export default function TermsOfService() {
           <section>
             <h2 className="text-xl font-semibold text-white mb-3">1. Acceptance of Terms</h2>
             <p>
-              By accessing or using Marvyn ("the Platform"), you agree to be bound by these Terms of Service.
+              By accessing or using Marvyn (&quot;the Platform&quot;), you agree to be bound by these Terms of Service.
               The Platform is operated by <strong className="text-white">Eleven Square Labs</strong> (648/A OM Chambers,
               4th Floor, Binnamangala 1st Stage, Indiranagar, Bangalore – 560038, India). If you do not agree
               to these terms, do not use the Platform.
@@ -132,7 +132,7 @@ export default function TermsOfService() {
           <section>
             <h2 className="text-xl font-semibold text-white mb-3">12. Disclaimer of Warranties</h2>
             <p>
-              The Platform is provided "as is" and "as available" without any warranties of any kind, express
+              The Platform is provided &quot;as is&quot; and &quot;as available&quot; without any warranties of any kind, express
               or implied. We do not warrant that the Platform will be uninterrupted, error-free, or free of
               viruses or other harmful components.
             </p>

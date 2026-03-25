@@ -91,7 +91,7 @@ export default function PrivacyPolicy() {
             <ul className="list-disc list-inside space-y-2 mt-3">
               <li>Access the personal data we hold about you.</li>
               <li>Request correction of inaccurate data.</li>
-              <li>Request deletion of your data ("right to be forgotten").</li>
+              <li>Request deletion of your data (&quot;right to be forgotten&quot;).</li>
               <li>Withdraw consent for data processing at any time.</li>
               <li>Export your data in a portable format.</li>
             </ul>
@@ -110,7 +110,7 @@ export default function PrivacyPolicy() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-white mb-3">9. Children's Privacy</h2>
+            <h2 className="text-xl font-semibold text-white mb-3">9. Children&apos;s Privacy</h2>
             <p>
               Marvyn is not intended for use by individuals under the age of 18. We do not knowingly collect
               personal data from children.

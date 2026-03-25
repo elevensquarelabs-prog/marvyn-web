@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { connectDB } from '@/lib/mongodb'
+import { buildLimitResponse, enforceAiBudget, estimateOpenRouterUsage, recordAiUsage } from '@/lib/ai-usage'
 import Brand from '@/models/Brand'
 import ChatSession from '@/models/ChatSession'
 import User from '@/models/User'
@@ -49,10 +50,24 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: 'AI not configured' }, { status: 500 })
   }
 
-  const { message, sessionId } = await req.json()
+  const { message, sessionId, skillId } = await req.json()
   if (!message?.trim()) return Response.json({ error: 'Message required' }, { status: 400 })
 
+  const SKILL_CONTEXT: Record<string, string> = {
+    'paid-ads': `ACTIVE SKILL: Paid Ads Specialist. Focus on Meta/Google ad performance, ROAS, CPM, CTR, budget optimization, and audience targeting. When analyzing, always look at conversion costs and ROI.`,
+    'email-sequence': `ACTIVE SKILL: Email Marketing Specialist. Focus on subject lines, open rates, click-through rates, email sequence flows, segmentation, and nurture campaigns. Write in a compelling, personal tone.`,
+    'copywriting': `ACTIVE SKILL: Copywriting Specialist. Focus on persuasion, clarity, value proposition, headlines, CTAs, and conversion-oriented copy. Use proven frameworks (AIDA, PAS, FAB) when appropriate.`,
+    'social-content': `ACTIVE SKILL: Social Media Specialist. Focus on platform-specific best practices, engagement, trending formats, hashtag strategy, and content calendars. Optimize for organic reach and audience growth.`,
+    'seo-audit': `ACTIVE SKILL: SEO Specialist. Focus on keyword rankings, technical SEO, content gaps, backlinks, and organic traffic growth. Always call get_seo_report first to ground your analysis in real data.`,
+    'content-strategy': `ACTIVE SKILL: Content Strategist. Focus on content planning, editorial calendars, topic clusters, audience alignment, and distribution channels. Create actionable plans tied to business goals.`,
+  }
+  const skillContext = skillId && SKILL_CONTEXT[skillId] ? `\n\n${SKILL_CONTEXT[skillId]}` : ''
+
   await connectDB()
+  const budget = await enforceAiBudget(userId, 'agent_chat')
+  if (!budget.allowed) {
+    return Response.json(buildLimitResponse(budget), { status: 429 })
+  }
 
   const [brand, user] = await Promise.all([
     Brand.findOne({ userId }).lean() as Promise<Record<string, unknown> | null>,
@@ -72,7 +87,7 @@ export async function POST(req: NextRequest) {
 BRAND: ${brand.name} | Product: ${brand.product} | Audience: ${brand.audience} | Tone: ${brand.tone} | Website: ${brand.websiteUrl}
 CONNECTED PLATFORMS: ${connectedPlatforms.length > 0 ? connectedPlatforms.join(', ') : 'none yet'}` : 'No brand set up yet.'
 
-  const finalSystem = `${SYSTEM_PROMPT}\n\n${contextSummary}`
+  const finalSystem = `${SYSTEM_PROMPT}\n\n${contextSummary}${skillContext}`
 
   // Load or create chat session
   let chatSession
@@ -126,12 +141,14 @@ CONNECTED PLATFORMS: ${connectedPlatforms.length > 0 ? connectedPlatforms.join('
         ]
 
         let fullResponse = ''
+        let totalInputTokens = 0
+        let totalOutputTokens = 0
+        let totalEstimatedCostUsd = 0
         const MAX_ITERATIONS = 6
 
         for (let i = 0; i < MAX_ITERATIONS; i++) {
           const isLastIteration = i === MAX_ITERATIONS - 1
 
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const response = await getOpenAI().chat.completions.create({
             model: 'anthropic/claude-sonnet-4-6',
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -141,6 +158,13 @@ CONNECTED PLATFORMS: ${connectedPlatforms.length > 0 ? connectedPlatforms.join('
             max_tokens: 4000,
             stream: false,
           })
+          totalInputTokens += response.usage?.prompt_tokens ?? 0
+          totalOutputTokens += response.usage?.completion_tokens ?? 0
+          totalEstimatedCostUsd += estimateOpenRouterUsage({
+            model: 'anthropic/claude-sonnet-4-6',
+            inputTokens: response.usage?.prompt_tokens ?? 0,
+            outputTokens: response.usage?.completion_tokens ?? 0,
+          }).estimatedCostUsd
 
           const msg = response.choices[0]?.message
           if (!msg) break
@@ -214,6 +238,16 @@ CONNECTED PLATFORMS: ${connectedPlatforms.length > 0 ? connectedPlatforms.join('
           { _id: userId },
           { $inc: { 'usage.totalAiCalls': 1 }, $set: { 'usage.lastActive': new Date() } }
         ).catch(() => {})
+
+        await recordAiUsage({
+          userId,
+          feature: 'agent_chat',
+          model: 'anthropic/claude-sonnet-4-6',
+          estimatedInputTokens: totalInputTokens,
+          estimatedOutputTokens: totalOutputTokens,
+          estimatedCostUsd: Number(totalEstimatedCostUsd.toFixed(6)),
+          status: fullResponse ? 'success' : 'failed',
+        })
 
         controller.close()
       } catch (err: unknown) {

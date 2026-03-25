@@ -94,7 +94,7 @@ export default function RefundPolicy() {
                 <a href="mailto:support@elevensquarelabs.com" className="text-[#DA7756] hover:underline">
                   support@elevensquarelabs.com
                 </a>{' '}
-                with the subject line <strong className="text-white">"Refund Request – [Your Email]"</strong>.
+                with the subject line <strong className="text-white">&quot;Refund Request – [Your Email]&quot;</strong>.
               </li>
               <li>Include your registered email address, the date of purchase, and the reason for your request.</li>
               <li>We will respond within <strong className="text-white">3 business days</strong>.</li>

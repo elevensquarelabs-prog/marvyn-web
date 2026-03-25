@@ -220,6 +220,29 @@ export const TOOL_DEFINITIONS = [
       },
     },
   },
+  // ── Alert tools ───────────────────────────────────────────────────────────
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_alerts',
+      description: 'Get the user\'s unread proactive alerts: traffic drops, content gaps, weekly digests, and budget alerts. Call this when the user asks about notifications, alerts, or what Marvyn has detected automatically.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'dismiss_alert',
+      description: 'Mark an alert as read and dismissed after the user has acknowledged it.',
+      parameters: {
+        type: 'object',
+        properties: {
+          alert_id: { type: 'string', description: 'MongoDB ID of the alert to dismiss' },
+        },
+        required: ['alert_id'],
+      },
+    },
+  },
   // ── Update tools ──────────────────────────────────────────────────────────
   {
     type: 'function' as const,
@@ -260,6 +283,8 @@ export const TOOL_LABELS: Record<string, string> = {
   publish_post: 'Publishing post…',
   schedule_post: 'Scheduling post…',
   update_brand_info: 'Updating brand profile…',
+  get_alerts: 'Checking alerts…',
+  dismiss_alert: 'Dismissing alert…',
 }
 
 // ── Tool Executors ─────────────────────────────────────────────────────────────
@@ -1182,6 +1207,93 @@ async function update_brand_info(
   }
 }
 
+async function get_alerts(context: AgentContext): Promise<ToolResult> {
+  await connectDB()
+
+  const Alert = (await import('@/models/Alert')).default
+  const userId = new mongoose.Types.ObjectId(context.userId)
+
+  const alerts = await Alert.find(
+    { userId, dismissed: false },
+    { type: 1, severity: 1, title: 1, message: 1, data: 1, read: 1, createdAt: 1 }
+  )
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .lean() as Array<{
+      _id: mongoose.Types.ObjectId
+      type: string
+      severity: string
+      title: string
+      message: string
+      data?: Record<string, unknown>
+      read: boolean
+      createdAt: Date
+    }>
+
+  if (alerts.length === 0) {
+    return {
+      summary: 'No active alerts — everything looks good.',
+      content: JSON.stringify({ count: 0, alerts: [] }),
+    }
+  }
+
+  const unread = alerts.filter(a => !a.read)
+  const summary = `${alerts.length} alert${alerts.length !== 1 ? 's' : ''} (${unread.length} unread): ${alerts.slice(0, 3).map(a => a.title).join(' | ')}`
+
+  return {
+    summary,
+    content: JSON.stringify({
+      count: alerts.length,
+      unreadCount: unread.length,
+      alerts: alerts.map(a => ({
+        id: a._id.toString(),
+        type: a.type,
+        severity: a.severity,
+        title: a.title,
+        message: a.message,
+        data: a.data,
+        read: a.read,
+        createdAt: a.createdAt,
+      })),
+    }),
+  }
+}
+
+async function dismiss_alert(
+  args: { alert_id: string },
+  context: AgentContext
+): Promise<ToolResult> {
+  if (!mongoose.isValidObjectId(args.alert_id)) {
+    return {
+      summary: `Invalid alert ID: ${args.alert_id}`,
+      content: JSON.stringify({ error: 'INVALID_ID', alert_id: args.alert_id }),
+    }
+  }
+
+  await connectDB()
+
+  const Alert = (await import('@/models/Alert')).default
+  const userId = new mongoose.Types.ObjectId(context.userId)
+
+  const alert = await Alert.findOneAndUpdate(
+    { _id: args.alert_id, userId },
+    { $set: { read: true, dismissed: true } },
+    { new: true }
+  ).lean() as { type: string; title: string } | null
+
+  if (!alert) {
+    return {
+      summary: `Alert not found: ${args.alert_id}`,
+      content: JSON.stringify({ error: 'NOT_FOUND', alert_id: args.alert_id }),
+    }
+  }
+
+  return {
+    summary: `Dismissed "${alert.title}"`,
+    content: JSON.stringify({ success: true, alert_id: args.alert_id, type: alert.type }),
+  }
+}
+
 // ── Dispatcher ─────────────────────────────────────────────────────────────────
 
 export async function executeTool(
@@ -1224,6 +1336,10 @@ export async function executeTool(
       return schedule_post(args as { post_id: string; scheduled_for: string }, context)
     case 'update_brand_info':
       return update_brand_info(args as { field: string; value: string }, context)
+    case 'get_alerts':
+      return get_alerts(context)
+    case 'dismiss_alert':
+      return dismiss_alert(args as { alert_id: string }, context)
     default:
       return { summary: `Unknown tool: ${name}`, content: `Tool "${name}" not found.` }
   }

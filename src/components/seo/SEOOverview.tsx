@@ -1,7 +1,5 @@
 'use client'
 
-import { Button } from '@/components/shared/Button'
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type AuditData = {
@@ -160,40 +158,32 @@ export default function SEOOverview({ audit, onSwitchTab }: Props) {
   // Word count estimate from headings
   const wordCount = Math.max(120, (pd.headings?.length ?? 0) * 12 + (pd.title?.split(' ').length ?? 0) * 8)
 
+  const issueTitles = new Set(audit.issues.map(i => i.title.toLowerCase()))
+
   // On-page checks
+  const hasViewport = !issueTitles.has('missing viewport meta') && !issueTitles.has('viewport meta missing')
   const onPageChecks = [
     { label: 'Meta Title', value: pd.title ? pd.title.slice(0, 55) + (pd.title.length > 55 ? '…' : '') : '—', pass: !!pd.title },
     { label: 'Meta Description', value: pd.description ? pd.description.slice(0, 80) + (pd.description.length > 80 ? '…' : '') : 'Missing', pass: !!pd.description },
     { label: 'H1 Tag', value: pd.h1 ? pd.h1.slice(0, 55) + (pd.h1.length > 55 ? '…' : '') : 'Missing', pass: !!pd.h1 },
-    { label: 'Viewport Meta', value: 'Present', pass: true },
+    { label: 'Viewport Meta', value: hasViewport ? 'Present' : 'Missing', pass: hasViewport },
   ]
 
   // Target keyword from H1
   const targetKeyword = (pd.h1 || pd.title || audit.domain).split(/\s+/).slice(0, 5).join(' ')
 
-  // Passed checks (issues NOT triggered)
-  const PASSED_CHECKS = [
-    { key: 'has_https', title: 'HTTPS Enabled', sub: 'Secure connection active' },
-    { key: 'has_title', title: 'Title Tag Present', sub: 'Page has a title tag' },
-    { key: 'has_description', title: 'Meta Description', sub: 'Description tag found' },
-    { key: 'has_h1', title: 'H1 Heading', sub: 'Primary heading present' },
-    { key: 'has_canonical', title: 'Canonical Tag', sub: 'Prevents duplicate content' },
-    { key: 'mobile_friendly', title: 'Mobile Friendly', sub: 'Viewport tag detected' },
-    { key: 'no_broken_links', title: 'No Broken Links', sub: 'All links returning 200' },
-    { key: 'fast_load', title: 'Reasonable Load Time', sub: 'Page loads within limits' },
-  ]
+  // Passed checks — only include items we can actually verify from crawl data
+  const passedItems = [
+    !!pd.title && { title: 'Title Tag Present', sub: 'Page has a title tag' },
+    !!pd.description && { title: 'Meta Description', sub: 'Description tag found' },
+    !!pd.h1 && { title: 'H1 Heading', sub: 'Primary heading present' },
+    !issueTitles.has('page served over http') && { title: 'HTTPS Enabled', sub: 'Secure connection active' },
+    hasViewport && { title: 'Viewport Tag', sub: 'Mobile-friendly layout' },
+    !issueTitles.has('missing canonical tag') && !issueTitles.has('no canonical tag') && { title: 'Canonical Tag', sub: 'Prevents duplicate content' },
+  ].filter(Boolean) as Array<{ title: string; sub: string }>
 
-  const issueTitles = new Set(audit.issues.map(i => i.title.toLowerCase()))
-  const passedItems = PASSED_CHECKS.filter(c => {
-    if (c.key === 'has_https') return !issueTitles.has('page served over http')
-    if (c.key === 'has_title') return !!pd.title
-    if (c.key === 'has_description') return !!pd.description
-    if (c.key === 'has_h1') return !!pd.h1
-    return true
-  }).slice(0, 8)
-
-  // Domain authority from first competitor with data, or own onpageScore
-  const domainAuthority = audit.competitors.find(c => c.domainRank && c.domainRank > 0)?.domainRank ?? pd.onpageScore ?? 0
+  // Domain authority from DataForSEO only — no fallback to onpageScore (different metric)
+  const domainAuthority = audit.competitors.find(c => c.domainRank && c.domainRank > 0)?.domainRank ?? 0
 
   const card = 'bg-white border border-[#E8E4DF] rounded-2xl'
 
@@ -251,10 +241,10 @@ export default function SEOOverview({ audit, onSwitchTab }: Props) {
         </div>
         <div className="grid grid-cols-4 divide-x divide-[#F0EDE9]">
           {[
-            { label: 'Performance', score: perf.score, sub: 'Mobile' },
-            { label: 'SEO', score: audit.score, sub: 'On-page' },
-            { label: 'Accessibility', score: 85, sub: 'Locked', locked: true },
-            { label: 'Best Practices', score: 92, sub: 'Locked', locked: true },
+            { label: 'Performance', score: perf.score, sub: 'Mobile', locked: false },
+            { label: 'SEO', score: audit.score, sub: 'On-page', locked: false },
+            { label: 'Accessibility', score: null, sub: 'Locked', locked: true },
+            { label: 'Best Practices', score: null, sub: 'Locked', locked: true },
           ].map(m => (
             <div key={m.label} className="p-4 text-center relative">
               {m.locked && (
@@ -265,7 +255,7 @@ export default function SEOOverview({ audit, onSwitchTab }: Props) {
                   </div>
                 </div>
               )}
-              <p className="text-2xl font-bold" style={{ color: scoreColor(m.score) }}>{m.score}</p>
+              <p className="text-2xl font-bold" style={{ color: m.score !== null ? scoreColor(m.score) : '#D1C9C0' }}>{m.score !== null ? m.score : '—'}</p>
               <p className="text-xs font-medium text-[#1A1A1A] mt-1">{m.label}</p>
               <p className="text-[10px] text-[#AAA]">{m.sub}</p>
             </div>

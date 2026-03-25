@@ -17,7 +17,8 @@ type AuditData = {
   domain: string
   location: string
   city?: string
-  score: number
+  score: number | null
+  scoreSource?: 'dataforseo_onpage'
   criticalCount: number
   warningCount: number
   passedCount: number
@@ -31,11 +32,16 @@ type AuditData = {
   }
   organicTraffic?: number
   organicKeywords?: number
+  trafficSource?: 'gsc' | 'estimated' | null
+  estimatedMetrics?: ISEOAudit['estimatedMetrics']
+  crawlSummary?: ISEOAudit['crawlSummary']
+  crawledPages?: ISEOAudit['crawledPages']
   issues: ISEOAudit['issues']
   competitors: ISEOAudit['competitors']
   performance: ISEOAudit['performance']
   aiActions: ISEOAudit['aiActions']
   pageKeywords: ISEOAudit['pageKeywords']
+  keywordOpportunities?: ISEOAudit['keywordOpportunities']
   status: 'running' | 'complete' | 'failed'
   createdAt: Date
   completedAt?: Date
@@ -67,8 +73,18 @@ function SeverityBadge({ severity }: { severity: string }) {
 
 
 const LOCATIONS = [
-  'India', 'United States', 'United Kingdom', 'Australia',
-  'Canada', 'Singapore', 'UAE', 'Germany',
+  // Asia Pacific
+  'India', 'Singapore', 'Australia', 'New Zealand', 'Japan', 'South Korea',
+  'Hong Kong', 'Taiwan', 'Indonesia', 'Malaysia', 'Philippines', 'Thailand',
+  'Vietnam', 'Bangladesh', 'Pakistan', 'Sri Lanka',
+  // Middle East & Africa
+  'UAE', 'Saudi Arabia', 'Egypt', 'Nigeria', 'Kenya', 'South Africa', 'Israel', 'Turkey',
+  // Europe
+  'United Kingdom', 'Germany', 'France', 'Italy', 'Spain', 'Netherlands',
+  'Belgium', 'Switzerland', 'Austria', 'Sweden', 'Norway', 'Denmark',
+  'Poland', 'Portugal', 'Ireland', 'Russia',
+  // Americas
+  'United States', 'Canada', 'Brazil', 'Mexico', 'Argentina', 'Colombia', 'Chile',
 ]
 
 const STEP_LABELS = [
@@ -84,7 +100,7 @@ export default function SEOPage() {
   const router = useRouter()
   const [pageState, setPageState] = useState<'loading' | 'idle' | 'running' | 'complete'>('loading')
   const [domain, setDomain] = useState('')
-  const [location, setLocation] = useState('India')
+  const [location, setLocation] = useState('United States')
   const [localSEO, setLocalSEO] = useState(false)
   const [city, setCity] = useState('')
   const [audit, setAudit] = useState<AuditData | null>(null)
@@ -101,7 +117,7 @@ export default function SEOPage() {
   const [gscConnected, setGscConnected] = useState(false)
   const [gscSiteUrl, setGscSiteUrl] = useState('')
   const [syncing, setSyncing] = useState(false)
-  const [gscKeywords, setGscKeywords] = useState<{ keyword: string; source: string; position?: number; searchVolume?: number; clicks?: number; difficulty?: number }[]>([])
+  const [gscKeywords, setGscKeywords] = useState<{ keyword: string; source: string; position?: number; searchVolume?: number; impressions?: number; clicks?: number; difficulty?: number }[]>([])
   const [gscStats, setGscStats] = useState<{ clicks: number; impressions: number; keywords: number; avgPosition: number } | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -145,13 +161,14 @@ export default function SEOPage() {
             keyword: k.keyword,
             source: 'gsc',
             position: k.currentPosition,
-            searchVolume: k.impressions,
+            impressions: k.impressions,  // GSC impressions — not search volume
+            searchVolume: undefined,      // not available from GSC
             clicks: k.clicks,
             difficulty: k.difficulty,
           }))
           setGscKeywords(kws)
           const totalClicks = kws.reduce((s: number, k: { clicks?: number }) => s + (k.clicks ?? 0), 0)
-          const totalImpressions = kws.reduce((s: number, k: { searchVolume?: number }) => s + (k.searchVolume ?? 0), 0)
+          const totalImpressions = kws.reduce((s: number, k: { impressions?: number }) => s + (k.impressions ?? 0), 0)
           const withPos = kws.filter((k: { position?: number }) => k.position != null)
           const avgPos = withPos.length ? withPos.reduce((s: number, k: { position?: number }) => s + (k.position ?? 0), 0) / withPos.length : 0
           setGscStats({ clicks: totalClicks, impressions: totalImpressions, keywords: kws.length, avgPosition: Math.round(avgPos * 10) / 10 })
@@ -175,13 +192,14 @@ export default function SEOPage() {
           keyword: k.keyword,
           source: 'gsc',
           position: k.currentPosition,
-          searchVolume: k.impressions,
+          impressions: k.impressions,
+          searchVolume: undefined,
           clicks: k.clicks,
           difficulty: k.difficulty,
         }))
         setGscKeywords(kws)
         const totalClicks = kws.reduce((s: number, k: { clicks?: number }) => s + (k.clicks ?? 0), 0)
-        const totalImpressions = kws.reduce((s: number, k: { searchVolume?: number }) => s + (k.searchVolume ?? 0), 0)
+        const totalImpressions = kws.reduce((s: number, k: { impressions?: number }) => s + (k.impressions ?? 0), 0)
         const withPos = kws.filter((k: { position?: number }) => k.position != null)
         const avgPos = withPos.length ? withPos.reduce((s: number, k: { position?: number }) => s + (k.position ?? 0), 0) / withPos.length : 0
         setGscStats({ clicks: totalClicks, impressions: totalImpressions, keywords: kws.length, avgPosition: Math.round(avgPos * 10) / 10 })
@@ -350,12 +368,17 @@ Be specific to this domain. Include exact code snippets or CMS steps if relevant
             <div>
               <input
                 value={domain}
-                onChange={e => setDomain(e.target.value)}
+                onChange={e => {
+                  // Strip protocol and trailing slash as user types
+                  const val = e.target.value.replace(/^https?:\/\//i, '').replace(/\/.*$/, '')
+                  setDomain(val)
+                }}
                 onKeyDown={e => e.key === 'Enter' && runAudit()}
-                placeholder="yoursite.com"
+                placeholder="yoursite.com or www.yoursite.com"
                 className="w-full bg-[#111] border border-[#2A2A2A] rounded-xl px-4 py-3 text-base text-white placeholder-[#444] outline-none focus:border-[#DA7756]/60 text-center"
                 autoFocus
               />
+              <p className="text-[11px] text-[#444] text-center">Enter domain only — no https:// needed</p>
             </div>
 
             <div className="flex gap-2">
@@ -540,12 +563,14 @@ Be specific to this domain. Include exact code snippets or CMS steps if relevant
               </div>
             )}
             <KeywordsTable
-              keywords={gscKeywords.length > 0 ? gscKeywords : (audit.pageKeywords ?? [])}
               domain={audit.domain}
               gscConnected={gscConnected}
               gscSiteUrl={gscSiteUrl}
               syncing={syncing}
               onSync={syncGSC}
+              searchConsoleKeywords={gscKeywords}
+              opportunityKeywords={audit.keywordOpportunities ?? []}
+              onPageKeywords={audit.pageKeywords ?? []}
             />
           </>
         )}
