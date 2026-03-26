@@ -99,6 +99,7 @@ export default function AdminPage() {
   const [userSearch, setUserSearch] = useState('')
   const [creditDrafts, setCreditDrafts] = useState<Record<string, string>>({})
   const [extraCreditDrafts, setExtraCreditDrafts] = useState<Record<string, string>>({})
+  const [manualUserForm, setManualUserForm] = useState({ name: '', email: '', password: '' })
 
   useEffect(() => {
     if (status === 'loading') return
@@ -258,6 +259,28 @@ export default function AdminPage() {
     })
     await fetchAll()
     setActionLoading(null)
+  }
+
+  async function createManualUser() {
+    setActionLoading('create-user')
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(manualUserForm),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to create user')
+      }
+      setApprovedNotice({ email: data.user.email, label: 'Reviewer/demo account created successfully' })
+      setManualUserForm({ name: '', email: '', password: '' })
+      await fetchAll()
+    } catch (err) {
+      alert(String(err))
+    } finally {
+      setActionLoading(null)
+    }
   }
 
   const filteredBeta = betaRequests.filter(r => betaFilter === 'all' || r.status === betaFilter)
@@ -431,13 +454,57 @@ export default function AdminPage() {
         {/* Users Tab */}
         {tab === 'users' && (
           <div>
-            <input
-              type="text"
-              placeholder="Search by name or email..."
-              value={userSearch}
-              onChange={e => setUserSearch(e.target.value)}
-              className="w-full max-w-sm bg-[#111] border border-[#1E1E1E] rounded-lg px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#DA7756]/60 mb-4 transition-colors"
-            />
+            <div className="grid grid-cols-1 xl:grid-cols-[0.9fr_1.1fr] gap-4 mb-4">
+              <div className="bg-[#111] border border-[#1E1E1E] rounded-xl p-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Create Reviewer / Demo User</h3>
+                  <p className="text-xs text-[#555] mt-1">Provision a manual beta account with known credentials for product demos, app review, or internal testing.</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+                  <input
+                    type="text"
+                    placeholder="Full name"
+                    value={manualUserForm.name}
+                    onChange={e => setManualUserForm(prev => ({ ...prev, name: e.target.value }))}
+                    className="bg-[#0D0D0D] border border-[#1E1E1E] rounded-lg px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#DA7756]/60 transition-colors"
+                  />
+                  <input
+                    type="email"
+                    placeholder="Email"
+                    value={manualUserForm.email}
+                    onChange={e => setManualUserForm(prev => ({ ...prev, email: e.target.value }))}
+                    className="bg-[#0D0D0D] border border-[#1E1E1E] rounded-lg px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#DA7756]/60 transition-colors"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Password"
+                    value={manualUserForm.password}
+                    onChange={e => setManualUserForm(prev => ({ ...prev, password: e.target.value }))}
+                    className="bg-[#0D0D0D] border border-[#1E1E1E] rounded-lg px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#DA7756]/60 transition-colors"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-3 mt-4">
+                  <p className="text-[11px] text-[#555]">Creates an active beta user immediately. Share these credentials manually with the reviewer.</p>
+                  <button
+                    onClick={createManualUser}
+                    disabled={!!actionLoading || !manualUserForm.name.trim() || !manualUserForm.email.trim() || manualUserForm.password.length < 8}
+                    className="text-xs px-3 py-2 rounded-lg bg-[#DA7756] hover:bg-[#C4633F] text-white transition-colors disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {actionLoading === 'create-user' ? 'Creating…' : 'Create user'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-end">
+                <input
+                  type="text"
+                  placeholder="Search by name or email..."
+                  value={userSearch}
+                  onChange={e => setUserSearch(e.target.value)}
+                  className="w-full max-w-sm bg-[#111] border border-[#1E1E1E] rounded-lg px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#DA7756]/60 transition-colors"
+                />
+              </div>
+            </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
