@@ -559,6 +559,7 @@ function Footer() {
           <Link href="/terms-of-service" className="hover:text-[#888] transition-colors">Terms</Link>
           <Link href="/cookie-policy" className="hover:text-[#888] transition-colors">Cookies</Link>
           <Link href="/refund-policy" className="hover:text-[#888] transition-colors">Refunds</Link>
+          <Link href="/data-deletion" className="hover:text-[#888] transition-colors">Data Deletion</Link>
         </div>
         <div className="text-xs text-[#333] text-center md:text-right">
           <p>Made with ❤️ by Eleven Square Labs</p>
