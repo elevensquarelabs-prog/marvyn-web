@@ -18,8 +18,8 @@ export async function GET(req: NextRequest) {
     const redirectUri = `${BASE_URL()}/api/oauth/meta/callback`
     const tokenRes = await axios.get('https://graph.facebook.com/v21.0/oauth/access_token', {
       params: {
-        client_id: process.env.META_APP_ID,
-        client_secret: process.env.META_APP_SECRET,
+        client_id: (process.env.META_APP_ID || '').trim(),
+        client_secret: (process.env.META_APP_SECRET || '').trim(),
         redirect_uri: redirectUri,
         code,
       },
@@ -31,8 +31,8 @@ export async function GET(req: NextRequest) {
     const longTokenRes = await axios.get('https://graph.facebook.com/v21.0/oauth/access_token', {
       params: {
         grant_type: 'fb_exchange_token',
-        client_id: process.env.META_APP_ID,
-        client_secret: process.env.META_APP_SECRET,
+        client_id: (process.env.META_APP_ID || '').trim(),
+        client_secret: (process.env.META_APP_SECRET || '').trim(),
         fb_exchange_token: shortLivedToken,
       },
     })

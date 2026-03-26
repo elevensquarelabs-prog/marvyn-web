@@ -8,7 +8,7 @@ export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const clientId = process.env.GOOGLE_CLIENT_ID
+  const clientId = (process.env.GOOGLE_CLIENT_ID || '').trim()
   const redirectUri = `${BASE_URL()}/api/oauth/google/callback`
   console.log('[Google OAuth] NEXTAUTH_URL:', BASE_URL())
   console.log('[Google OAuth] redirect_uri:', redirectUri)

@@ -8,7 +8,7 @@ export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const clientId = process.env.GOOGLE_CLIENT_ID
+  const clientId = (process.env.GOOGLE_CLIENT_ID || '').trim()
   const redirectUri = `${BASE_URL()}/api/oauth/ga4/callback`
   const scope = encodeURIComponent('https://www.googleapis.com/auth/analytics.readonly')
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&access_type=offline&prompt=consent&state=${session.user.id}`

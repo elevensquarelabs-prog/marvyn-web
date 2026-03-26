@@ -21,8 +21,8 @@ export async function GET(req: NextRequest) {
         grant_type: 'authorization_code',
         code,
         redirect_uri: `${BASE_URL()}/api/oauth/linkedin/callback`,
-        client_id: process.env.LINKEDIN_CLIENT_ID!,
-        client_secret: process.env.LINKEDIN_CLIENT_SECRET!,
+        client_id: (process.env.LINKEDIN_CLIENT_ID || '').trim(),
+        client_secret: (process.env.LINKEDIN_CLIENT_SECRET || '').trim(),
       }),
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
     )

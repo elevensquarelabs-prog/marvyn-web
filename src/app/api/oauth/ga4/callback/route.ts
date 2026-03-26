@@ -18,8 +18,8 @@ export async function GET(req: NextRequest) {
     const redirectUri = `${BASE_URL()}/api/oauth/ga4/callback`
     const params = new URLSearchParams()
     params.set('code', code)
-    params.set('client_id', process.env.GOOGLE_CLIENT_ID || '')
-    params.set('client_secret', process.env.GOOGLE_CLIENT_SECRET || '')
+    params.set('client_id', (process.env.GOOGLE_CLIENT_ID || '').trim())
+    params.set('client_secret', (process.env.GOOGLE_CLIENT_SECRET || '').trim())
     params.set('redirect_uri', redirectUri)
     params.set('grant_type', 'authorization_code')
 
