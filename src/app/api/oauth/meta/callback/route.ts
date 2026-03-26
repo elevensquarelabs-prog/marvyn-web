@@ -3,17 +3,19 @@ import { connectDB } from '@/lib/mongodb'
 import User from '@/models/User'
 import axios from 'axios'
 
+const BASE_URL = () => (process.env.NEXTAUTH_URL || '').trim()
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const code = searchParams.get('code')
   const userId = searchParams.get('state')
 
   if (!code || !userId) {
-    return Response.redirect(`${process.env.NEXTAUTH_URL}/settings?error=meta_oauth_failed`)
+    return Response.redirect(`${BASE_URL()}/settings?error=meta_oauth_failed`)
   }
 
   try {
-    const redirectUri = `${process.env.NEXTAUTH_URL}/api/oauth/meta/callback`
+    const redirectUri = `${BASE_URL()}/api/oauth/meta/callback`
     const tokenRes = await axios.get('https://graph.facebook.com/v21.0/oauth/access_token', {
       params: {
         client_id: process.env.META_APP_ID,
@@ -51,9 +53,9 @@ export async function GET(req: NextRequest) {
       'connections.meta': { accessToken, accountId, accountName },
     })
 
-    return Response.redirect(`${process.env.NEXTAUTH_URL}/settings?connected=meta`)
+    return Response.redirect(`${BASE_URL()}/settings?connected=meta`)
   } catch (err) {
     console.error('[meta/callback]', err)
-    return Response.redirect(`${process.env.NEXTAUTH_URL}/settings?error=meta_oauth_failed`)
+    return Response.redirect(`${BASE_URL()}/settings?error=meta_oauth_failed`)
   }
 }

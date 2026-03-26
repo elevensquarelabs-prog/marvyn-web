@@ -4,11 +4,14 @@ import mongoose from 'mongoose'
 
 export async function refreshGoogleToken(refreshToken: string): Promise<string | null> {
   try {
-    const res = await axios.post('https://oauth2.googleapis.com/token', {
-      client_id: process.env.GOOGLE_CLIENT_ID,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET,
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token',
+    const params = new URLSearchParams()
+    params.set('client_id', process.env.GOOGLE_CLIENT_ID || '')
+    params.set('client_secret', process.env.GOOGLE_CLIENT_SECRET || '')
+    params.set('refresh_token', refreshToken)
+    params.set('grant_type', 'refresh_token')
+
+    const res = await axios.post('https://oauth2.googleapis.com/token', params.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     })
     return res.data.access_token ?? null
   } catch {
@@ -43,7 +46,9 @@ export async function getValidGoogleToken(
   if (!conn.refreshToken) return conn.accessToken
 
   const newToken = await refreshGoogleToken(conn.refreshToken)
-  if (newToken && newToken !== conn.accessToken) {
+  if (!newToken) return null
+
+  if (newToken !== conn.accessToken) {
     // Persist refreshed token to both fields
     await mongoose.connection.db!.collection('users').updateOne(
       { _id: new mongoose.Types.ObjectId(userId) },
@@ -56,8 +61,7 @@ export async function getValidGoogleToken(
         },
       }
     )
-    return newToken
   }
 
-  return conn.accessToken
+  return newToken
 }
