@@ -12,6 +12,8 @@ export type AiFeature =
   | 'competitor_analysis'
   | 'clarity_insights'
   | 'competitor_tagging'
+  | 'strategy_plan'
+  | 'strategy_review'
 
 export type UsageProvider = 'openrouter' | 'dataforseo' | 'platform'
 
@@ -35,6 +37,8 @@ const FEATURE_CREDIT_COSTS: Record<AiFeature, number> = {
   competitor_analysis: 18,
   clarity_insights: 2,
   competitor_tagging: 2,
+  strategy_plan: 6,
+  strategy_review: 3,
 }
 
 export const DATAFORSEO_OPERATION_COST_USD: Record<string, number> = {

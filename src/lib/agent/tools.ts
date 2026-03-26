@@ -8,7 +8,7 @@ import SEOAudit from '@/models/SEOAudit'
 import Keyword from '@/models/Keyword'
 import mongoose from 'mongoose'
 import axios from 'axios'
-import { getValidGoogleToken } from '@/lib/google-auth'
+import { getAdsInsightsForUser } from '@/lib/ads-performance'
 import { publishToLinkedIn, publishToFacebook, publishToInstagram } from '@/lib/social-publish'
 
 export interface RawConnections {
@@ -681,8 +681,7 @@ async function get_google_ads_performance(
   args: { days?: number },
   context: AgentContext
 ): Promise<ToolResult> {
-  const google = context.connections.google
-  if (!google?.customerId) {
+  if (!context.connections.google?.customerId) {
     return {
       summary: 'Google Ads not connected.',
       content: JSON.stringify({ connected: false, message: 'Connect Google Ads in Settings > Connections to see ad performance.' }),
@@ -690,83 +689,28 @@ async function get_google_ads_performance(
   }
 
   const days = args.days || 30
-  const until = new Date()
-  until.setDate(until.getDate() - 1)
-  const since = new Date(until)
-  since.setDate(since.getDate() - days + 1)
-  const fmt = (d: Date) => d.toISOString().split('T')[0]
 
   try {
-    const token = await getValidGoogleToken(context.userId, 'google')
-    if (!token) throw new Error('Google token expired — reconnect in Settings')
-
-    const devToken = process.env.GOOGLE_DEVELOPER_TOKEN
-    if (!devToken) throw new Error('GOOGLE_DEVELOPER_TOKEN not configured')
-
-    const cid = google.customerId.replace(/-/g, '')
-    const headers = {
-      Authorization: `Bearer ${token}`,
-      'developer-token': devToken,
-      'login-customer-id': cid,
-      'Content-Type': 'application/json',
-    }
-
-    const query = `
-      SELECT campaign.id, campaign.name, campaign.status,
-             metrics.cost_micros, metrics.impressions, metrics.clicks,
-             metrics.conversions, metrics.conversion_value
-      FROM campaign
-      WHERE segments.date BETWEEN '${fmt(since)}' AND '${fmt(until)}'
-        AND campaign.status != 'REMOVED'
-    `
-
-    const res = await axios.post(
-      `https://googleads.googleapis.com/v19/customers/${cid}/googleAds:search`,
-      { query: query.trim() },
-      { headers }
-    )
-
-    type GAgg = { name: string; status: string; spend: number; impressions: number; clicks: number; conversions: number; revenue: number }
-    const aggMap = new Map<string, GAgg>()
-    for (const row of (res.data.results || [])) {
-      const gid = String(row.campaign?.id || '')
-      const agg = aggMap.get(gid) ?? {
-        name: row.campaign?.name || 'Unknown',
-        status: row.campaign?.status || '',
-        spend: 0, impressions: 0, clicks: 0, conversions: 0, revenue: 0,
-      }
-      agg.spend += (row.metrics?.costMicros || 0) / 1_000_000
-      agg.impressions += row.metrics?.impressions || 0
-      agg.clicks += row.metrics?.clicks || 0
-      agg.conversions += row.metrics?.conversions || 0
-      agg.revenue += row.metrics?.conversionValue || 0
-      aggMap.set(gid, agg)
-    }
-
-    const campaigns = Array.from(aggMap.values())
-    const totals = campaigns.reduce((t, c) => ({
-      spend: t.spend + c.spend, impressions: t.impressions + c.impressions,
-      clicks: t.clicks + c.clicks, conversions: t.conversions + c.conversions,
-      revenue: t.revenue + c.revenue,
-    }), { spend: 0, impressions: 0, clicks: 0, conversions: 0, revenue: 0 })
-
+    const result = await getAdsInsightsForUser({ userId: context.userId, days })
+    const totals = result.platformBreakdown.google
+    const googleCampaigns = result.campaigns.filter(c => c.platform === 'google')
     const roas = totals.spend > 0 && totals.revenue > 0 ? totals.revenue / totals.spend : null
     const ctr = totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0
     const cpa = totals.conversions > 0 ? totals.spend / totals.conversions : null
 
-    const summary = `Google Ads (${days}d): Spend ₹${totals.spend.toFixed(0)} | ${totals.clicks} clicks | ROAS ${roas ? roas.toFixed(2) + 'x' : 'N/A'} | ${campaigns.length} campaigns`
+    const summary = `Google Ads (${days}d): Spend ₹${totals.spend.toFixed(0)} | ${totals.clicks} clicks | ROAS ${roas ? roas.toFixed(2) + 'x' : 'N/A'} | ${googleCampaigns.length} campaigns`
 
     return {
       summary,
       content: JSON.stringify({
-        dateRange: { since: fmt(since), until: fmt(until), days },
         totals: { ...totals, roas, ctr: Math.round(ctr * 100) / 100, cpa },
-        campaigns: campaigns.sort((a, b) => b.spend - a.spend).slice(0, 10).map(c => ({
+        campaigns: googleCampaigns.slice(0, 10).map(c => ({
           ...c,
           roas: c.spend > 0 && c.revenue > 0 ? c.revenue / c.spend : null,
           ctr: c.impressions > 0 ? (c.clicks / c.impressions) * 100 : 0,
         })),
-        customerId: google.customerId,
+        customerId: context.connections.google?.customerId,
+        errors: result.errors,
       }),
     }
   } catch (err) {

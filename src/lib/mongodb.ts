@@ -23,7 +23,20 @@ export async function connectDB(): Promise<typeof mongoose> {
   if (cached.conn) return cached.conn
 
   if (!cached.promise) {
-    cached.promise = mongoose.connect(uri, { bufferCommands: false })
+    cached.promise = mongoose
+      .connect(uri, {
+        bufferCommands: false,
+        serverSelectionTimeoutMS: 10000,
+        connectTimeoutMS: 10000,
+        socketTimeoutMS: 30000,
+        family: 4, // force IPv4 — avoids ESERVFAIL on SRV lookup over IPv6
+        maxPoolSize: 10,
+      })
+      .catch(err => {
+        // Clear the cached promise on failure so the next call retries
+        cached.promise = null
+        throw err
+      })
   }
 
   cached.conn = await cached.promise

@@ -38,7 +38,8 @@ BEHAVIOR RULES:
 - You can chain tools: e.g. get_seo_report → then generate_blog_post targeting keyword gaps
 - Be specific and cite real numbers from tool results
 - After using tools, give a clear summary of what you found/did and what to do next
-- Keep responses concise and actionable — bullet points over paragraphs`
+- Keep responses concise and actionable — bullet points over paragraphs
+- Adapt recommendations to the user's business model. D2C cares about purchase conversion and revenue efficiency, SaaS cares about demos/trials/pipeline quality, and services businesses care about qualified leads and booked calls.`
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -83,8 +84,15 @@ export async function POST(req: NextRequest) {
     connections.facebook?.pageId ? `Facebook (${connections.facebook.pageName || ''})` : null,
   ].filter(Boolean)
 
+  const businessModel = brand?.businessModel === 'd2c_ecommerce'
+    ? 'D2C / Ecommerce'
+    : brand?.businessModel === 'services_lead_gen'
+      ? 'Services / Lead Gen'
+      : 'SaaS'
+
   const contextSummary = brand ? `
 BRAND: ${brand.name} | Product: ${brand.product} | Audience: ${brand.audience} | Tone: ${brand.tone} | Website: ${brand.websiteUrl}
+BUSINESS MODEL: ${businessModel} | PRIMARY GOAL: ${brand.primaryGoal || 'not set'} | PRIMARY CONVERSION: ${brand.primaryConversion || 'not set'} | AVG ORDER/DEAL VALUE: ${brand.averageOrderValue || 'unknown'} | PRIMARY CHANNELS: ${Array.isArray(brand.primaryChannels) && brand.primaryChannels.length ? brand.primaryChannels.join(', ') : 'not set'}
 CONNECTED PLATFORMS: ${connectedPlatforms.length > 0 ? connectedPlatforms.join(', ') : 'none yet'}` : 'No brand set up yet.'
 
   const finalSystem = `${SYSTEM_PROMPT}\n\n${contextSummary}${skillContext}`

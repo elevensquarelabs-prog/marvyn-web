@@ -5,7 +5,7 @@ import { SpendChart } from './SpendChart'
 import { CampaignPerformance } from './CampaignPerformance'
 import { AIInsights } from './AIInsights'
 import { CreativePerformance } from './CreativePerformance'
-import type { CampaignInsight, DailyEntry } from '@/app/api/ads/insights/route'
+import type { CampaignInsight, DailyEntry } from '@/lib/ads-performance'
 import { currencySymbol } from '@/lib/currency'
 
 export interface ConnectionError {

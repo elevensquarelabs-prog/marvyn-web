@@ -37,6 +37,11 @@ export interface IBrand extends Document {
   name: string
   product: string
   audience: string
+  businessModel?: 'd2c_ecommerce' | 'saas' | 'services_lead_gen'
+  primaryGoal?: string
+  primaryConversion?: string
+  averageOrderValue?: number
+  primaryChannels?: string[]
   tone: string
   usp: string
   avoidWords?: string
@@ -52,6 +57,11 @@ const BrandSchema = new Schema<IBrand>({
   name: { type: String, default: '' },
   product: { type: String, default: '' },
   audience: { type: String, default: '' },
+  businessModel: { type: String, enum: ['d2c_ecommerce', 'saas', 'services_lead_gen'] },
+  primaryGoal: { type: String, default: '' },
+  primaryConversion: { type: String, default: '' },
+  averageOrderValue: Number,
+  primaryChannels: [String],
   tone: { type: String, default: '' },
   usp: { type: String, default: '' },
   avoidWords: String,

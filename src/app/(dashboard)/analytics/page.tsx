@@ -101,6 +101,14 @@ interface Ga4Data {
   }>
 }
 
+interface BrandProfile {
+  name?: string
+  businessModel?: 'd2c_ecommerce' | 'saas' | 'services_lead_gen'
+  primaryGoal?: string
+  primaryConversion?: string
+  primaryChannels?: string[]
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const DEVICE_COLORS = ['#7c3aed', '#a78bfa', '#c4b5fd', '#ede9fe']
@@ -145,6 +153,13 @@ function insightTone(severity: 'high' | 'medium' | 'low') {
   if (severity === 'high') return 'border-red-200 bg-red-50 text-red-700'
   if (severity === 'medium') return 'border-amber-200 bg-amber-50 text-amber-700'
   return 'border-blue-200 bg-blue-50 text-blue-700'
+}
+
+function businessModelLabel(value?: string) {
+  if (value === 'd2c_ecommerce') return 'D2C / Ecommerce'
+  if (value === 'services_lead_gen') return 'Services / Lead Gen'
+  if (value === 'saas') return 'SaaS'
+  return 'Not set'
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -196,6 +211,7 @@ export default function AnalyticsPage() {
   const [summary, setSummary] = useState('')
   const [loading, setLoading] = useState(false)
   const [stats, setStats] = useState<{ blogPublished: number; socialPublished: number; keywords: number; campaigns: number } | null>(null)
+  const [brand, setBrand] = useState<BrandProfile | null>(null)
   const [connections, setConnections] = useState<ConnectionsData | null>(null)
   const [adsInsights, setAdsInsights] = useState<AdsInsightsData | null>(null)
   const [keywords, setKeywords] = useState<KeywordRecord[]>([])
@@ -206,7 +222,8 @@ export default function AnalyticsPage() {
 
   const loadStats = useCallback(async () => {
     try {
-      const [blogRes, socialRes, kwRes, adsRes, adsInsightsRes, connectionsRes, ga4Res] = await Promise.all([
+      const [brandRes, blogRes, socialRes, kwRes, adsRes, adsInsightsRes, connectionsRes, ga4Res] = await Promise.all([
+        fetch('/api/settings/brand'),
         fetch('/api/blog?status=published'),
         fetch('/api/social?status=published'),
         fetch('/api/seo/keywords'),
@@ -215,9 +232,10 @@ export default function AnalyticsPage() {
         fetch('/api/settings/connections'),
         fetch('/api/analytics/ga4'),
       ])
-      const [blog, social, kw, ads, insights, connected, ga4Data] = await Promise.all([
-        blogRes.json(), socialRes.json(), kwRes.json(), adsRes.json(), adsInsightsRes.json(), connectionsRes.json(), ga4Res.json(),
+      const [brandData, blog, social, kw, ads, insights, connected, ga4Data] = await Promise.all([
+        brandRes.json(), blogRes.json(), socialRes.json(), kwRes.json(), adsRes.json(), adsInsightsRes.json(), connectionsRes.json(), ga4Res.json(),
       ])
+      setBrand(brandData.brand || null)
       setKeywords(kw.keywords || [])
       setAdsInsights(insights)
       setConnections(connected)
@@ -273,11 +291,15 @@ export default function AnalyticsPage() {
     setLoading(true)
     setSummary('')
     try {
+      const businessContext = brand
+        ? `Business model: ${businessModelLabel(brand.businessModel)}. Primary goal: ${brand.primaryGoal || 'not set'}. Primary conversion: ${brand.primaryConversion || 'not set'}. Primary channels: ${brand.primaryChannels?.join(', ') || 'not set'}.`
+        : 'Business model not yet configured.'
       const res = await fetch('/api/agent/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: 'Give me a concise weekly marketing performance summary and 3 key recommendations based on what you know about my brand and marketing activity. Keep it to 150 words.',
+          skillId: 'content-strategy',
+          message: `Give me a concise weekly marketing performance summary and 3 key recommendations based on what you know about my brand and marketing activity. Adapt the recommendations to my business model and core conversion goal. Keep it to 150 words.\n\n${businessContext}`,
         }),
       })
       const reader = res.body!.getReader()

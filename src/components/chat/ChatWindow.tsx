@@ -158,9 +158,8 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
       setActiveSkill(null)
     } else {
       setActiveSkill(chip.id)
-      if (messages.length === 0) {
-        sendMessage(chip.prompt, chip.id)
-      }
+      if (!input.trim()) setInput(chip.prompt)
+      textareaRef.current?.focus()
     }
   }
 

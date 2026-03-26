@@ -12,6 +12,11 @@ interface Brand {
   name?: string
   product?: string
   audience?: string
+  businessModel?: 'd2c_ecommerce' | 'saas' | 'services_lead_gen'
+  primaryGoal?: string
+  primaryConversion?: string
+  averageOrderValue?: number
+  primaryChannels?: string[]
   tone?: string
   usp?: string
   avoidWords?: string
@@ -41,6 +46,14 @@ const PROVIDER_LABELS: Record<string, string> = {
   meta: 'Meta',
   linkedin: 'LinkedIn',
 }
+
+const BUSINESS_MODEL_OPTIONS = [
+  { value: 'd2c_ecommerce', label: 'D2C / Ecommerce' },
+  { value: 'saas', label: 'SaaS' },
+  { value: 'services_lead_gen', label: 'Services / Lead Gen' },
+] as const
+
+const PRIMARY_CHANNEL_OPTIONS = ['Meta Ads', 'Google Ads', 'SEO', 'Instagram', 'LinkedIn', 'Email', 'Organic Social'] as const
 
 export default function SettingsPage() {
   const { data: session } = useSession()
@@ -370,7 +383,10 @@ export default function SettingsPage() {
       await fetch('/api/settings/brand', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(brand),
+        body: JSON.stringify({
+          ...brand,
+          averageOrderValue: brand.averageOrderValue ? Number(brand.averageOrderValue) : undefined,
+        }),
       })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -552,6 +568,8 @@ export default function SettingsPage() {
   const contentWidthClass =
     section === 'billing'
       ? 'max-w-5xl'
+      : section === 'brand'
+        ? 'max-w-4xl'
       : section === 'connections'
         ? 'max-w-4xl'
         : 'max-w-3xl'
@@ -613,6 +631,81 @@ export default function SettingsPage() {
                   />
                 </div>
               ))}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-[#555] block mb-1">Business model</label>
+                  <select
+                    value={brand.businessModel || 'saas'}
+                    onChange={e => setBrand(b => ({ ...b, businessModel: e.target.value as Brand['businessModel'] }))}
+                    className="w-full bg-[#111] border border-[#1E1E1E] rounded-lg px-3 py-2 text-sm text-white outline-none"
+                  >
+                    {BUSINESS_MODEL_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value} className="bg-[#111]">
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-[#555] block mb-1">Average order / deal value</label>
+                  <input
+                    value={brand.averageOrderValue ?? ''}
+                    onChange={e => setBrand(b => ({
+                      ...b,
+                      averageOrderValue: e.target.value ? Number(e.target.value) : undefined,
+                    }))}
+                    inputMode="decimal"
+                    placeholder="2500"
+                    className="w-full bg-[#111] border border-[#1E1E1E] rounded-lg px-3 py-2 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-[#555] block mb-1">Primary growth goal</label>
+                  <input
+                    value={brand.primaryGoal || ''}
+                    onChange={e => setBrand(b => ({ ...b, primaryGoal: e.target.value }))}
+                    placeholder="Revenue growth, more demos, more qualified leads…"
+                    className="w-full bg-[#111] border border-[#1E1E1E] rounded-lg px-3 py-2 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-[#555] block mb-1">Primary conversion event</label>
+                  <input
+                    value={brand.primaryConversion || ''}
+                    onChange={e => setBrand(b => ({ ...b, primaryConversion: e.target.value }))}
+                    placeholder="Purchase, booked demo, lead form, WhatsApp inquiry…"
+                    className="w-full bg-[#111] border border-[#1E1E1E] rounded-lg px-3 py-2 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/50"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-[#555] block mb-2">Primary channels</label>
+                <div className="flex flex-wrap gap-2">
+                  {PRIMARY_CHANNEL_OPTIONS.map(channel => {
+                    const selected = (brand.primaryChannels || []).includes(channel)
+                    return (
+                      <button
+                        key={channel}
+                        type="button"
+                        onClick={() => setBrand(b => ({
+                          ...b,
+                          primaryChannels: selected
+                            ? (b.primaryChannels || []).filter(item => item !== channel)
+                            : [...(b.primaryChannels || []), channel],
+                        }))}
+                        className={`px-3 py-1.5 rounded-full border text-xs transition-colors ${
+                          selected
+                            ? 'border-[#DA7756] bg-[#DA7756]/15 text-[#DA7756]'
+                            : 'border-[#1E1E1E] bg-[#111] text-[#666] hover:text-white'
+                        }`}
+                      >
+                        {channel}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-xs text-[#555] mt-2">This changes how Marvyn prioritizes metrics, recommendations, and strategy planning.</p>
+              </div>
               <div>
                 <label className="text-xs text-[#555] block mb-1">Currency</label>
                 <select

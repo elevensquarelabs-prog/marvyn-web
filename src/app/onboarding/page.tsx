@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/shared/Button'
-import CompetitorAnalysis, { type AnalysisInsights } from '@/components/shared/CompetitorAnalysis'
+import CompetitorAnalysis from '@/components/shared/CompetitorAnalysis'
 
 const STEPS = ['Brand', 'Competitors', 'Connect']
 
@@ -11,11 +11,24 @@ interface BrandForm {
   name: string
   product: string
   audience: string
+  businessModel: 'd2c_ecommerce' | 'saas' | 'services_lead_gen'
+  primaryGoal: string
+  primaryConversion: string
+  averageOrderValue: string
+  primaryChannels: string[]
   tone: string
   usp: string
   websiteUrl: string
   currency: string
 }
+
+const BUSINESS_MODEL_OPTIONS = [
+  { value: 'd2c_ecommerce', label: 'D2C / Ecommerce' },
+  { value: 'saas', label: 'SaaS' },
+  { value: 'services_lead_gen', label: 'Services / Lead Gen' },
+] as const
+
+const CHANNEL_OPTIONS = ['Meta Ads', 'Google Ads', 'SEO', 'Instagram', 'LinkedIn', 'Email', 'Organic Social'] as const
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -24,7 +37,18 @@ export default function OnboardingPage() {
 
   // Step 1
   const [brand, setBrand] = useState<BrandForm>({
-    name: '', product: '', audience: '', tone: 'Professional', usp: '', websiteUrl: '', currency: 'INR',
+    name: '',
+    product: '',
+    audience: '',
+    businessModel: 'saas',
+    primaryGoal: '',
+    primaryConversion: '',
+    averageOrderValue: '',
+    primaryChannels: [],
+    tone: 'Professional',
+    usp: '',
+    websiteUrl: '',
+    currency: 'INR',
   })
 
   // Step 2
@@ -36,7 +60,10 @@ export default function OnboardingPage() {
       await fetch('/api/settings/brand', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(brand),
+        body: JSON.stringify({
+          ...brand,
+          averageOrderValue: brand.averageOrderValue ? Number(brand.averageOrderValue) : undefined,
+        }),
       })
       setStep(1)
     } finally {
@@ -115,6 +142,46 @@ export default function OnboardingPage() {
                 />
               </div>
               <div>
+                <label className="text-xs text-[#555] block mb-1">Business model *</label>
+                <select
+                  value={brand.businessModel}
+                  onChange={e => setBrand(b => ({ ...b, businessModel: e.target.value as BrandForm['businessModel'] }))}
+                  className="w-full bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg px-3 py-2.5 text-sm text-white outline-none"
+                >
+                  {BUSINESS_MODEL_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value} className="bg-[#111]">{option.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-[#555] block mb-1">Primary growth goal</label>
+                <input
+                  value={brand.primaryGoal}
+                  onChange={e => setBrand(b => ({ ...b, primaryGoal: e.target.value }))}
+                  placeholder="Revenue growth, more demos, more qualified leads…"
+                  className="w-full bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg px-3 py-2.5 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/60"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-[#555] block mb-1">Primary conversion event</label>
+                <input
+                  value={brand.primaryConversion}
+                  onChange={e => setBrand(b => ({ ...b, primaryConversion: e.target.value }))}
+                  placeholder="Purchase, booked demo, lead form, WhatsApp inquiry…"
+                  className="w-full bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg px-3 py-2.5 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/60"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-[#555] block mb-1">Average order / deal value</label>
+                <input
+                  value={brand.averageOrderValue}
+                  onChange={e => setBrand(b => ({ ...b, averageOrderValue: e.target.value }))}
+                  placeholder="2500"
+                  inputMode="decimal"
+                  className="w-full bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg px-3 py-2.5 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/60"
+                />
+              </div>
+              <div>
                 <label className="text-xs text-[#555] block mb-1">Brand tone</label>
                 <select
                   value={brand.tone}
@@ -146,6 +213,33 @@ export default function OnboardingPage() {
                   placeholder="What makes you different from competitors?"
                   className="w-full bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg px-3 py-2.5 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/60"
                 />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs text-[#555] block mb-2">Primary channels</label>
+                <div className="flex flex-wrap gap-2">
+                  {CHANNEL_OPTIONS.map(channel => {
+                    const selected = brand.primaryChannels.includes(channel)
+                    return (
+                      <button
+                        key={channel}
+                        type="button"
+                        onClick={() => setBrand(b => ({
+                          ...b,
+                          primaryChannels: selected
+                            ? b.primaryChannels.filter(item => item !== channel)
+                            : [...b.primaryChannels, channel],
+                        }))}
+                        className={`px-3 py-1.5 rounded-full border text-xs transition-colors ${
+                          selected
+                            ? 'border-[#DA7756] bg-[#DA7756]/15 text-[#DA7756]'
+                            : 'border-[#2A2A2A] bg-[#0D0D0D] text-[#777] hover:text-white'
+                        }`}
+                      >
+                        {channel}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
               <div className="col-span-2">
                 <label className="text-xs text-[#555] block mb-1">Website URL</label>
@@ -183,7 +277,7 @@ export default function OnboardingPage() {
             <CompetitorAnalysis
               defaultDomain={brand.websiteUrl?.replace(/^https?:\/\//, '') ?? ''}
               compact
-              onComplete={(_insights: AnalysisInsights) => setCompetitorAnalysisDone(true)}
+              onComplete={() => setCompetitorAnalysisDone(true)}
             />
 
             <div className="flex gap-3 pt-2">

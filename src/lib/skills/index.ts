@@ -15,6 +15,7 @@ export const skills = {
   emailSequence: loadSkill('email-sequence'),
   adCreative: loadSkill('ad-creative'),
   competitorAlternatives: loadSkill('competitor-alternatives'),
+  marketingOpsPlan: loadSkill('marketing-ops-plan'),
 }
 
 export type SkillKey = keyof typeof skills

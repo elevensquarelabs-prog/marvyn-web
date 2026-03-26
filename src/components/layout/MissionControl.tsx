@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
 interface MCData {
-  brand: { name?: string; competitors?: unknown[] } | null
+  brand: { name?: string; businessModel?: string; competitors?: unknown[] } | null
   blogPending: number
   blogScheduled: number
   socialPending: number
@@ -91,6 +91,18 @@ export function MissionControl({ agentStatus = 'idle', activeTool = null }: { ag
             <span className="text-xs text-[#A0A0A0]">Competitors</span>
             <span className="text-xs text-[#A0A0A0]">{(data.brand?.competitors as unknown[])?.length || 0} tracked</span>
           </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[#A0A0A0]">Business mode</span>
+            <span className="text-xs text-[#A0A0A0]">
+              {data.brand?.businessModel === 'd2c_ecommerce'
+                ? 'D2C'
+                : data.brand?.businessModel === 'services_lead_gen'
+                  ? 'Services'
+                  : data.brand?.businessModel === 'saas'
+                    ? 'SaaS'
+                    : 'Unset'}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -136,6 +148,7 @@ export function MissionControl({ agentStatus = 'idle', activeTool = null }: { ag
         <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-2">Quick Links</p>
         <div className="space-y-1">
           {[
+            { href: '/strategy', label: 'Review strategy cycle' },
             { href: '/blog', label: 'Review blog posts' },
             { href: '/social', label: 'Review social posts' },
             { href: '/seo', label: 'SEO opportunities' },

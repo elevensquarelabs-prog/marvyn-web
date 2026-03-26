@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getUserConnections, makeConnectionError, parseMetaApiError, type ConnectionError } from '@/lib/get-user-connections'
-import { getValidGoogleToken } from '@/lib/google-auth'
+import { getGoogleCampaignsForUser } from '@/lib/ads-performance'
 import axios from 'axios'
 
 export async function GET(_req: NextRequest) {
@@ -59,46 +59,9 @@ export async function GET(_req: NextRequest) {
     connectionErrors.push(makeConnectionError('GOOGLE_NOT_CONNECTED'))
   } else {
     try {
-      const accessToken = await getValidGoogleToken(userId, 'google')
-      if (!accessToken) throw new Error('No Google token')
-
-      const developerToken = process.env.GOOGLE_DEVELOPER_TOKEN
-      if (!developerToken) throw new Error('No Google Ads developer token')
-
-      const customerId = google.customerId.replace(/-/g, '')
-      const query = `
-        SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type,
-               campaign_budget.amount_micros
-        FROM campaign
-        WHERE campaign.status != 'REMOVED'
-        LIMIT 50
-      `
-
-      const res = await axios.post(
-        `https://googleads.googleapis.com/v19/customers/${customerId}/googleAds:search`,
-        { query: query.trim() },
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'developer-token': developerToken,
-            'login-customer-id': customerId,
-            'Content-Type': 'application/json',
-          },
-        }
-      )
-
-      const rows = res.data.results ?? []
-      const results = rows.map((row: { campaign?: Record<string, unknown>; campaignBudget?: Record<string, unknown> }) => ({
-        id: row.campaign?.id,
-        name: row.campaign?.name,
-        status: row.campaign?.status,
-        channelType: row.campaign?.advertisingChannelType,
-        dailyBudgetMicros: row.campaignBudget?.amountMicros,
-        platform: 'google',
-      }))
-
-      campaigns.push(...results)
-      console.log(`[campaigns] Google: fetched ${results.length} campaigns for customer ${customerId}`)
+      const result = await getGoogleCampaignsForUser({ userId })
+      campaigns.push(...result.campaigns)
+      errors.push(...result.errors)
     } catch (err) {
       const e = err as { response?: { data?: unknown; status?: number }; message?: string }
       const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message

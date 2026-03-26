@@ -233,7 +233,7 @@ export default function AlertsPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 px-6 py-4 max-w-2xl">
+      <div className="flex-1 px-6 py-4">
         {loading ? (
           <div className="space-y-3">
             {[...Array(3)].map((_, i) => (
@@ -249,7 +249,7 @@ export default function AlertsPage() {
             </p>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="mx-auto max-w-5xl space-y-3">
             {alerts.map(alert => (
               <AlertCard
                 key={alert._id}
