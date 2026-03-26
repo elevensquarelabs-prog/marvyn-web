@@ -22,7 +22,9 @@ export async function GET(_req: NextRequest) {
   if (!session?.user?.id) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const accessToken = await getValidGoogleToken(session.user.id, 'ga4')
-  if (!accessToken) return Response.json({ error: 'GA4 not connected' }, { status: 400 })
+  if (!accessToken) {
+    return Response.json({ error: 'GA4 authentication expired. Reconnect Google Analytics 4 and try again.' }, { status: 401 })
+  }
 
   try {
     const res = await axios.get('https://analyticsadmin.googleapis.com/v1beta/accountSummaries?pageSize=200', {
@@ -40,7 +42,7 @@ export async function GET(_req: NextRequest) {
     return Response.json({ properties })
   } catch (err) {
     console.error('[ga4/properties] fetch failed:', err)
-    return Response.json({ error: 'Failed to fetch GA4 properties' }, { status: 500 })
+    return Response.json({ error: 'Failed to fetch GA4 properties. Confirm the connected Google account has access to the GA4 property.' }, { status: 500 })
   }
 }
 
