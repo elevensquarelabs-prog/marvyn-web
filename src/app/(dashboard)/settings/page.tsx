@@ -259,6 +259,79 @@ export default function SettingsPage() {
     }
   }
 
+  const disconnectConnection = async (platform: 'meta' | 'google' | 'ga4') => {
+    if (platform === 'meta') {
+      await Promise.all([
+        fetch('/api/settings/connections', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ platform: 'meta' }),
+        }),
+        fetch('/api/settings/connections', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ platform: 'facebook' }),
+        }),
+        fetch('/api/settings/connections', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ platform: 'instagram' }),
+        }),
+      ])
+
+      setConnections(prev => {
+        const next = { ...prev }
+        delete next.meta
+        delete next.facebook
+        delete next.instagram
+        return next
+      })
+      setAdAccounts([])
+      setMetaPages([])
+      return
+    }
+
+    if (platform === 'google') {
+      await Promise.all([
+        fetch('/api/settings/connections', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ platform: 'google' }),
+        }),
+        fetch('/api/settings/connections', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ platform: 'searchConsole' }),
+        }),
+      ])
+
+      setConnections(prev => {
+        const next = { ...prev }
+        delete next.google
+        delete next.searchConsole
+        return next
+      })
+      setGoogleAccounts([])
+      setGoogleSites([])
+      setGoogleAdsManualEntry(false)
+      setGoogleAdsManualId('')
+      setChangingGSCSite(false)
+      return
+    }
+
+    await fetch('/api/settings/connections', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform: 'ga4' }),
+    })
+    setConnections(prev => {
+      const next = { ...prev }
+      delete next.ga4
+      return next
+    })
+    setGa4Properties([])
+  }
+
   const selectGoogleSite = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const siteUrl = e.target.value
     if (!siteUrl) return
@@ -783,6 +856,11 @@ export default function SettingsPage() {
                     {(connections.meta?.accountId || connections.facebook?.pageId) && (
                       <Badge variant="success">Connected</Badge>
                     )}
+                    {(connections.meta?.accountId || connections.facebook?.pageId) && (
+                      <Button size="sm" variant="ghost" onClick={() => disconnectConnection('meta')}>
+                        Disconnect
+                      </Button>
+                    )}
                     <Button size="sm" variant="secondary" onClick={() => connectOAuth('meta')}>
                       {connections.meta?.accountId ? 'Reconnect' : 'Connect'}
                     </Button>
@@ -907,6 +985,11 @@ export default function SettingsPage() {
                     {connections.google?.connected && (
                       <Badge variant="success">Connected</Badge>
                     )}
+                    {connections.google?.connected && (
+                      <Button size="sm" variant="ghost" onClick={() => disconnectConnection('google')}>
+                        Disconnect
+                      </Button>
+                    )}
                     <Button size="sm" variant="secondary" onClick={() => connectOAuth('google')}>
                       {connections.google?.connected ? 'Reconnect' : 'Connect'}
                     </Button>
@@ -1026,35 +1109,6 @@ export default function SettingsPage() {
                         Connected {new Date(connections.google.connectedAt).toLocaleDateString()}
                       </p>
                     )}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={async () => {
-                        await fetch('/api/settings/connections', {
-                          method: 'DELETE',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ platform: 'google' }),
-                        })
-                        await fetch('/api/settings/connections', {
-                          method: 'DELETE',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ platform: 'searchConsole' }),
-                        })
-                        setConnections(prev => {
-                          const n = { ...prev }
-                          delete n.google
-                          delete n.searchConsole
-                          return n
-                        })
-                        setGoogleAccounts([])
-                        setGoogleSites([])
-                        setGoogleAdsManualEntry(false)
-                        setGoogleAdsManualId('')
-                        setChangingGSCSite(false)
-                      }}
-                    >
-                      Disconnect
-                    </Button>
                   </div>
                 )}
               </div>
@@ -1075,6 +1129,11 @@ export default function SettingsPage() {
                   <div className="flex items-center gap-2">
                     {connections.ga4?.connected && (
                       <Badge variant="success">Connected</Badge>
+                    )}
+                    {connections.ga4?.connected && (
+                      <Button size="sm" variant="ghost" onClick={() => disconnectConnection('ga4')}>
+                        Disconnect
+                      </Button>
                     )}
                     <Button size="sm" variant="secondary" onClick={() => connectOAuth('ga4')}>
                       {connections.ga4?.connected ? 'Reconnect' : 'Connect'}
@@ -1138,25 +1197,6 @@ export default function SettingsPage() {
                       </p>
                     )}
 
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={async () => {
-                        await fetch('/api/settings/connections', {
-                          method: 'DELETE',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ platform: 'ga4' }),
-                        })
-                        setConnections(prev => {
-                          const n = { ...prev }
-                          delete n.ga4
-                          return n
-                        })
-                        setGa4Properties([])
-                      }}
-                    >
-                      Disconnect
-                    </Button>
                   </div>
                 )}
               </div>
