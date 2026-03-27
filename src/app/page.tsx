@@ -1,61 +1,169 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { Inter, Plus_Jakarta_Sans } from 'next/font/google'
 
-// ─── Icons ────────────────────────────────────────────────────────────────────
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-body',
+  weight: ['300', '400', '500', '600'],
+})
 
-function IconM() {
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  variable: '--font-headline',
+  weight: ['400', '500', '600', '700', '800'],
+})
+
+const integrations = [
+  { name: 'Meta Ads', logo: '/landing/meta.png', note: 'Paid social + creative testing' },
+  { name: 'Google Ads', logo: '/landing/google-ads.png', note: 'Search demand and paid intent' },
+  { name: 'LinkedIn', logo: '/landing/linkedin.png', note: 'B2B distribution and ads' },
+  { name: 'GA4', logo: '/landing/ga4.png', note: 'Sessions, funnels, and attribution' },
+  { name: 'Clarity', logo: '/landing/clarity.png', note: 'Behavior, dead clicks, and friction' },
+]
+
+const orchestrationSteps = [
+  {
+    step: '01',
+    title: 'Deep ingestion',
+    body: 'Marvyn reads brand context, SEO gaps, performance signals, funnel behavior, and publishing output before suggesting anything.',
+  },
+  {
+    step: '02',
+    title: 'Tactical synthesis',
+    body: 'The strategy engine converts those signals into a 30-day operating plan with KPI targets, channel lanes, and execution tasks.',
+  },
+  {
+    step: '03',
+    title: 'Human-in-the-loop',
+    body: 'Nothing is blindly shipped. Marketers review, commit, and refine the plan before a single campaign or content action goes live.',
+  },
+]
+
+const accountabilityItems = [
+  { label: 'Approve LinkedIn content pillars', done: true },
+  { label: 'Verify Meta budget allocation', done: true },
+  { label: 'Finalize landing page wireframes', done: false },
+]
+
+const contentProof = [
+  {
+    title: 'Adaptive voice mimicry',
+    body: 'Marvyn learns your brand rhythm and strategy context so content feels operator-grade, not template-generated.',
+  },
+  {
+    title: 'Social preview workflow',
+    body: 'Review LinkedIn, Meta, and social drafts inside one operating system before approving or scheduling.',
+  },
+  {
+    title: 'Strategy-backed creative',
+    body: 'Every draft ties back to the active cycle, not a disconnected writing prompt.',
+  },
+]
+
+const problemPoints = [
+  {
+    title: 'Too many dashboards, no operating view',
+    body: 'Paid performance, SEO, behavior analytics, and content output live in different tools, so teams spend more time reconciling data than deciding what matters.',
+  },
+  {
+    title: 'Content gets produced without strategic context',
+    body: 'Most teams can ship posts and ads, but they cannot easily tie them back to the current bottleneck, KPI target, or conversion path.',
+  },
+  {
+    title: 'Strategy lives in meetings instead of systems',
+    body: 'The plan gets discussed, but execution, approvals, and review stay fragmented. That is where momentum and budget get lost.',
+  },
+]
+
+const productModules = [
+  {
+    title: 'Strategy',
+    subtitle: 'Diagnose the bottleneck and commit a 30-day cycle.',
+    body: 'Marvyn builds a draft, helps you refine it, and turns it into a live operating plan with KPI targets and review built in.',
+  },
+  {
+    title: 'Ads',
+    subtitle: 'Read paid signals before spending more.',
+    body: 'Meta and Google Ads context feed into one decision layer so campaign guidance is tied to actual performance, not generic playbooks.',
+  },
+  {
+    title: 'SEO',
+    subtitle: 'Spot content gaps and ranking opportunities.',
+    body: 'Search Console, technical SEO signals, and keyword opportunities flow into briefs, priorities, and long-term search strategy.',
+  },
+  {
+    title: 'Analytics',
+    subtitle: 'See traffic, behavior, and conversion paths together.',
+    body: 'GA4 and Clarity help Marvyn understand what users do, where friction exists, and whether the funnel is ready for more acquisition.',
+  },
+  {
+    title: 'Alerts',
+    subtitle: 'Surface drops, gaps, and issues early.',
+    body: 'Marvyn turns anomalies and missed opportunities into action prompts instead of leaving them buried in reporting tools.',
+  },
+  {
+    title: 'Social + Content',
+    subtitle: 'Execute faster without losing context.',
+    body: 'Posts, briefs, social drafts, and publishing decisions stay tied to the active plan so output supports the actual cycle objective.',
+  },
+]
+
+function BrandMark() {
   return (
-    <div className="w-7 h-7 rounded-lg bg-[#DA7756] flex items-center justify-center shrink-0">
-      <span className="text-white font-black text-sm leading-none">M</span>
+    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#DA7755] shadow-[0_14px_30px_rgba(218,119,85,0.24)]">
+      <span className="text-lg font-black text-white">M</span>
     </div>
   )
 }
 
-function CheckIcon() {
+function TopNav({
+  darkMode,
+  onToggleDarkMode,
+}: {
+  darkMode: boolean
+  onToggleDarkMode: () => void
+}) {
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0 mt-0.5">
-      <path d="M2.5 7L5.5 10L11.5 4" stroke="#DA7756" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  )
-}
-
-// ─── Nav ─────────────────────────────────────────────────────────────────────
-
-function Nav() {
-  const [scrolled, setScrolled] = useState(false)
-  useEffect(() => {
-    const fn = () => setScrolled(window.scrollY > 20)
-    window.addEventListener('scroll', fn)
-    return () => window.removeEventListener('scroll', fn)
-  }, [])
-
-  return (
-    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-[#0A0A0A]/80 backdrop-blur-xl border-b border-white/5' : ''}`}>
-      <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2.5">
-          <IconM />
-          <span className="text-white font-semibold text-base tracking-tight">Marvyn</span>
+    <nav className="fixed inset-x-0 top-0 z-50 border-b border-[color:var(--landing-border-soft)] bg-[color:var(--landing-nav)] backdrop-blur-md">
+      <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between px-6 py-5 lg:px-10">
+        <Link href="/" className="flex items-center gap-3">
+          <BrandMark />
+          <div>
+            <div className="font-[family-name:var(--font-headline)] text-2xl font-extrabold uppercase tracking-tight text-[color:var(--landing-text)]">
+              Marvyn
+            </div>
+          </div>
         </Link>
-        <div className="hidden md:flex items-center gap-8">
-          {['Features', 'About'].map(item => (
-            <a
-              key={item}
-              href={`#${item.toLowerCase()}`}
-              className="text-sm text-[#A0A0A0] hover:text-white transition-colors"
-            >
-              {item}
-            </a>
-          ))}
+
+        <div className="hidden items-center gap-8 md:flex">
+          <a className="font-[family-name:var(--font-headline)] text-sm font-semibold uppercase tracking-[0.16em] text-[color:var(--landing-accent)] transition-colors hover:opacity-80" href="#ecosystem">
+            Ecosystem
+          </a>
+          <a className="font-[family-name:var(--font-headline)] text-sm font-semibold uppercase tracking-[0.16em] text-[color:var(--landing-muted)] transition-colors hover:text-[color:var(--landing-accent)]" href="#orchestration">
+            Intelligence
+          </a>
+          <a className="font-[family-name:var(--font-headline)] text-sm font-semibold uppercase tracking-[0.16em] text-[color:var(--landing-muted)] transition-colors hover:text-[color:var(--landing-accent)]" href="#beta-form">
+            Beta
+          </a>
         </div>
-        <div className="flex items-center gap-3">
-          <Link href="/login" className="text-sm text-[#A0A0A0] hover:text-white transition-colors px-3 py-1.5">
-            Sign in
+
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={onToggleDarkMode}
+            className="hidden rounded-xl border border-[color:var(--landing-border)] bg-[color:var(--landing-panel)] px-3 py-2 font-[family-name:var(--font-headline)] text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--landing-text)] transition-colors hover:border-[color:var(--landing-accent)] sm:inline-flex"
+          >
+            {darkMode ? 'Light mode' : 'Dark mode'}
+          </button>
+          <Link href="/login" className="font-[family-name:var(--font-headline)] hidden text-sm font-medium uppercase tracking-[0.14em] text-[color:var(--landing-muted)] transition-colors hover:text-[color:var(--landing-accent)] sm:inline-flex">
+            Login
           </Link>
           <a
             href="#beta-form"
-            className="text-sm font-medium bg-[#DA7756] hover:bg-[#C4633F] text-white px-4 py-2 rounded-lg transition-colors"
+            className="rounded-xl bg-[linear-gradient(135deg,#994527_0%,#da7755_100%)] px-5 py-2.5 font-[family-name:var(--font-headline)] text-sm font-bold tracking-tight !text-white shadow-lg shadow-[#994527]/20 transition-transform hover:scale-[1.01]"
           >
             Request Beta Access
           </a>
@@ -65,387 +173,458 @@ function Nav() {
   )
 }
 
-// ─── Hero ─────────────────────────────────────────────────────────────────────
-
-function Hero() {
+function HeroSection() {
   return (
-    <section className="relative min-h-screen flex flex-col items-center justify-center pt-16 px-6 overflow-hidden">
-      {/* Background glow */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-[#DA7756]/8 rounded-full blur-[120px]" />
-        <div className="absolute top-1/3 left-1/4 w-[300px] h-[300px] bg-purple-900/10 rounded-full blur-[80px]" />
-        <div className="absolute top-1/3 right-1/4 w-[300px] h-[300px] bg-blue-900/10 rounded-full blur-[80px]" />
-      </div>
-
-      <div className="relative max-w-4xl mx-auto text-center">
-        {/* Badge */}
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/10 bg-white/5 mb-8">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#DA7756] animate-pulse" />
-          <span className="text-xs text-[#A0A0A0] font-medium">AI Marketing OS for Modern Teams</span>
+    <section className="relative mx-auto max-w-[1440px] overflow-visible px-6 py-20 pt-28 lg:px-10 lg:py-24">
+      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_right,var(--landing-hero-glow-1),transparent_30%),radial-gradient(circle_at_bottom_left,var(--landing-hero-glow-2),transparent_35%)]" />
+      <div className="grid items-center gap-12 lg:grid-cols-2">
+        <div>
+          <span className="mb-6 inline-block font-[family-name:var(--font-headline)] text-sm font-semibold uppercase tracking-[0.2em] text-[color:var(--landing-accent)]">
+            Marketing OS Beta
+          </span>
+          <h1 className="font-[family-name:var(--font-headline)] text-4xl font-extrabold leading-[0.94] tracking-tight text-[color:var(--landing-text)] md:text-6xl xl:text-7xl">
+            Marketing,
+            <br />
+            orchestrated
+            <br />
+            by <span className="italic text-[color:var(--landing-accent)]">intelligence.</span>
+          </h1>
+          <p className="mt-7 max-w-xl text-lg font-light leading-relaxed text-[color:var(--landing-muted)] md:text-xl">
+            Marvyn is the AI marketing operating system that reads your data, builds your 30-day plan, and helps your team execute with clarity.
+          </p>
+          <div className="mt-8 flex flex-col gap-4 sm:flex-row">
+            <a
+              href="#beta-form"
+              className="rounded-xl bg-[linear-gradient(135deg,#994527_0%,#da7755_100%)] px-8 py-4 text-center font-[family-name:var(--font-headline)] text-base font-bold tracking-tight !text-white shadow-xl shadow-[#994527]/20 transition-all hover:-translate-y-0.5 hover:shadow-2xl"
+            >
+              Request Beta Access
+            </a>
+            <a
+              href="#chat"
+              className="rounded-xl bg-[color:var(--landing-surface-3)] px-8 py-4 text-center font-[family-name:var(--font-headline)] text-base font-bold tracking-tight text-[color:var(--landing-text)] transition-colors hover:opacity-90"
+            >
+              View Demo
+            </a>
+          </div>
         </div>
 
-        {/* H1 */}
-        <h1 className="text-5xl md:text-7xl font-black text-white tracking-tight leading-[1.05] mb-6">
-          Your entire marketing<br />
-          <span className="text-[#DA7756]">team.</span> In one AI.
-        </h1>
+        <div className="relative">
+          <div className="absolute -inset-4 rounded-[2rem] bg-[color:var(--landing-accent-glow)] blur-3xl" />
+          <div className="relative overflow-hidden rounded-[2rem] border border-[color:var(--landing-border)] bg-[color:var(--landing-panel)] shadow-[0_30px_90px_rgba(153,69,39,0.12)]">
+            <img
+              alt="Marvyn dashboard preview on laptop"
+              className="h-full w-full object-cover"
+              src="/landing/hero-dashboard.png"
+            />
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[color:var(--landing-panel)] via-[color:var(--landing-panel-fade)] to-transparent p-5">
+              <div className="grid gap-3 md:grid-cols-3">
+                {[
+                  ['Reads', 'Ads, GA4, Search Console, Clarity'],
+                  ['Diagnoses', 'Bottlenecks, channel readiness, waste'],
+                  ['Executes', 'Strategy cycles, content, alerts, reviews'],
+                ].map(([title, body]) => (
+                  <div key={title} className="rounded-2xl border border-[color:var(--landing-border-soft)] bg-[color:var(--landing-panel-fade-strong)] p-4 backdrop-blur-sm">
+                    <p className="font-[family-name:var(--font-headline)] text-xs font-extrabold uppercase tracking-[0.18em] text-[color:var(--landing-accent)]">{title}</p>
+                    <p className="mt-2 text-sm leading-relaxed text-[color:var(--landing-muted)]">{body}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
 
-        {/* Subheadline */}
-        <p className="text-lg md:text-xl text-[#707070] leading-relaxed max-w-2xl mx-auto mb-10">
-          Marvyn connects your ads, SEO, content and social into one intelligent workspace.
-          Powered by AI, built for results.
+function EcosystemSection() {
+  return (
+    <section id="ecosystem" className="bg-[color:var(--landing-surface-1)] px-6 py-20 lg:px-10">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-12 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h2 className="font-[family-name:var(--font-headline)] text-3xl font-extrabold tracking-tight text-[color:var(--landing-text)] md:text-4xl">The unified ecosystem</h2>
+            <p className="mt-4 max-w-xl text-lg text-[color:var(--landing-muted)]">
+              Marvyn speaks the language of the marketing tools you already use. It connects them into one operating context.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            {['west', 'east'].map((item) => (
+              <div
+                key={item}
+                className="flex h-12 w-12 items-center justify-center rounded-full border border-[color:var(--landing-border)] text-[color:var(--landing-muted)]"
+              >
+                <span className="text-xs font-bold uppercase">{item === 'west' ? '←' : '→'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid overflow-hidden rounded-[2rem] border border-[color:var(--landing-border)] bg-[color:var(--landing-surface-2)] md:grid-cols-5">
+          {integrations.map((integration) => (
+            <div
+              key={integration.name}
+              className="flex min-h-[190px] flex-col items-center justify-center gap-4 border-b border-[color:var(--landing-border)] bg-[color:var(--landing-panel)] px-6 py-8 text-center transition-colors hover:bg-[color:var(--landing-surface-0)] md:border-b-0 md:border-r last:border-r-0"
+            >
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[color:var(--landing-surface-0)]">
+                <img alt={integration.name} className="h-10 w-10 object-contain" src={integration.logo} />
+              </div>
+              <div>
+                <p className="font-[family-name:var(--font-headline)] text-xs font-bold uppercase tracking-[0.18em] text-[color:var(--landing-muted)]">{integration.name}</p>
+                <p className="mt-3 text-sm leading-relaxed text-[color:var(--landing-muted-2)]">{integration.note}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function ProblemSection() {
+  return (
+    <section className="mx-auto max-w-7xl px-6 py-20 lg:px-10">
+      <div className="grid gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:items-start">
+        <div>
+          <div className="mb-8 flex items-center gap-4 text-[color:var(--landing-accent)]">
+            <span className="h-px w-12 bg-[color:var(--landing-accent)]" />
+            <span className="text-sm font-bold uppercase tracking-[0.2em]">Why teams stall</span>
+          </div>
+          <h2 className="font-[family-name:var(--font-headline)] text-4xl font-extrabold leading-tight tracking-tight text-[color:var(--landing-text)] md:text-5xl">
+            Most marketing teams do not have a tool problem.
+            <br />
+            They have a coordination problem.
+          </h2>
+          <p className="mt-8 max-w-xl text-lg leading-relaxed text-[color:var(--landing-muted)]">
+            Ads, SEO, analytics, content, and strategy all live in different places. Marvyn exists to turn that fragmented stack into one shared operating system.
+          </p>
+        </div>
+
+        <div className="grid gap-5">
+          {problemPoints.map((point, index) => (
+            <div
+              key={point.title}
+              className="rounded-[2rem] border border-[color:var(--landing-border)] bg-[color:var(--landing-panel)] p-7 shadow-sm transition-all hover:border-[color:var(--landing-accent)]/25 hover:shadow-lg"
+            >
+              <div className="mb-5 flex items-center gap-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[color:var(--landing-accent-soft)] font-[family-name:var(--font-headline)] text-sm font-bold text-[color:var(--landing-accent)]">
+                  0{index + 1}
+                </div>
+                <h3 className="font-[family-name:var(--font-headline)] text-xl font-bold tracking-tight text-[color:var(--landing-text)]">
+                  {point.title}
+                </h3>
+              </div>
+              <p className="leading-relaxed text-[color:var(--landing-muted)]">{point.body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function OrchestrationSection() {
+  return (
+    <section id="orchestration" className="mx-auto max-w-7xl px-6 py-20 lg:px-10">
+      <div className="text-center">
+        <h2 className="font-[family-name:var(--font-headline)] text-4xl font-extrabold tracking-tight text-[color:var(--landing-text)] md:text-5xl">
+          Collaborative orchestration
+        </h2>
+        <p className="mt-5 text-xl font-light text-[color:var(--landing-muted)]">
+          The agent does not just suggest. It builds a validated roadmap for your approval.
         </p>
+      </div>
 
-        {/* CTAs */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-5">
+      <div className="relative mt-14 grid gap-8 md:grid-cols-3">
+        <div className="absolute left-0 top-1/2 hidden h-px w-full -translate-y-1/2 bg-gradient-to-r from-transparent via-[color:var(--landing-border)] to-transparent md:block" />
+        {orchestrationSteps.map((step) => (
+          <div
+            key={step.step}
+            className="relative rounded-[2rem] border border-[color:var(--landing-border)] bg-[color:var(--landing-panel)] p-7 shadow-sm transition-all hover:border-[color:var(--landing-accent)]/25 hover:shadow-lg"
+          >
+            <div className="mb-8 flex h-14 w-14 items-center justify-center rounded-full bg-[color:var(--landing-surface-0)] font-[family-name:var(--font-headline)] text-lg font-bold text-[color:var(--landing-accent)] shadow-sm">
+              {step.step}
+            </div>
+            <h3 className="font-[family-name:var(--font-headline)] text-2xl font-bold tracking-tight text-[color:var(--landing-text)]">{step.title}</h3>
+            <p className="mt-4 leading-relaxed text-[color:var(--landing-muted)]">{step.body}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function AccountabilitySection() {
+  return (
+    <section className="bg-[color:var(--landing-surface-2)] px-6 py-20 lg:px-10">
+      <div className="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-2">
+        <div className="relative">
+          <div className="rounded-[2.5rem] border border-[color:var(--landing-border)] bg-[color:var(--landing-panel)] p-8 shadow-[0_30px_80px_rgba(153,69,39,0.08)]">
+            <div className="mb-10 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h4 className="font-[family-name:var(--font-headline)] text-xl font-extrabold text-[color:var(--landing-text)]">Campaign: Q4 Growth</h4>
+                <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-[color:var(--landing-muted)]">Status: Active Strategy</p>
+              </div>
+              <button className="rounded-xl bg-[linear-gradient(135deg,#994527_0%,#da7755_100%)] px-5 py-2.5 text-sm font-bold !text-white shadow-md">
+                Commit Plan
+              </button>
+            </div>
+
+            <div className="space-y-5">
+              {accountabilityItems.map((item) => (
+                <div key={item.label} className="flex items-center gap-4">
+                  <div
+                    className={`flex h-6 w-6 items-center justify-center rounded border-2 ${
+                      item.done ? 'border-[color:var(--landing-accent)] bg-[color:var(--landing-accent-soft)] text-[color:var(--landing-accent)]' : 'border-[color:var(--landing-muted-2)]'
+                    }`}
+                  >
+                    <span className="text-xs font-bold">{item.done ? '✓' : ''}</span>
+                  </div>
+                  <span className="text-sm font-medium text-[color:var(--landing-text)]">{item.label}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-10">
+              <div className="mb-2 flex items-end justify-between">
+                <span className="text-xs font-bold uppercase tracking-[0.18em] text-[color:var(--landing-muted)]">Strategy completion</span>
+                <span className="font-[family-name:var(--font-headline)] text-3xl font-extrabold text-[color:var(--landing-accent)]">66%</span>
+              </div>
+              <div className="h-3 w-full overflow-hidden rounded-full bg-[color:var(--landing-surface-3)]">
+                <div className="h-full w-2/3 bg-[linear-gradient(135deg,#994527_0%,#da7755_100%)]" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-8 flex items-center gap-4 text-[color:var(--landing-accent)]">
+            <span className="h-px w-12 bg-[color:var(--landing-accent)]" />
+            <span className="text-sm font-bold uppercase tracking-[0.2em]">Accountability system</span>
+          </div>
+          <h2 className="font-[family-name:var(--font-headline)] text-4xl font-extrabold leading-tight tracking-tight text-[color:var(--landing-text)] md:text-5xl">
+            Execution without ambiguity.
+          </h2>
+          <p className="mt-8 text-lg leading-relaxed text-[color:var(--landing-muted)]">
+            Marvyn turns AI recommendations into a concrete commit plan with task checklists, progress tracking, and a review loop tied to the active strategy cycle.
+          </p>
+          <ul className="mt-10 space-y-6">
+            {['Structured task checklists', 'Visual progress tracking', 'KPI vs actual review loop'].map((item) => (
+              <li key={item} className="flex gap-4">
+                <span className="pt-0.5 text-[color:var(--landing-accent)]">●</span>
+                <span className="font-semibold text-[color:var(--landing-text)]">{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function ProductModulesSection() {
+  return (
+    <section className="bg-[color:var(--landing-surface-1)] px-6 py-20 lg:px-10">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-12 max-w-3xl">
+          <div className="mb-8 flex items-center gap-4 text-[color:var(--landing-accent)]">
+            <span className="h-px w-12 bg-[color:var(--landing-accent)]" />
+            <span className="text-sm font-bold uppercase tracking-[0.2em]">What Marvyn includes</span>
+          </div>
+          <h2 className="font-[family-name:var(--font-headline)] text-4xl font-extrabold leading-tight tracking-tight text-[color:var(--landing-text)] md:text-5xl">
+            A real operating layer, not a collection of disconnected AI widgets.
+          </h2>
+          <p className="mt-6 text-lg leading-relaxed text-[color:var(--landing-muted)]">
+            Every module in Marvyn is tied to the same context: the brand, the data, the active strategy cycle, and what the team is actually trying to improve this month.
+          </p>
+        </div>
+
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {productModules.map((module) => (
+            <div
+              key={module.title}
+              className="rounded-[2rem] border border-[color:var(--landing-border)] bg-[color:var(--landing-panel)] p-7 shadow-sm transition-all hover:-translate-y-1 hover:border-[color:var(--landing-accent)]/25 hover:shadow-lg"
+            >
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[color:var(--landing-accent)]">{module.title}</p>
+              <h3 className="mt-4 font-[family-name:var(--font-headline)] text-2xl font-bold tracking-tight text-[color:var(--landing-text)]">
+                {module.subtitle}
+              </h3>
+              <p className="mt-4 leading-relaxed text-[color:var(--landing-muted)]">{module.body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function ContentEngineSection() {
+  return (
+    <section className="bg-[color:var(--landing-panel)] px-6 py-20 lg:px-10">
+      <div className="mx-auto grid max-w-[1440px] items-center gap-12 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="space-y-10">
+          <div className="flex items-center gap-4 text-[color:var(--landing-accent)]">
+            <span className="h-px w-12 bg-[color:var(--landing-accent)]" />
+            <span className="text-sm font-bold uppercase tracking-[0.2em]">Editorial engine</span>
+          </div>
+          <h2 className="font-[family-name:var(--font-headline)] text-4xl font-extrabold leading-tight tracking-tight text-[color:var(--landing-text)] md:text-5xl">
+            Narratives that scale, naturally.
+          </h2>
+          <p className="text-lg leading-relaxed text-[color:var(--landing-muted)]">
+            Marvyn connects strategy, voice, and channel context so your team ships marketing that sounds deliberate, not AI-generated.
+          </p>
+          <div className="space-y-6">
+            {contentProof.map((item) => (
+              <div key={item.title} className="flex gap-4">
+                <span className="pt-1 text-xl text-[color:var(--landing-accent)]">✦</span>
+                <div>
+                  <h4 className="font-[family-name:var(--font-headline)] text-lg font-bold text-[color:var(--landing-text)]">{item.title}</h4>
+                  <p className="mt-2 leading-relaxed text-[color:var(--landing-muted)]">{item.body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-8 md:grid-cols-2">
+          <div className="space-y-8">
+            <div className="rounded-[2rem] border border-[color:var(--landing-border)] bg-[color:var(--landing-surface-1)] p-8 shadow-sm">
+              <div className="mb-6 flex items-center gap-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[color:var(--landing-accent-soft)] text-sm font-bold text-[color:var(--landing-accent)]">GM</div>
+                <div>
+                  <p className="text-sm font-bold text-[color:var(--landing-text)]">Growth Marketer</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--landing-muted)]">Performance team</p>
+                </div>
+              </div>
+              <p className="italic leading-relaxed text-[color:var(--landing-muted)]">
+                “This feels like the first AI marketing product that understands the difference between strategy, execution, and review.”
+              </p>
+            </div>
+
+            <div className="rounded-[2rem] border border-[color:var(--landing-border)] bg-[color:var(--landing-surface-2)] p-8 shadow-sm">
+              <img
+                alt="Social preview card"
+                className="mb-6 h-48 w-full rounded-xl object-cover"
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuABHeur9lzu5z_Ei1fhCZF_PqJ1ccMAqkq93B0Im9pFNjMItiK60DvUdWQgR7UHXG7q35vCCVe_dg-HXXREZF_MPre_c7I99VBU_b9idAG6IO93sSFqvQfj9OvHBxI79kEm7fZC_1ndsgIVZKn2mywNZQ8SM1BANI7EHBuYkk9WFn_UEaovnnaNlN6qWDwE2vIjKp3ZyFjmb8jjE0KlR0xaKoY0B8vGethfucv0Y6jHm7mK99VYvJA6s-K7Hkl_BVTc9LKMjWc6aAzS"
+              />
+              <h4 className="font-[family-name:var(--font-headline)] text-lg font-bold text-[color:var(--landing-text)]">Social preview</h4>
+              <p className="mt-2 text-sm text-[color:var(--landing-muted)]">Review a campaign draft before it hits your publishing queue.</p>
+            </div>
+          </div>
+
+          <div className="relative flex min-h-[460px] flex-col justify-end overflow-hidden rounded-[2rem] bg-[color:var(--landing-surface-3)] p-8">
+            <img
+              alt="Operator dashboard background"
+              className="absolute inset-0 h-full w-full object-cover opacity-20 mix-blend-multiply"
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuCxSQrmf1lvRZyjG-d2zS_YhHfcTjmFMxBgEwscuDSHKmd-94lZ9Qn8pBfwW6jkmvH63HCmr-8LxCOX4PLzdmAvxQghqu2cAY09-bIQVs7oarqV3gIDJfQXng_gPD_ybTwMBj5t9ULuhMnVheblYK0rIslZKIwaxRISFhr99-GHE1EWjt5wDFKnh84QCNxnGpl1fXOlQADcnp9fcBGJ3cqVq1oR6c4H1rEAp6ufRzgS7uRnWPU4dOBbxuD5bL_XZl5GCOFrhOhp0Ud5"
+            />
+            <div className="relative z-10">
+              <div className="mb-6 h-1 w-12 bg-[linear-gradient(135deg,#994527_0%,#da7755_100%)]" />
+              <h3 className="font-[family-name:var(--font-headline)] text-3xl font-extrabold text-[color:var(--landing-text)]">Context over content spam</h3>
+              <p className="mt-4 max-w-md leading-relaxed text-[color:var(--landing-muted)]">
+                Marvyn turns strategy, data, and brand context into a system your team can actually trust.
+              </p>
+              <a href="#beta-form" className="mt-8 inline-flex items-center gap-2 font-bold text-[color:var(--landing-accent)]">
+                Request beta access <span>→</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function MarvynChatSection() {
+  return (
+    <section id="chat" className="px-6 py-20 lg:px-10">
+      <div className="mx-auto max-w-5xl overflow-hidden rounded-[2.5rem] border border-[color:var(--landing-border)] bg-[color:var(--landing-panel)] shadow-[0_25px_70px_rgba(153,69,39,0.1)]">
+        <div className="flex items-center justify-between border-b border-[color:var(--landing-border)] bg-[color:var(--landing-surface-3)] px-10 py-6">
+          <div className="flex items-center gap-3">
+            <div className="h-3 w-3 rounded-full bg-[color:var(--landing-accent-soft-strong)]" />
+            <span className="font-[family-name:var(--font-headline)] text-sm font-bold uppercase tracking-[0.18em] text-[color:var(--landing-muted)]">
+              Marvyn Chat
+            </span>
+          </div>
+          <span className="text-[color:var(--landing-muted)]">⋯</span>
+        </div>
+
+        <div className="min-h-[360px] space-y-8 p-8">
+          <div className="flex justify-end">
+            <div className="max-w-md rounded-2xl rounded-tr-none bg-[color:var(--landing-accent-soft)] p-6">
+              <p className="font-medium italic text-[color:var(--landing-text)]">
+                “Which ad creative had the highest emotional resonance with our Gen Z audience last month?”
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-5">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#994527_0%,#da7755_100%)] text-white">
+              ✦
+            </div>
+            <div className="max-w-2xl space-y-4">
+              <p className="leading-relaxed text-[color:var(--landing-muted)]">
+                Analyzing performance, behavior, and conversion paths. The strongest signal came from your “Proof + clarity” creative set. It outperformed on CTR and assisted conversions while holding CPC steady.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                {['View data map', 'Export chart', 'Build follow-up brief'].map((item) => (
+                  <span
+                    key={item}
+                    className="rounded-full bg-[color:var(--landing-surface-2)] px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--landing-muted)]"
+                  >
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-[color:var(--landing-border)] pt-8">
+            <div className="relative">
+              <input
+                className="w-full rounded-2xl bg-[color:var(--landing-surface-1)] px-7 py-5 pr-24 text-lg font-light italic text-[color:var(--landing-text)] outline-none ring-0 transition-all placeholder:text-[color:var(--landing-muted-2)] focus:ring-2 focus:ring-[#da7755]/20"
+                placeholder="Ask anything about your marketing system..."
+                type="text"
+              />
+              <button className="absolute right-4 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#994527_0%,#da7755_100%)] text-white shadow-lg">
+                →
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function FinalCTA() {
+  return (
+    <section className="bg-[color:var(--landing-surface-0)] px-6 py-20 lg:px-10">
+      <div className="mx-auto max-w-4xl text-center">
+        <h2 className="font-[family-name:var(--font-headline)] text-4xl font-extrabold tracking-tight text-[color:var(--landing-text)] md:text-6xl">
+          Ready to orchestrate?
+        </h2>
+        <div className="mt-10 flex flex-col justify-center gap-5 sm:flex-row">
           <a
             href="#beta-form"
-            className="px-8 py-3.5 bg-[#DA7756] hover:bg-[#C4633F] text-white font-semibold rounded-xl text-base transition-all hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(218,119,86,0.35)]"
+            className="rounded-2xl bg-[linear-gradient(135deg,#994527_0%,#da7755_100%)] px-10 py-5 font-[family-name:var(--font-headline)] text-lg font-bold tracking-tight !text-white shadow-2xl shadow-[#994527]/20 transition-transform hover:scale-[1.01]"
           >
-            Request Beta Access →
+            Request Beta Access
           </a>
           <a
-            href="#features"
-            className="px-8 py-3.5 border border-white/10 text-[#A0A0A0] hover:text-white hover:border-white/20 font-medium rounded-xl text-base transition-colors"
+            href="#chat"
+            className="rounded-2xl border-2 border-[color:var(--landing-border)] px-10 py-5 font-[family-name:var(--font-headline)] text-lg font-bold tracking-tight text-[color:var(--landing-text)] transition-colors hover:bg-[color:var(--landing-surface-2)]"
           >
-            See how it works →
+            View Demo
           </a>
         </div>
-        <p className="text-xs text-[#444] tracking-wide">Limited spots · Closed beta · Apply to get early access</p>
-
-        {/* Dashboard mockup */}
-        <div className="relative mt-16 mx-auto max-w-5xl">
-          {/* Glow under mockup */}
-          <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-3/4 h-16 bg-[#DA7756]/20 blur-3xl rounded-full" />
-          <div className="relative rounded-2xl border border-white/8 bg-[#111] overflow-hidden shadow-[0_40px_80px_rgba(0,0,0,0.8)]">
-            {/* Fake browser chrome */}
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-[#0D0D0D]">
-              <span className="w-3 h-3 rounded-full bg-[#FF5F57]" />
-              <span className="w-3 h-3 rounded-full bg-[#FEBC2E]" />
-              <span className="w-3 h-3 rounded-full bg-[#28C840]" />
-              <div className="flex-1 mx-4 h-6 rounded bg-[#1A1A1A] flex items-center px-3">
-                <span className="text-[10px] text-[#444]">app.marvyn.tech/dashboard</span>
-              </div>
-            </div>
-            {/* Dashboard preview */}
-            <div className="flex h-[380px]">
-              {/* Sidebar */}
-              <div className="w-44 shrink-0 bg-[#0D0D0D] border-r border-white/5 p-3 flex flex-col gap-1">
-                <div className="flex items-center gap-2 px-2 py-2 mb-3">
-                  <div className="w-5 h-5 rounded bg-[#DA7756] flex items-center justify-center">
-                    <span className="text-white text-[8px] font-black">M</span>
-                  </div>
-                  <span className="text-white text-xs font-semibold">Marvyn</span>
-                </div>
-                {['Chat', 'Ads', 'Blog', 'SEO', 'Social', 'Analytics', 'Email', 'Copy'].map((item, i) => (
-                  <div key={item} className={`px-2 py-1.5 rounded-lg text-[10px] ${i === 2 ? 'bg-[#DA7756]/20 text-[#DA7756]' : 'text-[#444]'}`}>{item}</div>
-                ))}
-              </div>
-              {/* Main area */}
-              <div className="flex-1 p-4 overflow-hidden">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <div className="h-3 w-16 bg-white/10 rounded mb-1.5" />
-                    <div className="h-2 w-24 bg-white/5 rounded" />
-                  </div>
-                  <div className="h-7 w-20 bg-[#DA7756]/30 rounded-lg" />
-                </div>
-                {/* Stats row */}
-                <div className="grid grid-cols-4 gap-2 mb-4">
-                  {[80, 60, 45, 70].map((w, i) => (
-                    <div key={i} className="bg-[#1A1A1A] rounded-lg p-2.5">
-                      <div className={`h-2 rounded mb-2`} style={{ width: `${w}%`, background: i === 0 ? '#DA7756' : '#333' }} />
-                      <div className="h-4 w-10 bg-white/15 rounded mb-1" />
-                      <div className="h-2 w-14 bg-white/5 rounded" />
-                    </div>
-                  ))}
-                </div>
-                {/* Calendar rows */}
-                <div className="grid grid-cols-7 gap-1 mb-3">
-                  {Array.from({ length: 7 }).map((_, i) => (
-                    <div key={i} className="h-2 bg-white/5 rounded text-center" />
-                  ))}
-                  {Array.from({ length: 28 }).map((_, i) => (
-                    <div key={i} className={`h-10 rounded border ${i === 10 ? 'border-[#DA7756]/40 bg-[#DA7756]/5' : 'border-white/5 bg-[#111]'}`} />
-                  ))}
-                </div>
-              </div>
-              {/* Right panel */}
-              <div className="w-48 shrink-0 border-l border-white/5 bg-[#0D0D0D] p-3">
-                <div className="h-2 w-24 bg-white/10 rounded mb-4" />
-                {[['Brand profile', '✓'], ['Keywords', '13'], ['Pending', '2']].map(([label, val]) => (
-                  <div key={label} className="flex items-center justify-between py-2 border-b border-white/5">
-                    <span className="text-[9px] text-[#444]">{label}</span>
-                    <span className="text-[9px] text-[#DA7756]">{val}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-// ─── Logos ────────────────────────────────────────────────────────────────────
-
-function Logos() {
-  const logos = [
-    { name: 'Meta', color: '#1877F2', letter: 'M' },
-    { name: 'Google', color: '#4285F4', letter: 'G' },
-    { name: 'LinkedIn', color: '#0A66C2', letter: 'in' },
-    { name: 'Clarity', color: '#7C3AED', letter: 'C' },
-    { name: 'DataForSEO', color: '#22C55E', letter: 'D' },
-  ]
-
-  return (
-    <section className="py-16 px-6 border-y border-white/5">
-      <div className="max-w-4xl mx-auto text-center">
-        <p className="text-xs text-[#444] uppercase tracking-widest mb-10 font-medium">Works with your favorite platforms</p>
-        <div className="flex items-center justify-center gap-10 flex-wrap">
-          {logos.map(l => (
-            <div key={l.name} className="flex items-center gap-2.5 text-[#555] hover:text-[#888] transition-colors">
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold" style={{ background: l.color }}>
-                {l.letter}
-              </div>
-              <span className="text-sm font-medium">{l.name}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-// ─── Features ─────────────────────────────────────────────────────────────────
-
-function Features() {
-  const features = [
-    { icon: '💬', title: 'Manager Agent', desc: 'Ask anything. Get answers from your real data, brand context, and live campaign performance.' },
-    { icon: '📊', title: 'Ads Intelligence', desc: 'Meta and Google campaigns unified in one view. Spend, CTR, ROAS — all in real time.' },
-    { icon: '✍️', title: 'Content Engine', desc: 'Blog posts, social captions, emails — all AI-generated with your brand tone and USP baked in.' },
-    { icon: '🔍', title: 'SEO Workspace', desc: 'Competitor analysis and keyword opportunities powered by DataForSEO. Outrank, not guess.' },
-    { icon: '📱', title: 'Social Publisher', desc: 'Create, schedule and publish to LinkedIn, Facebook and Instagram. Approve before anything goes live.' },
-    { icon: '📈', title: 'Analytics Hub', desc: 'Microsoft Clarity + platform metrics in one dashboard. Understand behavior, not just traffic.' },
-  ]
-
-  return (
-    <section id="features" className="py-24 px-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight mb-4">
-            Everything you need.<br />Nothing you don&apos;t.
-          </h2>
-          <p className="text-[#606060] text-lg max-w-xl mx-auto">Six intelligent workspaces that actually talk to each other.</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {features.map((f) => (
-            <div
-              key={f.title}
-              className="group p-6 rounded-2xl border border-white/8 bg-[#0D0D0D] hover:border-[#DA7756]/30 hover:bg-[#DA7756]/3 transition-all duration-300 hover:shadow-[0_0_30px_rgba(218,119,86,0.06)] cursor-default"
-            >
-              <div className="text-2xl mb-4">{f.icon}</div>
-              <h3 className="text-white font-semibold text-base mb-2 group-hover:text-[#DA7756] transition-colors">{f.title}</h3>
-              <p className="text-[#555] text-sm leading-relaxed">{f.desc}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-// ─── How it works ─────────────────────────────────────────────────────────────
-
-function HowItWorks() {
-  const steps = [
-    {
-      num: '01',
-      icon: '🔗',
-      title: 'Connect your platforms',
-      desc: 'Link Meta Ads, Google, LinkedIn, Instagram and Search Console in minutes. No engineering required.',
-    },
-    {
-      num: '02',
-      icon: '⚡',
-      title: 'Let the AI analyze',
-      desc: 'Marvyn reads your brand, campaigns, keywords and behavior data to build a complete picture of your marketing.',
-    },
-    {
-      num: '03',
-      icon: '🚀',
-      title: 'Act on insights',
-      desc: 'Generate content, approve posts, adjust bids — all from one workspace. Your AI does the heavy lifting.',
-    },
-  ]
-
-  return (
-    <section className="py-24 px-6 border-t border-white/5">
-      <div className="max-w-5xl mx-auto">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight mb-4">Up and running in minutes</h2>
-          <p className="text-[#606060]">Three steps to your unified marketing OS.</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {steps.map((s) => (
-            <div key={s.num} className="relative">
-              <div className="flex items-start gap-4">
-                <div className="shrink-0">
-                  <div className="w-10 h-10 rounded-xl bg-[#DA7756]/10 border border-[#DA7756]/20 flex items-center justify-center text-lg">
-                    {s.icon}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold text-[#DA7756] tracking-widest mb-1">STEP {s.num}</div>
-                  <h3 className="text-white font-semibold text-base mb-2">{s.title}</h3>
-                  <p className="text-[#555] text-sm leading-relaxed">{s.desc}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-// ─── Pricing ──────────────────────────────────────────────────────────────────
-
-function Pricing() {
-  const featureList = [
-    'All 6 workspaces',
-    'Unlimited AI generations',
-    'Meta + Google Ads sync',
-    'SEO competitor analysis',
-    'Social media publishing',
-    'Microsoft Clarity analytics',
-    '14-day free trial',
-  ]
-
-  return (
-    <section id="pricing" className="hidden">
-      <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight mb-4">Simple, honest pricing</h2>
-          <p className="text-[#606060]">One plan. Everything included. Cancel anytime.</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Monthly */}
-          <div className="p-8 rounded-2xl border border-white/8 bg-[#0D0D0D]">
-            <p className="text-[#606060] text-sm mb-1">Monthly</p>
-            <div className="flex items-baseline gap-1 mb-1">
-              <span className="text-4xl font-black text-white">₹699</span>
-              <span className="text-[#444] text-sm">/month</span>
-            </div>
-            <p className="text-[#444] text-xs mb-8">Billed monthly</p>
-            <div className="space-y-3 mb-8">
-              {featureList.map(f => (
-                <div key={f} className="flex items-start gap-2.5">
-                  <CheckIcon />
-                  <span className="text-sm text-[#888]">{f}</span>
-                </div>
-              ))}
-            </div>
-            <Link
-              href="/signup"
-              className="block w-full text-center py-3 rounded-xl border border-white/10 text-white text-sm font-medium hover:border-white/20 hover:bg-white/5 transition-colors"
-            >
-              Start free trial
-            </Link>
-          </div>
-
-          {/* Yearly */}
-          <div className="p-8 rounded-2xl border border-[#DA7756]/30 bg-[#DA7756]/4 relative">
-            <div className="absolute -top-3 left-6">
-              <span className="px-3 py-1 bg-[#DA7756] text-white text-[10px] font-bold tracking-widest rounded-full">BEST VALUE</span>
-            </div>
-            <p className="text-[#DA7756] text-sm mb-1">Yearly</p>
-            <div className="flex items-baseline gap-1 mb-1">
-              <span className="text-4xl font-black text-white">₹4,999</span>
-              <span className="text-[#444] text-sm">/year</span>
-            </div>
-            <p className="text-[#DA7756]/70 text-xs mb-8">Save ₹3,389 · Billed annually</p>
-            <div className="space-y-3 mb-8">
-              {featureList.map(f => (
-                <div key={f} className="flex items-start gap-2.5">
-                  <CheckIcon />
-                  <span className="text-sm text-[#888]">{f}</span>
-                </div>
-              ))}
-            </div>
-            <Link
-              href="/signup"
-              className="block w-full text-center py-3 rounded-xl bg-[#DA7756] hover:bg-[#C4633F] text-white text-sm font-semibold transition-all hover:shadow-[0_0_20px_rgba(218,119,86,0.4)]"
-            >
-              Start free trial
-            </Link>
-          </div>
-        </div>
-
-        <p className="text-center text-[#333] text-sm mt-8">
-          Questions?{' '}
-          <a href="mailto:support@marvyn.tech" className="text-[#555] hover:text-[#888] transition-colors underline underline-offset-2">
-            support@marvyn.tech
-          </a>
+        <p className="mt-10 text-xs font-bold uppercase tracking-[0.3em] text-[color:var(--landing-muted)]">
+          No credit card. No fluff. Human-led intelligence.
         </p>
       </div>
     </section>
   )
 }
-
-// ─── Testimonials ─────────────────────────────────────────────────────────────
-
-function Testimonials() {
-  const items = [
-    {
-      quote: "Marvyn replaced three separate tools we were using. The AI chat that actually knows our campaigns is a game changer.",
-      name: 'Priya Sharma',
-      role: 'Head of Growth, D2C Brand',
-    },
-    {
-      quote: "The SEO competitor analysis saved us weeks. We found keyword gaps our agency had missed for months.",
-      name: 'Rahul Menon',
-      role: 'Founder, SaaS Startup',
-    },
-    {
-      quote: "Being able to approve and schedule social posts with AI-generated content in one place is exactly what we needed.",
-      name: 'Anjali Kapoor',
-      role: 'Marketing Manager, E-commerce',
-    },
-  ]
-
-  return (
-    <section className="py-24 px-6 border-t border-white/5">
-      <div className="max-w-5xl mx-auto">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight mb-4">Marketers love Marvyn</h2>
-          <p className="text-[#606060]">Joined by teams across India and beyond.</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {items.map((t) => (
-            <div key={t.name} className="p-6 rounded-2xl border border-white/8 bg-[#0D0D0D]">
-              <div className="flex gap-0.5 mb-4">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <span key={i} className="text-[#DA7756] text-sm">★</span>
-                ))}
-              </div>
-              <p className="text-[#888] text-sm leading-relaxed mb-5">&quot;{t.quote}&quot;</p>
-              <div>
-                <p className="text-white text-sm font-medium">{t.name}</p>
-                <p className="text-[#444] text-xs mt-0.5">{t.role}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-// ─── Beta Form ────────────────────────────────────────────────────────────────
 
 function BetaForm() {
   const [betaSubmitted, setBetaSubmitted] = useState(false)
@@ -456,6 +635,7 @@ function BetaForm() {
     setSubmitting(true)
     const form = e.currentTarget
     const data = Object.fromEntries(new FormData(form))
+
     try {
       await fetch('/api/beta-request', {
         method: 'POST',
@@ -469,71 +649,80 @@ function BetaForm() {
   }
 
   return (
-    <section id="beta-form" className="py-24 px-6 border-t border-white/5 relative overflow-hidden">
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-[#DA7756]/8 rounded-full blur-[100px]" />
-      </div>
-      <div className="relative max-w-xl mx-auto text-center">
-        <div className="inline-block bg-[#DA7756]/10 border border-[#DA7756]/30 rounded-full px-4 py-1 text-[#DA7756] text-sm mb-6">
-          Closed Beta
+    <section id="beta-form" className="bg-[color:var(--landing-surface-2)] px-6 py-20 lg:px-10">
+      <div className="mx-auto max-w-4xl rounded-[2.5rem] border border-[color:var(--landing-border)] bg-[color:var(--landing-panel)] p-8 shadow-[0_25px_70px_rgba(153,69,39,0.08)] md:p-9">
+        <div className="text-center">
+          <div className="inline-flex rounded-full bg-[color:var(--landing-accent-soft)] px-4 py-1.5 text-sm font-semibold text-[color:var(--landing-accent)]">
+            Closed beta
+          </div>
+          <h2 className="mt-5 font-[family-name:var(--font-headline)] text-4xl font-extrabold tracking-tight text-[color:var(--landing-text)] md:text-5xl">
+            Request beta access
+          </h2>
+          <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-[color:var(--landing-muted)]">
+            We’re onboarding marketers, founders, and lean teams that want one operating system for strategy, execution, and review.
+          </p>
         </div>
-        <h2 className="text-3xl font-bold text-white mb-4">Request Early Access</h2>
-        <p className="text-[#606060] mb-8">
-          We&apos;re onboarding a limited number of marketing teams.
-          Tell us about yourself and we&apos;ll be in touch.
-        </p>
 
         {betaSubmitted ? (
-          <div className="p-6 bg-green-500/10 border border-green-500/30 rounded-2xl text-green-400">
-            <p className="text-lg font-semibold mb-1">✓ Request received!</p>
-            <p className="text-sm text-green-400/80">We&apos;ll review and get back to you within 48 hours.</p>
+          <div className="mt-10 rounded-[2rem] border border-green-200 bg-green-50 p-8 text-center">
+            <p className="text-xl font-semibold text-green-700">Request received</p>
+            <p className="mt-3 text-sm text-green-800/80">We’ll review it and get back to you shortly.</p>
           </div>
         ) : (
-          <form onSubmit={handleBetaSubmit} className="space-y-4 text-left">
-            <div className="grid grid-cols-2 gap-4">
+          <form onSubmit={handleBetaSubmit} className="mt-10 grid gap-4">
+            <div className="grid gap-4 md:grid-cols-2">
               <input
                 name="name"
                 placeholder="Your name"
                 required
-                className="bg-[#111] border border-[#333] rounded-lg px-4 py-3 text-white placeholder-[#555] focus:border-[#DA7756] outline-none w-full text-sm"
+                className="w-full rounded-2xl border border-[color:var(--landing-border)] bg-[color:var(--landing-surface-0)] px-4 py-3 text-sm text-[color:var(--landing-text)] outline-none transition-colors placeholder:text-[color:var(--landing-muted-2)] focus:border-[#da7755]"
               />
               <input
                 name="company"
-                placeholder="Company name"
+                placeholder="Company"
                 required
-                className="bg-[#111] border border-[#333] rounded-lg px-4 py-3 text-white placeholder-[#555] focus:border-[#DA7756] outline-none w-full text-sm"
+                className="w-full rounded-2xl border border-[color:var(--landing-border)] bg-[color:var(--landing-surface-0)] px-4 py-3 text-sm text-[color:var(--landing-text)] outline-none transition-colors placeholder:text-[color:var(--landing-muted-2)] focus:border-[#da7755]"
               />
             </div>
+
             <input
               name="email"
               type="email"
               placeholder="Work email"
               required
-              className="bg-[#111] border border-[#333] rounded-lg px-4 py-3 text-white placeholder-[#555] focus:border-[#DA7756] outline-none w-full text-sm"
+              className="w-full rounded-2xl border border-[color:var(--landing-border)] bg-[color:var(--landing-surface-0)] px-4 py-3 text-sm text-[color:var(--landing-text)] outline-none transition-colors placeholder:text-[color:var(--landing-muted-2)] focus:border-[#da7755]"
             />
-            <select
-              name="team_size"
-              required
-              className="bg-[#111] border border-[#333] rounded-lg px-4 py-3 text-[#555] focus:border-[#DA7756] outline-none w-full text-sm"
-            >
-              <option value="">Team size</option>
-              <option value="1">Just me</option>
-              <option value="2-5">2–5 people</option>
-              <option value="6-20">6–20 people</option>
-              <option value="20+">20+ people</option>
-            </select>
-            <textarea
-              name="use_case"
-              placeholder="What marketing challenges are you trying to solve?"
-              rows={3}
-              className="bg-[#111] border border-[#333] rounded-lg px-4 py-3 text-white placeholder-[#555] focus:border-[#DA7756] outline-none w-full resize-none text-sm"
-            />
+
+            <div className="grid gap-4 md:grid-cols-[0.42fr_0.58fr]">
+              <select
+                name="team_size"
+                required
+                className="w-full rounded-2xl border border-[color:var(--landing-border)] bg-[color:var(--landing-surface-0)] px-4 py-3 text-sm text-[color:var(--landing-text)] outline-none transition-colors focus:border-[#da7755]"
+                defaultValue=""
+              >
+                <option value="" disabled>
+                  Team size
+                </option>
+                <option value="1">Just me</option>
+                <option value="2-5">2–5 people</option>
+                <option value="6-20">6–20 people</option>
+                <option value="20+">20+ people</option>
+              </select>
+
+              <textarea
+                name="use_case"
+                rows={4}
+                placeholder="What are you trying to improve right now? Paid efficiency, SEO growth, funnel clarity, content velocity..."
+                className="w-full resize-none rounded-2xl border border-[color:var(--landing-border)] bg-[color:var(--landing-surface-0)] px-4 py-3 text-sm text-[color:var(--landing-text)] outline-none transition-colors placeholder:text-[color:var(--landing-muted-2)] focus:border-[#da7755]"
+              />
+            </div>
+
             <button
               type="submit"
               disabled={submitting}
-              className="w-full bg-[#DA7756] hover:bg-[#C4633F] disabled:opacity-60 text-white font-semibold py-3 rounded-lg transition-colors text-sm"
+              className="mt-2 inline-flex items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#994527_0%,#da7755_100%)] px-6 py-3.5 font-[family-name:var(--font-headline)] text-base font-semibold !text-white shadow-lg shadow-[#994527]/20 transition-all hover:shadow-xl disabled:opacity-60"
             >
-              {submitting ? 'Submitting…' : 'Request Beta Access →'}
+              {submitting ? 'Submitting…' : 'Request Beta Access'}
             </button>
           </form>
         )}
@@ -542,47 +731,121 @@ function BetaForm() {
   )
 }
 
-// ─── Footer ───────────────────────────────────────────────────────────────────
-
 function Footer() {
   return (
-    <footer className="py-12 px-6 border-t border-white/5">
-      <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-        <div className="flex items-center gap-2.5">
-          <IconM />
-          <span className="text-white font-semibold text-sm">Marvyn</span>
+    <footer className="bg-[color:var(--landing-surface-1)] px-6 py-20 lg:px-10">
+      <div className="mx-auto flex max-w-7xl flex-col gap-10 border-t border-[color:var(--landing-border-soft)] pt-12 md:flex-row md:items-center md:justify-between">
+        <div>
+          <div className="font-[family-name:var(--font-headline)] text-lg font-bold uppercase tracking-tight text-[color:var(--landing-text)]">
+            Marvyn
+          </div>
+          <p className="mt-4 max-w-xs text-xs uppercase tracking-[0.22em] text-[color:var(--landing-muted)]">
+            © 2026 Marvyn. Built by Eleven Square Labs for operators who want marketing to behave like a system.
+          </p>
         </div>
-        <div className="flex items-center gap-6 text-sm text-[#444]">
-          <a href="#features" className="hover:text-[#888] transition-colors">Features</a>
-          <a href="#pricing" className="hover:text-[#888] transition-colors">Pricing</a>
-          <Link href="/privacy-policy" className="hover:text-[#888] transition-colors">Privacy Policy</Link>
-          <Link href="/terms-of-service" className="hover:text-[#888] transition-colors">Terms</Link>
-          <Link href="/cookie-policy" className="hover:text-[#888] transition-colors">Cookies</Link>
-          <Link href="/refund-policy" className="hover:text-[#888] transition-colors">Refunds</Link>
-          <Link href="/data-deletion" className="hover:text-[#888] transition-colors">Data Deletion</Link>
-        </div>
-        <div className="text-xs text-[#333] text-center md:text-right">
-          <p>Made with ❤️ by Eleven Square Labs</p>
-          <p className="mt-0.5">© 2026 Marvyn. All rights reserved.</p>
+
+        <div className="flex flex-wrap gap-8">
+          <Link className="text-xs uppercase tracking-[0.18em] text-[color:var(--landing-muted)] transition-colors hover:text-[color:var(--landing-accent)]" href="/privacy-policy">
+            Privacy
+          </Link>
+          <Link className="text-xs uppercase tracking-[0.18em] text-[color:var(--landing-muted)] transition-colors hover:text-[color:var(--landing-accent)]" href="/terms-of-service">
+            Terms
+          </Link>
+          <Link className="text-xs uppercase tracking-[0.18em] text-[color:var(--landing-muted)] transition-colors hover:text-[color:var(--landing-accent)]" href="/cookie-policy">
+            Cookies
+          </Link>
+          <Link className="text-xs uppercase tracking-[0.18em] text-[color:var(--landing-muted)] transition-colors hover:text-[color:var(--landing-accent)]" href="/refund-policy">
+            Refunds
+          </Link>
+          <Link className="text-xs uppercase tracking-[0.18em] text-[color:var(--landing-muted)] transition-colors hover:text-[color:var(--landing-accent)]" href="/data-deletion">
+            Data Deletion
+          </Link>
         </div>
       </div>
     </footer>
   )
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
 export default function LandingPage() {
+  const [darkMode, setDarkMode] = useState(false)
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem('marvyn-landing-theme')
+    if (saved === 'dark') {
+      setDarkMode(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem('marvyn-landing-theme', darkMode ? 'dark' : 'light')
+  }, [darkMode])
+
+  const landingTheme = darkMode
+    ? ({
+        '--landing-bg': '#12100f',
+        '--landing-nav': 'rgba(18,16,15,0.86)',
+        '--landing-nav-border': 'rgba(101,76,67,0.35)',
+        '--landing-surface-0': '#12100f',
+        '--landing-surface-1': '#181513',
+        '--landing-surface-2': '#201c19',
+        '--landing-surface-3': '#28231f',
+        '--landing-panel': '#161311',
+        '--landing-panel-fade': 'rgba(22,19,17,0.72)',
+        '--landing-panel-fade-strong': 'rgba(22,19,17,0.9)',
+        '--landing-text': '#f5ede5',
+        '--landing-muted': '#c9b7ad',
+        '--landing-muted-2': '#9e8a81',
+        '--landing-accent': '#ffb59d',
+        '--landing-accent-soft': 'rgba(255,181,157,0.12)',
+        '--landing-accent-soft-strong': 'rgba(255,181,157,0.38)',
+        '--landing-accent-glow': 'rgba(255,181,157,0.12)',
+        '--landing-border': 'rgba(121,93,82,0.42)',
+        '--landing-border-soft': 'rgba(121,93,82,0.28)',
+        '--landing-hero-glow-1': 'rgba(255,181,157,0.16)',
+        '--landing-hero-glow-2': 'rgba(255,181,157,0.08)',
+      } as React.CSSProperties)
+    : ({
+        '--landing-bg': '#faf9f4',
+        '--landing-nav': 'rgba(250,249,244,0.85)',
+        '--landing-nav-border': 'rgba(231,229,228,0.5)',
+        '--landing-surface-0': '#faf9f4',
+        '--landing-surface-1': '#f5f4ef',
+        '--landing-surface-2': '#efeee9',
+        '--landing-surface-3': '#e9e8e3',
+        '--landing-panel': '#ffffff',
+        '--landing-panel-fade': 'rgba(255,255,255,0.6)',
+        '--landing-panel-fade-strong': 'rgba(255,255,255,0.85)',
+        '--landing-text': '#1c1917',
+        '--landing-muted': '#55433d',
+        '--landing-muted-2': '#6b5a54',
+        '--landing-accent': '#994527',
+        '--landing-accent-soft': 'rgba(153,69,39,0.1)',
+        '--landing-accent-soft-strong': 'rgba(153,69,39,0.45)',
+        '--landing-accent-glow': 'rgba(153,69,39,0.08)',
+        '--landing-border': 'rgba(219,193,185,0.45)',
+        '--landing-border-soft': 'rgba(214,211,209,0.8)',
+        '--landing-hero-glow-1': 'rgba(218,119,85,0.16)',
+        '--landing-hero-glow-2': 'rgba(153,69,39,0.08)',
+      } as React.CSSProperties)
+
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white">
-      <Nav />
-      <Hero />
-      <Logos />
-      <Features />
-      <HowItWorks />
-      <Pricing />
-      <Testimonials />
-      <BetaForm />
+    <div
+      style={landingTheme}
+      className={`${inter.variable} ${plusJakarta.variable} min-h-screen bg-[color:var(--landing-bg)] font-[family-name:var(--font-body)] text-[color:var(--landing-text)] antialiased selection:bg-[#da7755] selection:text-[#541500] transition-colors duration-300`}
+    >
+      <TopNav darkMode={darkMode} onToggleDarkMode={() => setDarkMode((value) => !value)} />
+      <main className="overflow-x-hidden">
+        <HeroSection />
+        <ProblemSection />
+        <EcosystemSection />
+        <OrchestrationSection />
+        <ProductModulesSection />
+        <AccountabilitySection />
+        <ContentEngineSection />
+        <MarvynChatSection />
+        <FinalCTA />
+        <BetaForm />
+      </main>
       <Footer />
     </div>
   )
