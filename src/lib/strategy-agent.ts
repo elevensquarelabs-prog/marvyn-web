@@ -4,7 +4,12 @@ import BlogPost from '@/models/BlogPost'
 import Keyword from '@/models/Keyword'
 import SEOAudit from '@/models/SEOAudit'
 import SocialPost from '@/models/SocialPost'
-import StrategyPlanModel, { type IStrategyDiagnosis, type IStrategyQuestionAnswer, type IStrategyReview } from '@/models/StrategyPlan'
+import StrategyPlanModel, {
+  type IStrategyDiagnosis,
+  type IStrategyPerformanceSnapshot,
+  type IStrategyQuestionAnswer,
+  type IStrategyReview,
+} from '@/models/StrategyPlan'
 import User from '@/models/User'
 import { llm } from '@/lib/llm'
 import { skills } from '@/lib/skills'
@@ -131,6 +136,56 @@ export type StrategyAgentNeedsInput = {
 }
 
 export type StrategyAgentResult = StrategyAgentSuccess | StrategyAgentNeedsInput
+
+function metricDelta(current?: number | null, baseline?: number | null) {
+  if (current == null || baseline == null) return null
+  return current - baseline
+}
+
+function formatSignedNumber(value: number, suffix = '') {
+  if (value === 0) return `0${suffix}`
+  return `${value > 0 ? '+' : ''}${Number(value.toFixed(1))}${suffix}`
+}
+
+function buildSignalChanges(baseline?: IStrategyPerformanceSnapshot, current?: IStrategyPerformanceSnapshot) {
+  if (!baseline || !current) return [] as string[]
+  const changes: string[] = []
+
+  const conversionDelta = metricDelta(current.ga4Conversions, baseline.ga4Conversions)
+  if (conversionDelta !== null) {
+    changes.push(`GA4 conversions changed by ${formatSignedNumber(conversionDelta)} (${baseline.ga4Conversions || 0} → ${current.ga4Conversions || 0}).`)
+  }
+
+  const sessionDelta = metricDelta(current.ga4Sessions, baseline.ga4Sessions)
+  if (sessionDelta !== null) {
+    changes.push(`GA4 sessions changed by ${formatSignedNumber(sessionDelta)} (${baseline.ga4Sessions || 0} → ${current.ga4Sessions || 0}).`)
+  }
+
+  const organicDelta = metricDelta(current.organicClicks, baseline.organicClicks)
+  if (organicDelta !== null) {
+    changes.push(`Organic clicks changed by ${formatSignedNumber(organicDelta)} (${baseline.organicClicks || 0} → ${current.organicClicks || 0}).`)
+  }
+
+  const paidConversionDelta = metricDelta(current.paidConversions, baseline.paidConversions)
+  if (paidConversionDelta !== null) {
+    changes.push(`Paid conversions changed by ${formatSignedNumber(paidConversionDelta)} (${baseline.paidConversions || 0} → ${current.paidConversions || 0}).`)
+  }
+
+  const assetDelta = metricDelta(
+    (current.blogCount || 0) + (current.socialCount || 0),
+    (baseline.blogCount || 0) + (baseline.socialCount || 0)
+  )
+  if (assetDelta !== null) {
+    changes.push(`Published assets changed by ${formatSignedNumber(assetDelta)} (${(baseline.blogCount || 0) + (baseline.socialCount || 0)} → ${(current.blogCount || 0) + (current.socialCount || 0)}).`)
+  }
+
+  const completionRate = current.totalTasks
+    ? Math.round(((current.completedTasks || 0) / current.totalTasks) * 100)
+    : 0
+  changes.push(`Execution completion reached ${completionRate}% (${current.completedTasks || 0}/${current.totalTasks || 0} tasks done).`)
+
+  return changes
+}
 
 function normalizeBusinessModel(value?: string) {
   const raw = (value || '').toLowerCase().trim()
@@ -382,6 +437,38 @@ export async function collectStrategyContext(userId: string, answers: IStrategyQ
         : 0,
       review: previousCycle.review,
     } : null,
+  }
+}
+
+export async function collectCycleSnapshot(userId: string, taskStats?: { completedTasks?: number; totalTasks?: number }): Promise<IStrategyPerformanceSnapshot> {
+  const [topKeywords, blogCount, socialCount, userDoc] = await Promise.all([
+    Keyword.find({ userId }).sort({ clicks: -1, impressions: -1, createdAt: -1 }).limit(50).lean() as Promise<Array<{ clicks?: number }>>,
+    BlogPost.countDocuments({ userId, status: 'published' }).catch(() => BlogPost.countDocuments({ userId })),
+    SocialPost.countDocuments({ userId, status: 'published' }).catch(() => SocialPost.countDocuments({ userId })),
+    User.findById(userId).select('connections').lean() as Promise<{ connections?: { ga4?: { propertyId?: string } } } | null>,
+  ])
+
+  const [ga4, paid] = await Promise.all([
+    fetchGa4Snapshot(userId, userDoc || {}),
+    getAdsInsightsForUser({ userId, days: 30 }).catch(() => null),
+  ])
+
+  return {
+    capturedAt: new Date(),
+    ga4Sessions: ga4?.sessions,
+    ga4Users: ga4?.users,
+    ga4Conversions: ga4?.conversions,
+    ga4BounceRate: ga4?.bounceRate,
+    organicClicks: topKeywords.reduce((sum, item) => sum + (item.clicks || 0), 0),
+    paidSpend: paid?.spend,
+    paidClicks: paid?.clicks,
+    paidConversions: paid?.conversions,
+    paidRoas: paid?.roas ?? null,
+    paidCtr: paid?.ctr,
+    blogCount,
+    socialCount,
+    completedTasks: taskStats?.completedTasks,
+    totalTasks: taskStats?.totalTasks,
   }
 }
 
@@ -797,10 +884,15 @@ export async function synthesizeCycleReview(params: {
     customAdjustments?: string
   }
   actualSignal: string
+  baselineSnapshot?: IStrategyPerformanceSnapshot
+  actualSnapshot?: IStrategyPerformanceSnapshot
 }) {
+  const signalChanges = buildSignalChanges(params.baselineSnapshot, params.actualSnapshot)
   const fallback: IStrategyReview = {
     actualSignal: params.actualSignal,
     summary: 'Cycle closed without a synthesized review.',
+    executionSummary: signalChanges[signalChanges.length - 1] || 'Execution completion could not be summarized.',
+    signalChanges,
     whatWorked: params.plan.manualWins ? [sanitizeText(params.plan.manualWins)] : [],
     whatFailed: params.plan.manualNotes ? [sanitizeText(params.plan.manualNotes)] : [],
     nextCycleFocus: ['Tighten the next cycle around the clearest measurable bottleneck.'],
@@ -819,6 +911,7 @@ Plan summary: ${params.plan.summary}
 North star: ${params.plan.northStarMetric}
 Success metric: ${params.plan.successMetric?.label || 'Not set'} / target ${params.plan.successMetric?.target || 'Not set'}
 Actual signal: ${params.actualSignal}
+Signal changes: ${signalChanges.join(' | ') || 'No baseline signal comparison available'}
 Priorities: ${(params.plan.priorities || []).map(item => item.title).filter(Boolean).join(' | ')}
 Tasks done: ${(params.plan.tasks || []).filter(item => item.done).length}/${params.plan.tasks?.length || 0}
 Manual wins: ${params.plan.manualWins || 'none'}
@@ -829,6 +922,8 @@ Return JSON:
 {
   "actualSignal": "string",
   "summary": "1-2 sentence review summary",
+  "executionSummary": "1 sentence on what actually got executed",
+  "signalChanges": ["string"],
   "whatWorked": ["string"],
   "whatFailed": ["string"],
   "nextCycleFocus": ["string"]

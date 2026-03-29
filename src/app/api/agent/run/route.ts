@@ -8,8 +8,7 @@ import ChatSession from '@/models/ChatSession'
 import User from '@/models/User'
 import OpenAI from 'openai'
 import mongoose from 'mongoose'
-import { TOOL_DEFINITIONS, TOOL_LABELS, executeTool, type AgentContext, type NangoIntegrationContext } from '@/lib/agent/tools'
-import NangoConnection from '@/models/NangoConnection'
+import { TOOL_DEFINITIONS, TOOL_LABELS, executeTool, type AgentContext } from '@/lib/agent/tools'
 
 let _openai: OpenAI | null = null
 function getOpenAI() {
@@ -138,38 +137,6 @@ Build recommendations around topic clusters aligned to the brand's primary goal 
     connections.facebook?.pageId ? `Facebook (${connections.facebook.pageName || ''})` : null,
   ].filter(Boolean)
 
-  // ── Nango integrations ────────────────────────────────────────────────────
-  const CAPABILITIES: Record<string, string[]> = {
-    shopify: ['orders', 'revenue', 'refunds', 'aov'],
-    hubspot: ['deals', 'pipeline', 'crm_revenue'],
-    stripe:  ['charges', 'subscriptions', 'mrr', 'revenue'],
-  }
-
-  const nangoConns = await NangoConnection.find({ userId, status: 'active' }).lean()
-
-  const integrations: NangoIntegrationContext[] = nangoConns.map(c => ({
-    integration:  c.integration,
-    connectionId: c.connectionId,
-    metadata:     (c.metadata ?? {}) as Record<string, string>,
-    capabilities: CAPABILITIES[c.integration] ?? [],
-  }))
-
-  const integrationContext = integrations.length > 0
-    ? `\n\nCONNECTED INTEGRATIONS:\n` +
-      integrations.map(i =>
-        `- ${i.integration} (capabilities: ${i.capabilities.join(', ')})` +
-        (i.metadata.shopDomain ? ` [${i.metadata.shopDomain}]` : '') +
-        (i.metadata.accountName ? ` [${i.metadata.accountName}]` : '')
-      ).join('\n') +
-      `\n\nINTEGRATION TOOLS AVAILABLE:\n` +
-      (integrations.some(i => i.integration === 'shopify')
-        ? `- get_shopify_orders / get_shopify_revenue: use when user asks about actual sales, real order volume, or to verify ad attribution vs real Shopify data\n` : '') +
-      (integrations.some(i => i.integration === 'hubspot')
-        ? `- get_hubspot_deals: use when user asks about pipeline, deal value, CRM revenue, or lead-to-revenue\n` : '') +
-      (integrations.some(i => i.integration === 'stripe')
-        ? `- get_stripe_revenue: use when user asks about MRR, subscriptions, cash revenue, or payment trends\n` : '')
-    : ''
-
   const businessModel = brand?.businessModel === 'd2c_ecommerce'
     ? 'D2C / Ecommerce'
     : brand?.businessModel === 'services_lead_gen'
@@ -181,7 +148,7 @@ BRAND: ${brand.name} | Product: ${brand.product} | Audience: ${brand.audience} |
 BUSINESS MODEL: ${businessModel} | PRIMARY GOAL: ${brand.primaryGoal || 'not set'} | PRIMARY CONVERSION: ${brand.primaryConversion || 'not set'} | AVG ORDER/DEAL VALUE: ${brand.averageOrderValue || 'unknown'} | PRIMARY CHANNELS: ${Array.isArray(brand.primaryChannels) && brand.primaryChannels.length ? brand.primaryChannels.join(', ') : 'not set'}
 CONNECTED PLATFORMS: ${connectedPlatforms.length > 0 ? connectedPlatforms.join(', ') : 'none yet'}` : 'No brand set up yet.'
 
-  const finalSystem = `${SYSTEM_PROMPT}\n\n${contextSummary}${integrationContext}${skillContext}`
+  const finalSystem = `${SYSTEM_PROMPT}\n\n${contextSummary}${skillContext}`
 
   // Load or create chat session
   let chatSession
@@ -266,7 +233,7 @@ CONNECTED PLATFORMS: ${connectedPlatforms.length > 0 ? connectedPlatforms.join('
           ) as { connections?: import('@/lib/agent/tools').RawConnections } | null
 
         const rawConnections = rawUser?.connections || {}
-        const agentContext: AgentContext = { userId, brand, connections: rawConnections, integrations }
+        const agentContext: AgentContext = { userId, brand, connections: rawConnections }
 
         // Build conversation history (last 8 messages)
         const historyMsgs = (chatSession.messages.slice(-9, -1) as { role: 'user' | 'assistant'; content: string }[])

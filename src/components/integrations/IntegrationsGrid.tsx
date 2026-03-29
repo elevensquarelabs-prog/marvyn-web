@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import Nango from '@nangohq/frontend'
 import { IntegrationCard } from './IntegrationCard'
 
 interface Connection {
@@ -53,30 +52,8 @@ export function IntegrationsGrid() {
 
   useEffect(() => { fetchConnections() }, [fetchConnections])
 
-  async function handleConnect(integration: 'shopify' | 'hubspot' | 'stripe') {
-    const res = await fetch('/api/nango/session', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ integration }),
-    })
-    if (!res.ok) throw new Error('Failed to start connection')
-    const { sessionToken } = await res.json()
-
-    await new Promise<void>((resolve, reject) => {
-      const nango = new Nango({ host: process.env.NEXT_PUBLIC_NANGO_BASE_URL })
-      nango.openConnectUI({
-        sessionToken,
-        onEvent: (event: { type: string }) => {
-          if (event.type === 'connect') {
-            // Webhook will persist — refresh connections after short delay
-            setTimeout(() => { fetchConnections().then(resolve) }, 1500)
-          }
-          if (event.type === 'close' || event.type === 'error') {
-            reject(new Error(event.type === 'error' ? 'Connection error' : 'Cancelled'))
-          }
-        },
-      })
-    })
+  async function handleConnect(_integration: 'shopify' | 'hubspot' | 'stripe') {
+    throw new Error('Coming soon')
   }
 
   async function handleDisconnect(integration: 'shopify' | 'hubspot' | 'stripe') {

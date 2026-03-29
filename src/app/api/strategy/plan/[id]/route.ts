@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { connectDB } from '@/lib/mongodb'
 import StrategyPlan from '@/models/StrategyPlan'
-import { normalizeQuestionAnswers, synthesizeCycleReview } from '@/lib/strategy-agent'
+import { collectCycleSnapshot, normalizeQuestionAnswers, synthesizeCycleReview } from '@/lib/strategy-agent'
 import { recordAiUsage } from '@/lib/ai-usage'
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -52,6 +52,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const startDate = new Date()
     const endDate = new Date(startDate)
     endDate.setDate(endDate.getDate() + 30)
+    const baselineSnapshot = await collectCycleSnapshot(session.user.id, {
+      completedTasks: draft.tasks?.filter((task: { done?: boolean }) => task.done).length || 0,
+      totalTasks: draft.tasks?.length || 0,
+    })
 
     draft.status = 'active'
     draft.generationState = 'idle'
@@ -60,6 +64,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     draft.endDate = endDate
     draft.committedAt = startDate
     draft.completedAt = undefined
+    draft.baselineSnapshot = baselineSnapshot
+    draft.actualSnapshot = undefined
+    draft.review = undefined
     await draft.save()
 
     return Response.json({ plan: draft })
@@ -99,6 +106,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (Array.isArray(body.tasks)) activePlan.tasks = body.tasks
 
     const actualSignal = typeof body.actualSignal === 'string' ? body.actualSignal.trim() : 'No tracked KPI signal provided.'
+    const actualSnapshot = await collectCycleSnapshot(session.user.id, {
+      completedTasks: activePlan.tasks?.filter((task: { done?: boolean }) => task.done).length || 0,
+      totalTasks: activePlan.tasks?.length || 0,
+    })
     const { review, usage } = await synthesizeCycleReview({
       plan: {
         summary: activePlan.summary,
@@ -111,9 +122,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         customAdjustments: activePlan.customAdjustments,
       },
       actualSignal,
+      baselineSnapshot: activePlan.baselineSnapshot,
+      actualSnapshot,
     })
 
     activePlan.review = review
+    activePlan.actualSnapshot = actualSnapshot
     activePlan.status = 'completed'
     activePlan.completedAt = new Date()
     await activePlan.save()

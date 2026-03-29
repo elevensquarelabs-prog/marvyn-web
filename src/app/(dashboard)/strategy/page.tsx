@@ -74,10 +74,14 @@ interface StrategyPlan {
   review?: {
     actualSignal?: string
     summary?: string
+    executionSummary?: string
+    signalChanges?: string[]
     whatWorked?: string[]
     whatFailed?: string[]
     nextCycleFocus?: string[]
   }
+  baselineSnapshot?: StrategySnapshot
+  actualSnapshot?: StrategySnapshot
   generationState?: 'idle' | 'running' | 'failed'
   generationError?: string
   startDate?: string
@@ -86,6 +90,24 @@ interface StrategyPlan {
   completedAt?: string
   createdAt: string
   status: 'draft' | 'active' | 'completed'
+}
+
+interface StrategySnapshot {
+  capturedAt?: string
+  ga4Sessions?: number
+  ga4Users?: number
+  ga4Conversions?: number
+  ga4BounceRate?: number
+  organicClicks?: number
+  paidSpend?: number
+  paidClicks?: number
+  paidConversions?: number
+  paidRoas?: number | null
+  paidCtr?: number
+  blogCount?: number
+  socialCount?: number
+  completedTasks?: number
+  totalTasks?: number
 }
 
 interface Ga4Data {
@@ -149,6 +171,14 @@ function fmtCompact(n: number) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
   return `${Math.round(n)}`
+}
+
+function signedDelta(current?: number | null, baseline?: number | null) {
+  if (current == null || baseline == null) return '—'
+  const diff = current - baseline
+  if (diff === 0) return '0'
+  if (Math.abs(diff) >= 1000) return `${diff > 0 ? '+' : ''}${fmtCompact(Math.abs(diff))}`
+  return `${diff > 0 ? '+' : ''}${Math.round(diff)}`
 }
 
 function resolveChannelTheme(channel?: string) {
@@ -236,7 +266,13 @@ function buildStrategyMarkdown(plan: StrategyPlan, profile: BrandProfile) {
       '## Review',
       `Actual signal: ${plan.review.actualSignal || 'Not set'}`,
       `Summary: ${plan.review.summary || 'Not set'}`,
+      ...(plan.review.executionSummary ? [`Execution summary: ${plan.review.executionSummary}`] : []),
       '',
+      ...(plan.review.signalChanges?.length ? [
+        '### Signal changes',
+        ...((plan.review.signalChanges || []).map(item => `- ${item}`)),
+        '',
+      ] : []),
       '### What worked',
       ...((plan.review.whatWorked || []).map(item => `- ${item}`)),
       '',
@@ -353,14 +389,20 @@ function ChannelRow({ channel }: { channel: StrategyChannel }) {
 
   return (
     <div className={`rounded-xl border px-4 py-3 ${theme.tint} ${theme.border}`}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium ${theme.chip}`}>{theme.label}</span>
-          <span className="text-sm font-semibold text-[var(--text-primary)] truncate">{channel.platformRole || channel.focus}</span>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium ${theme.chip}`}>{theme.label}</span>
+            <span className="min-w-0 break-words text-sm font-semibold leading-6 text-[var(--text-primary)]">
+              {channel.platformRole || channel.focus}
+            </span>
+          </div>
+          <div className="mt-2 min-w-0 break-words text-[11px] font-medium uppercase tracking-[0.12em] leading-5 text-[var(--text-secondary)]">
+            {channel.kpi}
+          </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 lg:justify-self-end">
           <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${effortTone(channel.effort)}`}>{channel.effort || 'medium'}</span>
-          <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-secondary)]">{channel.kpi}</span>
           {channel.executionNote && (
             <button
               type="button"
@@ -374,14 +416,14 @@ function ChannelRow({ channel }: { channel: StrategyChannel }) {
       </div>
       <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1">
         {channel.cadence && (
-          <span className="text-xs text-[var(--text-secondary)]">
+          <span className="min-w-0 break-words text-xs text-[var(--text-secondary)]">
             <span className="font-medium text-[var(--text-primary)]">Cadence</span>
             <span className="text-[var(--text-muted)]"> · </span>
             {channel.cadence}
           </span>
         )}
         {channel.outputTarget && (
-          <span className="text-xs text-[var(--text-secondary)]">
+          <span className="min-w-0 break-words text-xs text-[var(--text-secondary)]">
             <span className="font-medium text-[var(--text-primary)]">Target</span>
             <span className="text-[var(--text-muted)]"> · </span>
             {channel.outputTarget}
@@ -549,6 +591,25 @@ export default function StrategyPage() {
   }, [activePlan])
 
   const activeSignal = useMemo(() => inferActual(activePlan, { ga4, ads, keywords, blogCount, socialCount }), [activePlan, ga4, ads, keywords, blogCount, socialCount])
+  const activeCurrentSnapshot = useMemo<StrategySnapshot | null>(() => {
+    if (!activePlan) return null
+    return {
+      ga4Sessions: ga4?.overview?.sessions,
+      ga4Users: ga4?.overview?.users,
+      ga4Conversions: ga4?.overview?.conversions,
+      ga4BounceRate: ga4?.overview?.bounceRate,
+      organicClicks: keywords.reduce((sum, kw) => sum + (kw.clicks || 0), 0),
+      paidSpend: ads?.spend,
+      paidClicks: ads?.clicks,
+      paidConversions: ads?.conversions,
+      paidRoas: ads?.roas ?? null,
+      paidCtr: ads?.ctr,
+      blogCount,
+      socialCount,
+      completedTasks: activePlan.tasks?.filter(task => task.done).length || 0,
+      totalTasks: activePlan.tasks?.length || 0,
+    }
+  }, [activePlan, ga4, ads, keywords, blogCount, socialCount])
   const historySorted = useMemo(() => [...history].sort((a, b) => new Date(b.completedAt || b.createdAt).getTime() - new Date(a.completedAt || a.createdAt).getTime()), [history])
   const selectedDocument = view === 'draft' ? draftPlan : activePlan
   const editableQuestions = useMemo(
@@ -1158,6 +1219,35 @@ export default function StrategyPage() {
                             <p className="text-[10px] text-[var(--text-muted)]">organic</p>
                           </div>
                         </div>
+                        {activePlan.baselineSnapshot && activeCurrentSnapshot && (
+                          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-muted)]">What changed since commit</p>
+                            <p className="mt-1 text-[10px] text-[var(--text-muted)]">Marvyn compares the committed baseline with today&apos;s live data so the next cycle is based on outcomes, not just fresh prompts.</p>
+                            <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2.5">
+                                <p className="text-[10px] text-[var(--text-muted)]">Conversions</p>
+                                <p className="mt-1 text-sm font-semibold text-[var(--text-primary)]">{signedDelta(activeCurrentSnapshot.ga4Conversions, activePlan.baselineSnapshot.ga4Conversions)}</p>
+                              </div>
+                              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2.5">
+                                <p className="text-[10px] text-[var(--text-muted)]">Sessions</p>
+                                <p className="mt-1 text-sm font-semibold text-[var(--text-primary)]">{signedDelta(activeCurrentSnapshot.ga4Sessions, activePlan.baselineSnapshot.ga4Sessions)}</p>
+                              </div>
+                              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2.5">
+                                <p className="text-[10px] text-[var(--text-muted)]">Organic clicks</p>
+                                <p className="mt-1 text-sm font-semibold text-[var(--text-primary)]">{signedDelta(activeCurrentSnapshot.organicClicks, activePlan.baselineSnapshot.organicClicks)}</p>
+                              </div>
+                              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2.5">
+                                <p className="text-[10px] text-[var(--text-muted)]">Assets shipped</p>
+                                <p className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
+                                  {signedDelta(
+                                    (activeCurrentSnapshot.blogCount || 0) + (activeCurrentSnapshot.socialCount || 0),
+                                    (activePlan.baselineSnapshot.blogCount || 0) + (activePlan.baselineSnapshot.socialCount || 0)
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -1248,6 +1338,17 @@ export default function StrategyPage() {
                             <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-muted)]">Review Summary</p>
                             <p className="mt-1.5 text-xs text-[var(--text-secondary)]">{plan.review.summary || '—'}</p>
                             <p className="mt-2 text-[10px] text-[var(--text-muted)]">Actual signal: {plan.review.actualSignal || '—'}</p>
+                            {plan.review.executionSummary && (
+                              <p className="mt-2 text-[10px] text-[var(--text-muted)]">Execution: {plan.review.executionSummary}</p>
+                            )}
+                          </div>
+                          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3 lg:col-span-4">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-muted)]">What changed</p>
+                            <ul className="mt-1.5 space-y-1">
+                              {(plan.review.signalChanges || []).map(item => (
+                                <li key={item} className="text-xs text-[var(--text-secondary)]">{item}</li>
+                              ))}
+                            </ul>
                           </div>
                           <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
                             <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-muted)]">What worked</p>

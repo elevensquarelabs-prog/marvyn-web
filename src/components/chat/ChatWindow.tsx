@@ -49,9 +49,33 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
 
   // Reset when switching sessions
   useEffect(() => {
-    setMessages(initialMessages ?? [])
-    setSessionId(initialSessionId ?? null)
-  }, [initialSessionId]) // eslint-disable-line react-hooks/exhaustive-deps
+    const nextSessionId = initialSessionId ?? null
+    const currentSessionId = sessionId ?? null
+    const nextMessages = initialMessages ?? []
+
+    // First message creates a real session id after send. Keep local streamed
+    // state instead of replacing it with still-empty parent props.
+    if (nextSessionId && nextSessionId !== currentSessionId) {
+      const isLoadedSessionSwitch = nextMessages.length > 0
+      if (isLoadedSessionSwitch) {
+        setMessages(nextMessages)
+      }
+      setSessionId(nextSessionId)
+      return
+    }
+
+    // Starting a brand-new chat from the parent should clear the local thread.
+    if (!nextSessionId && currentSessionId) {
+      setMessages([])
+      setSessionId(null)
+      return
+    }
+
+    // Initial hydration for preloaded messages.
+    if (!currentSessionId && !nextSessionId && nextMessages.length > 0) {
+      setMessages(nextMessages)
+    }
+  }, [initialSessionId, initialMessages, sessionId])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })

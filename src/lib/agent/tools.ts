@@ -1,8 +1,6 @@
 import { connectDB } from '@/lib/mongodb'
 import { llm } from '@/lib/llm'
 import { skills } from '@/lib/skills'
-import { buildCacheKey, getCachedIntegrationResult, setCachedIntegrationResult } from '@/lib/integration-cache'
-import { nangoGet } from '@/lib/nango'
 import Brand from '@/models/Brand'
 import BlogPost from '@/models/BlogPost'
 import SocialPost from '@/models/SocialPost'
@@ -25,18 +23,10 @@ export interface RawConnections {
   clarity?: { projectId?: string; apiToken?: string; clarityCache?: { data?: Record<string, unknown>; cachedAt?: Date } }
 }
 
-export interface NangoIntegrationContext {
-  integration: string
-  connectionId: string
-  metadata: Record<string, string>
-  capabilities: string[]
-}
-
 export interface AgentContext {
   userId: string
   brand: Record<string, unknown> | null
   connections: RawConnections
-  integrations: NangoIntegrationContext[]
 }
 
 export interface ToolResult {
@@ -289,65 +279,6 @@ export const TOOL_DEFINITIONS = [
       },
     },
   },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'get_shopify_orders',
-      description: 'Fetch recent Shopify orders: order IDs, totals, status, source, line items. Call this when the user asks about actual sales, real conversion volume, or wants to cross-reference ad-reported conversions against real Shopify orders. Requires Shopify to be connected.',
-      parameters: {
-        type: 'object',
-        properties: {
-          days:   { type: 'number', description: 'Look back N days (default 30, max 90)' },
-          limit:  { type: 'number', description: 'Number of orders to return (default 50, max 250)' },
-          status: { type: 'string', enum: ['any', 'open', 'closed', 'cancelled'], description: 'Order status filter (default: any)' },
-        },
-        required: [],
-      },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'get_shopify_revenue',
-      description: 'Fetch aggregated Shopify revenue summary: total revenue, AOV, order count. Call this when the user asks about total sales, average order value, or revenue trends. Use instead of get_shopify_orders when aggregate numbers are sufficient.',
-      parameters: {
-        type: 'object',
-        properties: {
-          days: { type: 'number', description: 'Look back N days (default 30, max 90)' },
-        },
-        required: [],
-      },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'get_hubspot_deals',
-      description: 'Fetch open HubSpot deals: deal name, value, pipeline stage, close date. Call this when the user asks about pipeline health, deal flow, CRM revenue potential, or wants to understand their sales funnel performance.',
-      parameters: {
-        type: 'object',
-        properties: {
-          limit: { type: 'number', description: 'Number of deals to return (default 50, max 100)' },
-          stage: { type: 'string', description: 'Filter by pipeline stage name (optional)' },
-        },
-        required: [],
-      },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'get_stripe_revenue',
-      description: 'Fetch Stripe revenue data: MRR estimate, total charges, subscription count, recent transactions. Call this when the user asks about recurring revenue, subscription health, cash collection, or payment trends.',
-      parameters: {
-        type: 'object',
-        properties: {
-          days: { type: 'number', description: 'Look back N days for charges (default 30, max 90)' },
-        },
-        required: [],
-      },
-    },
-  },
 ]
 
 export const TOOL_LABELS: Record<string, string> = {
@@ -371,10 +302,6 @@ export const TOOL_LABELS: Record<string, string> = {
   update_brand_info: 'Updating brand profile…',
   get_alerts: 'Checking alerts…',
   dismiss_alert: 'Dismissing alert…',
-  get_shopify_orders:  'Fetching Shopify orders…',
-  get_shopify_revenue: 'Fetching Shopify revenue…',
-  get_hubspot_deals:   'Fetching HubSpot deals…',
-  get_stripe_revenue:  'Fetching Stripe revenue…',
 }
 
 // ── Tool Executors ─────────────────────────────────────────────────────────────
@@ -1447,147 +1374,6 @@ async function dismiss_alert(
   }
 }
 
-// ── Nango Integration Tools ───────────────────────────────────────────────────
-
-async function get_shopify_orders(
-  args: { days?: number; limit?: number; status?: string },
-  context: AgentContext,
-): Promise<ToolResult> {
-  const conn = context.integrations.find(i => i.integration === 'shopify')
-  if (!conn) return { summary: 'Shopify not connected', content: 'Shopify integration is not connected. Ask the user to connect it from the Integrations page.' }
-
-  const days   = Math.min(args.days ?? 30, 90)
-  const limit  = Math.min(args.limit ?? 50, 250)
-  const status = args.status ?? 'any'
-
-  const cacheKey = buildCacheKey(context.userId, 'shopify', 'orders', { days, limit, status })
-  const cached   = await getCachedIntegrationResult(cacheKey)
-  if (cached) return cached as ToolResult
-
-  const createdAtMin = new Date(Date.now() - days * 86400000).toISOString()
-  const data = await nangoGet(conn.connectionId, 'shopify', '/admin/api/2024-01/orders.json', {
-    status,
-    limit:          String(limit),
-    created_at_min: createdAtMin,
-  }) as { orders?: Array<Record<string, unknown>> }
-
-  const orders  = data.orders ?? []
-  const summary = `Fetched ${orders.length} Shopify orders (last ${days} days)`
-  const content = JSON.stringify({ orderCount: orders.length, orders: orders.slice(0, 20) })
-
-  const result: ToolResult = { summary, content }
-  await setCachedIntegrationResult(cacheKey, result)
-  return result
-}
-
-async function get_shopify_revenue(
-  args: { days?: number },
-  context: AgentContext,
-): Promise<ToolResult> {
-  const conn = context.integrations.find(i => i.integration === 'shopify')
-  if (!conn) return { summary: 'Shopify not connected', content: 'Shopify integration is not connected.' }
-
-  const days     = Math.min(args.days ?? 30, 90)
-  const cacheKey = buildCacheKey(context.userId, 'shopify', 'revenue', { days })
-  const cached   = await getCachedIntegrationResult(cacheKey)
-  if (cached) return cached as ToolResult
-
-  const createdAtMin = new Date(Date.now() - days * 86400000).toISOString()
-  const data = await nangoGet(conn.connectionId, 'shopify', '/admin/api/2024-01/orders.json', {
-    status:           'any',
-    limit:            '250',
-    created_at_min:   createdAtMin,
-    financial_status: 'paid',
-  }) as { orders?: Array<{ total_price?: string }> }
-
-  const orders       = data.orders ?? []
-  const totalRevenue = orders.reduce((sum, o) => sum + parseFloat(o.total_price ?? '0'), 0)
-  const aov          = orders.length > 0 ? totalRevenue / orders.length : 0
-
-  const summary = `Shopify revenue last ${days}d: $${totalRevenue.toFixed(2)} across ${orders.length} paid orders (AOV $${aov.toFixed(2)})`
-  const content = JSON.stringify({ days, orderCount: orders.length, totalRevenue: totalRevenue.toFixed(2), aov: aov.toFixed(2) })
-
-  const result: ToolResult = { summary, content }
-  await setCachedIntegrationResult(cacheKey, result)
-  return result
-}
-
-async function get_hubspot_deals(
-  args: { limit?: number; stage?: string },
-  context: AgentContext,
-): Promise<ToolResult> {
-  const conn = context.integrations.find(i => i.integration === 'hubspot')
-  if (!conn) return { summary: 'HubSpot not connected', content: 'HubSpot integration is not connected.' }
-
-  const limit    = Math.min(args.limit ?? 50, 100)
-  const cacheKey = buildCacheKey(context.userId, 'hubspot', 'deals', { limit, stage: args.stage })
-  const cached   = await getCachedIntegrationResult(cacheKey)
-  if (cached) return cached as ToolResult
-
-  const params: Record<string, string> = {
-    limit:      String(limit),
-    properties: 'dealname,amount,dealstage,closedate,hubspot_owner_id',
-    archived:   'false',
-  }
-  if (args.stage) params.dealstage = args.stage
-
-  const data = await nangoGet(conn.connectionId, 'hubspot', '/crm/v3/objects/deals', params) as {
-    results?: Array<{ id: string; properties: Record<string, string> }>
-  }
-
-  const deals      = data.results ?? []
-  const totalValue = deals.reduce((sum, d) => sum + parseFloat(d.properties.amount ?? '0'), 0)
-  const summary    = `Fetched ${deals.length} HubSpot deals, total pipeline value: $${totalValue.toFixed(2)}`
-  const content    = JSON.stringify({ dealCount: deals.length, totalPipelineValue: totalValue.toFixed(2), deals: deals.slice(0, 20) })
-
-  const result: ToolResult = { summary, content }
-  await setCachedIntegrationResult(cacheKey, result)
-  return result
-}
-
-async function get_stripe_revenue(
-  args: { days?: number },
-  context: AgentContext,
-): Promise<ToolResult> {
-  const conn = context.integrations.find(i => i.integration === 'stripe')
-  if (!conn) return { summary: 'Stripe not connected', content: 'Stripe integration is not connected.' }
-
-  const days         = Math.min(args.days ?? 30, 90)
-  const cacheKey     = buildCacheKey(context.userId, 'stripe', 'revenue', { days })
-  const cached       = await getCachedIntegrationResult(cacheKey)
-  if (cached) return cached as ToolResult
-
-  const createdAfter = Math.floor((Date.now() - days * 86400000) / 1000)
-
-  const chargesData = await nangoGet(conn.connectionId, 'stripe', '/v1/charges', {
-    limit:   '100',
-    created: String(createdAfter),
-  }) as { data?: Array<{ amount: number; status: string }> }
-
-  const subsData = await nangoGet(conn.connectionId, 'stripe', '/v1/subscriptions', {
-    limit:  '100',
-    status: 'active',
-  }) as { data?: Array<{ plan?: { amount?: number; interval?: string } }> }
-
-  const charges          = chargesData.data ?? []
-  const subs             = subsData.data ?? []
-  const successfulCharges = charges.filter(c => c.status === 'succeeded')
-  const totalRevenue     = successfulCharges.reduce((sum, c) => sum + c.amount, 0) / 100
-  const mrrCents         = subs.reduce((sum, s) => {
-    const amount   = s.plan?.amount ?? 0
-    const interval = s.plan?.interval ?? 'month'
-    return sum + (interval === 'year' ? Math.round(amount / 12) : amount)
-  }, 0)
-  const mrr = mrrCents / 100
-
-  const summary = `Stripe last ${days}d: $${totalRevenue.toFixed(2)} revenue, ${subs.length} active subscriptions, MRR ~$${mrr.toFixed(2)}`
-  const content = JSON.stringify({ days, totalRevenue: totalRevenue.toFixed(2), chargeCount: successfulCharges.length, activeSubscriptions: subs.length, estimatedMrr: mrr.toFixed(2) })
-
-  const result: ToolResult = { summary, content }
-  await setCachedIntegrationResult(cacheKey, result)
-  return result
-}
-
 // ── Dispatcher ─────────────────────────────────────────────────────────────────
 
 export async function executeTool(
@@ -1636,14 +1422,6 @@ export async function executeTool(
       return get_alerts(context)
     case 'dismiss_alert':
       return dismiss_alert(args as { alert_id: string }, context)
-    case 'get_shopify_orders':
-      return get_shopify_orders(args as { days?: number; limit?: number; status?: string }, context)
-    case 'get_shopify_revenue':
-      return get_shopify_revenue(args as { days?: number }, context)
-    case 'get_hubspot_deals':
-      return get_hubspot_deals(args as { limit?: number; stage?: string }, context)
-    case 'get_stripe_revenue':
-      return get_stripe_revenue(args as { days?: number }, context)
     default:
       return { summary: `Unknown tool: ${name}`, content: `Tool "${name}" not found.` }
   }

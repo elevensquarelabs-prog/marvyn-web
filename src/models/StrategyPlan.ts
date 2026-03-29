@@ -44,9 +44,29 @@ export interface IStrategyDiagnosis {
 export interface IStrategyReview {
   actualSignal?: string
   summary?: string
+  executionSummary?: string
+  signalChanges?: string[]
   whatWorked: string[]
   whatFailed: string[]
   nextCycleFocus: string[]
+}
+
+export interface IStrategyPerformanceSnapshot {
+  capturedAt?: Date
+  ga4Sessions?: number
+  ga4Users?: number
+  ga4Conversions?: number
+  ga4BounceRate?: number
+  organicClicks?: number
+  paidSpend?: number
+  paidClicks?: number
+  paidConversions?: number
+  paidRoas?: number | null
+  paidCtr?: number
+  blogCount?: number
+  socialCount?: number
+  completedTasks?: number
+  totalTasks?: number
 }
 
 export interface IStrategyPlan extends Document {
@@ -69,6 +89,8 @@ export interface IStrategyPlan extends Document {
   manualNotes?: string
   manualWins?: string
   review?: IStrategyReview
+  baselineSnapshot?: IStrategyPerformanceSnapshot
+  actualSnapshot?: IStrategyPerformanceSnapshot
   generationState?: 'idle' | 'running' | 'failed'
   generationError?: string
   status: 'draft' | 'active' | 'completed'
@@ -131,9 +153,45 @@ const StrategyPlanSchema = new Schema<IStrategyPlan>({
   review: {
     actualSignal: String,
     summary: String,
+    executionSummary: String,
+    signalChanges: [String],
     whatWorked: [String],
     whatFailed: [String],
     nextCycleFocus: [String],
+  },
+  baselineSnapshot: {
+    capturedAt: Date,
+    ga4Sessions: Number,
+    ga4Users: Number,
+    ga4Conversions: Number,
+    ga4BounceRate: Number,
+    organicClicks: Number,
+    paidSpend: Number,
+    paidClicks: Number,
+    paidConversions: Number,
+    paidRoas: Number,
+    paidCtr: Number,
+    blogCount: Number,
+    socialCount: Number,
+    completedTasks: Number,
+    totalTasks: Number,
+  },
+  actualSnapshot: {
+    capturedAt: Date,
+    ga4Sessions: Number,
+    ga4Users: Number,
+    ga4Conversions: Number,
+    ga4BounceRate: Number,
+    organicClicks: Number,
+    paidSpend: Number,
+    paidClicks: Number,
+    paidConversions: Number,
+    paidRoas: Number,
+    paidCtr: Number,
+    blogCount: Number,
+    socialCount: Number,
+    completedTasks: Number,
+    totalTasks: Number,
   },
   generationState: { type: String, enum: ['idle', 'running', 'failed'], default: 'idle' },
   generationError: String,

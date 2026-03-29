@@ -1,0 +1,163 @@
+<h2>Integrations Page Design</h2>
+<p class="subtitle">How the page looks inside Marvyn — click to select a layout</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:var(--surface-2);border-radius:8px;padding:16px;font-size:11px;font-family:monospace;">
+        <!-- Sidebar + Page mockup -->
+        <div style="display:flex;gap:12px;height:220px;">
+          <!-- Sidebar -->
+          <div style="width:80px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:4px;">
+            <div style="height:8px;background:#DA7756;border-radius:3px;opacity:0.3;margin-bottom:4px;"></div>
+            <div style="height:6px;background:var(--border);border-radius:3px;"></div>
+            <div style="height:6px;background:var(--border);border-radius:3px;"></div>
+            <div style="height:6px;background:var(--border);border-radius:3px;"></div>
+            <div style="height:6px;background:var(--border);border-radius:3px;"></div>
+            <div style="flex:1;"></div>
+            <div style="height:6px;background:var(--border);border-radius:3px;"></div>
+            <!-- Integrations highlighted -->
+            <div style="height:6px;background:#DA7756;border-radius:3px;"></div>
+            <div style="height:6px;background:var(--border);border-radius:3px;"></div>
+          </div>
+          <!-- Page content -->
+          <div style="flex:1;display:flex;flex-direction:column;gap:10px;overflow:hidden;">
+            <div style="font-size:13px;font-weight:600;color:var(--text-primary);">Integrations</div>
+            <div style="font-size:10px;color:var(--text-muted);">Connect data sources · agents use them automatically</div>
+            <!-- Card grid 3-col -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+              <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;">
+                <div style="width:20px;height:20px;background:#95BF47;border-radius:4px;margin-bottom:6px;"></div>
+                <div style="font-size:10px;font-weight:600;color:var(--text-primary);margin-bottom:2px;">Shopify</div>
+                <div style="font-size:9px;color:var(--text-muted);margin-bottom:6px;">Orders · Revenue · Customers</div>
+                <div style="height:16px;background:#DA7756;border-radius:4px;display:flex;align-items:center;justify-content:center;">
+                  <span style="font-size:8px;color:white;font-weight:500;">Connect</span>
+                </div>
+              </div>
+              <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;">
+                <div style="width:20px;height:20px;background:#FF7A59;border-radius:4px;margin-bottom:6px;"></div>
+                <div style="font-size:10px;font-weight:600;color:var(--text-primary);margin-bottom:2px;">HubSpot</div>
+                <div style="font-size:9px;color:var(--text-muted);margin-bottom:6px;">Deals · Contacts · Pipeline</div>
+                <div style="height:16px;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;display:flex;align-items:center;justify-content:center;">
+                  <span style="font-size:8px;color:var(--text-muted);font-weight:500;">Connect</span>
+                </div>
+              </div>
+              <div style="background:var(--bg);border:1px solid #22c55e33;border-radius:6px;padding:8px;">
+                <div style="width:20px;height:20px;background:#7C3AED;border-radius:4px;margin-bottom:6px;"></div>
+                <div style="font-size:10px;font-weight:600;color:var(--text-primary);margin-bottom:2px;">Klaviyo</div>
+                <div style="font-size:9px;color:var(--text-muted);margin-bottom:4px;">Email · Revenue · Flows</div>
+                <div style="height:16px;background:#22c55e22;border:1px solid #22c55e44;border-radius:4px;display:flex;align-items:center;justify-content:center;gap:4px;">
+                  <div style="width:5px;height:5px;background:#22c55e;border-radius:50%;"></div>
+                  <span style="font-size:8px;color:#22c55e;font-weight:500;">Connected</span>
+                </div>
+              </div>
+              <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;">
+                <div style="width:20px;height:20px;background:#635BFF;border-radius:4px;margin-bottom:6px;"></div>
+                <div style="font-size:10px;font-weight:600;color:var(--text-primary);margin-bottom:2px;">Stripe</div>
+                <div style="font-size:9px;color:var(--text-muted);margin-bottom:6px;">Payments · MRR · Churn</div>
+                <div style="height:16px;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;display:flex;align-items:center;justify-content:center;">
+                  <span style="font-size:8px;color:var(--text-muted);font-weight:500;">Connect</span>
+                </div>
+              </div>
+              <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;">
+                <div style="width:20px;height:20px;background:#0071CE;border-radius:4px;margin-bottom:6px;"></div>
+                <div style="font-size:10px;font-weight:600;color:var(--text-primary);margin-bottom:2px;">WooCommerce</div>
+                <div style="font-size:9px;color:var(--text-muted);margin-bottom:6px;">Orders · Products</div>
+                <div style="height:16px;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;display:flex;align-items:center;justify-content:center;">
+                  <span style="font-size:8px;color:var(--text-muted);font-weight:500;">Connect</span>
+                </div>
+              </div>
+              <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;">
+                <div style="width:20px;height:20px;background:#00A1E0;border-radius:4px;margin-bottom:6px;"></div>
+                <div style="font-size:10px;font-weight:600;color:var(--text-primary);margin-bottom:2px;">Salesforce</div>
+                <div style="font-size:9px;color:var(--text-muted);margin-bottom:6px;">Leads · Opportunities</div>
+                <div style="height:16px;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;display:flex;align-items:center;justify-content:center;">
+                  <span style="font-size:8px;color:var(--text-muted);font-weight:500;">Connect</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Grid cards (3-col)</h3>
+      <p>Each integration is a compact card with logo, name, what data it provides, and a connect/disconnect button. Clean grid, easy to scan.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:var(--surface-2);border-radius:8px;padding:16px;font-size:11px;">
+        <div style="display:flex;gap:12px;height:220px;">
+          <div style="width:80px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:4px;">
+            <div style="height:8px;background:#DA7756;border-radius:3px;opacity:0.3;margin-bottom:4px;"></div>
+            <div style="height:6px;background:var(--border);border-radius:3px;"></div>
+            <div style="height:6px;background:var(--border);border-radius:3px;"></div>
+            <div style="flex:1;"></div>
+            <div style="height:6px;background:var(--border);border-radius:3px;"></div>
+            <div style="height:6px;background:#DA7756;border-radius:3px;"></div>
+            <div style="height:6px;background:var(--border);border-radius:3px;"></div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:8px;overflow:hidden;">
+            <div style="font-size:13px;font-weight:600;color:var(--text-primary);">Integrations</div>
+            <!-- Section rows -->
+            <div style="font-size:9px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">eCommerce</div>
+            <div style="display:flex;gap:6px;">
+              <div style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px;display:flex;align-items:center;gap:6px;">
+                <div style="width:16px;height:16px;background:#95BF47;border-radius:3px;flex-shrink:0;"></div>
+                <div style="flex:1;"><div style="font-size:9px;font-weight:600;">Shopify</div><div style="font-size:8px;color:var(--text-muted);">Orders · Revenue</div></div>
+                <div style="height:14px;width:40px;background:#DA7756;border-radius:3px;display:flex;align-items:center;justify-content:center;"><span style="font-size:7px;color:white;">Connect</span></div>
+              </div>
+              <div style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px;display:flex;align-items:center;gap:6px;">
+                <div style="width:16px;height:16px;background:#0071CE;border-radius:3px;flex-shrink:0;"></div>
+                <div style="flex:1;"><div style="font-size:9px;font-weight:600;">WooCommerce</div><div style="font-size:8px;color:var(--text-muted);">Orders · Products</div></div>
+                <div style="height:14px;width:40px;background:var(--surface-2);border:1px solid var(--border);border-radius:3px;display:flex;align-items:center;justify-content:center;"><span style="font-size:7px;color:var(--text-muted);">Connect</span></div>
+              </div>
+            </div>
+            <div style="font-size:9px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">CRM</div>
+            <div style="display:flex;gap:6px;">
+              <div style="flex:1;background:var(--bg);border:1px solid #22c55e33;border-radius:6px;padding:7px;display:flex;align-items:center;gap:6px;">
+                <div style="width:16px;height:16px;background:#FF7A59;border-radius:3px;flex-shrink:0;"></div>
+                <div style="flex:1;"><div style="font-size:9px;font-weight:600;">HubSpot</div><div style="font-size:8px;color:var(--text-muted);">Deals · Pipeline</div></div>
+                <div style="height:14px;width:50px;background:#22c55e22;border:1px solid #22c55e44;border-radius:3px;display:flex;align-items:center;justify-content:center;gap:3px;">
+                  <div style="width:4px;height:4px;background:#22c55e;border-radius:50%;"></div>
+                  <span style="font-size:7px;color:#22c55e;">Active</span>
+                </div>
+              </div>
+              <div style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px;display:flex;align-items:center;gap:6px;">
+                <div style="width:16px;height:16px;background:#00A1E0;border-radius:3px;flex-shrink:0;"></div>
+                <div style="flex:1;"><div style="font-size:9px;font-weight:600;">Salesforce</div><div style="font-size:8px;color:var(--text-muted);">Leads · Opps</div></div>
+                <div style="height:14px;width:40px;background:var(--surface-2);border:1px solid var(--border);border-radius:3px;display:flex;align-items:center;justify-content:center;"><span style="font-size:7px;color:var(--text-muted);">Connect</span></div>
+              </div>
+            </div>
+            <div style="font-size:9px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Revenue</div>
+            <div style="display:flex;gap:6px;">
+              <div style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px;display:flex;align-items:center;gap:6px;">
+                <div style="width:16px;height:16px;background:#635BFF;border-radius:3px;flex-shrink:0;"></div>
+                <div style="flex:1;"><div style="font-size:9px;font-weight:600;">Stripe</div><div style="font-size:8px;color:var(--text-muted);">MRR · Payments</div></div>
+                <div style="height:14px;width:40px;background:var(--surface-2);border:1px solid var(--border);border-radius:3px;display:flex;align-items:center;justify-content:center;"><span style="font-size:7px;color:var(--text-muted);">Connect</span></div>
+              </div>
+              <div style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px;display:flex;align-items:center;gap:6px;">
+                <div style="width:16px;height:16px;background:#7C3AED;border-radius:3px;flex-shrink:0;"></div>
+                <div style="flex:1;"><div style="font-size:9px;font-weight:600;">Klaviyo</div><div style="font-size:8px;color:var(--text-muted);">Email · Revenue</div></div>
+                <div style="height:14px;width:40px;background:var(--surface-2);border:1px solid var(--border);border-radius:3px;display:flex;align-items:center;justify-content:center;"><span style="font-size:7px;color:var(--text-muted);">Connect</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Grouped rows by category</h3>
+      <p>Integrations grouped under eCommerce, CRM, Revenue headers. Row layout with logo + name + data labels + action button. Better when you have many integrations.</p>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top:20px;padding:14px;background:var(--surface-2);border-radius:8px;border-left:3px solid #DA7756;">
+  <p style="margin:0;font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:6px;">How agents know what's connected</p>
+  <p style="margin:0;font-size:11px;color:var(--text-muted);">When you connect Shopify, it gets stored in a <code style="background:var(--bg);padding:1px 4px;border-radius:3px;">NangoConnection</code> record in MongoDB. Every time a conversation starts, the agent route loads those records and appends them to the system prompt — same pattern as today's native connections. The agent sees: <code style="background:var(--bg);padding:1px 4px;border-radius:3px;">CONNECTED PLATFORMS: Meta Ads, Google Ads, Shopify (mystore.myshopify.com), HubSpot</code> — and new tools like <code style="background:var(--bg);padding:1px 4px;border-radius:3px;">get_shopify_orders</code> become available automatically.</p>
+</div>
