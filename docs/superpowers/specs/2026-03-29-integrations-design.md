@@ -1,252 +1,276 @@
 # Integrations Feature — Design Spec
-Date: 2026-03-29
+Date: 2026-03-29 (revised)
 
 ## Overview
 
-Add an **Integrations** page to Marvyn that lets users connect third-party data sources (Shopify, HubSpot, Klaviyo, Stripe, WooCommerce, Salesforce) via Nango. Once connected, the AI agents automatically gain access to those data sources as on-demand tools — no event/trigger system, agents query live data mid-conversation.
+Add an **Integrations** page to Marvyn that lets users connect Shopify, HubSpot, and Stripe via Nango. Once connected, the AI agents gain structured runtime awareness of those integrations and can call on-demand tools (`get_shopify_orders`, `get_shopify_revenue`, `get_hubspot_deals`, `get_stripe_revenue`) using live Nango proxy calls with a lightweight cache.
 
 ---
 
 ## Problem Being Solved
 
-Marvyn agents currently only see data from natively connected ad platforms (Meta, Google, LinkedIn). They cannot cross-reference actual sales, CRM pipeline, or email revenue against ad spend. This makes diagnosis shallow — agents can see "Google Ads reported 100 conversions" but cannot verify against real Shopify orders. Adding Nango-powered integrations fills this gap.
+Marvyn agents currently only see data from natively connected ad platforms (Meta, Google, LinkedIn). They cannot cross-reference actual sales, CRM pipeline, or payment revenue against ad spend. Adding Nango-powered integrations fills this gap with live, on-demand data access.
+
+---
+
+## Scope
+
+**Phase 1 integrations (only):**
+- Shopify
+- HubSpot
+- Stripe
+
+**Explicitly out of scope:**
+- Klaviyo, WooCommerce, Salesforce
+- Background data sync / caching pipelines
+- Generic automation builder
+- Custom user-created integrations
+- Nango dashboard or builder UI exposure
+- Warehouse ingestion
 
 ---
 
 ## Architecture
 
-### Credential Layer — Nango
+### A. NangoConnection Model
 
-Nango (self-hosted via Docker Compose) acts purely as an **OAuth credential vault + API proxy**. It handles:
-- OAuth flows for each integration (user authenticates once via a Nango popup)
-- Token storage and automatic refresh
-- Proxied API calls: `GET /proxy/{api-path}` with 3 headers injects stored credentials
-
-Nango is **not** a trigger/event system. Agents call the proxy on-demand mid-conversation.
-
-Self-hosted setup: 4 Docker containers (server, db/postgres, redis, optional elasticsearch). Free tier covers Auth + Proxy which is all Marvyn needs.
-
-Required env vars:
-```
-NANGO_BASE_URL=http://localhost:3003   # or hosted domain
-NANGO_SECRET_KEY=<secret>
-NANGO_WEBHOOK_SECRET=<secret>
-```
-
-### Storage — NangoConnection Model
-
-New MongoDB model in `src/models/NangoConnection.ts`:
+`src/models/NangoConnection.ts`
 
 ```typescript
 {
-  userId: ObjectId          // ref to User
-  integration: string       // 'shopify' | 'hubspot' | 'klaviyo' | 'stripe' | 'woocommerce' | 'salesforce'
-  connectionId: string      // Nango connection ID (deterministic: `${integration}_${userId}`)
+  userId: ObjectId
+  integration: 'shopify' | 'hubspot' | 'stripe'
+  connectionId: string                          // deterministic: `${integration}_${userId}`
   metadata: {
-    shopDomain?: string     // Shopify only — mystore.myshopify.com
-    portalId?: string       // HubSpot only
+    shopDomain?: string                         // Shopify: mystore.myshopify.com
+    portalId?: string                           // HubSpot portal ID
+    accountName?: string                        // display name
   }
-  connectedAt: Date
   status: 'active' | 'error'
+  connectedAt: Date
+  updatedAt: Date
 }
 ```
 
-Index on `{ userId, integration }` (unique).
+Unique index on `{ userId, integration }`.
 
-### Agent Awareness
+---
 
-In `src/app/api/agent/run/route.ts`, after the existing `connectedPlatforms` array is built from `user.connections`, load Nango connections and append:
+### B. Nango Helper
 
-```typescript
-const nangoConns = await NangoConnection.find({ userId, status: 'active' }).lean()
-const nangoLabels = nangoConns.map(c => {
-  if (c.integration === 'shopify') return `Shopify (${c.metadata?.shopDomain ?? ''})`
-  if (c.integration === 'hubspot') return `HubSpot`
-  if (c.integration === 'klaviyo') return `Klaviyo`
-  if (c.integration === 'stripe') return `Stripe`
-  if (c.integration === 'woocommerce') return `WooCommerce`
-  if (c.integration === 'salesforce') return `Salesforce`
-  return c.integration
-})
-connectedPlatforms.push(...nangoLabels)
-```
-
-The system prompt already injects `CONNECTED PLATFORMS: ...` — no other prompt changes needed. The agent sees all connected sources and knows which tools to call.
-
-`AgentContext` gains a new field:
-```typescript
-nangoConnections: Array<{ integration: string; connectionId: string; metadata: Record<string, string> }>
-```
-
-This is passed to all tool executors so they can find the right `connectionId` for a given integration.
-
-### New Agent Tools
-
-Added to `TOOL_DEFINITIONS` and `executeTool` in `src/lib/agent/tools.ts`:
-
-| Tool | Integration | What it fetches |
-|---|---|---|
-| `get_shopify_orders` | Shopify | Orders list with revenue, status, source, line items |
-| `get_shopify_revenue` | Shopify | Aggregated revenue summary (total, AOV, by source) |
-| `get_hubspot_deals` | HubSpot | Open deals, pipeline stages, deal value, close dates |
-| `get_klaviyo_metrics` | Klaviyo | Campaign revenue, flow revenue, list sizes |
-| `get_stripe_revenue` | Stripe | MRR, total revenue, recent charges, subscription counts |
-| `get_woocommerce_orders` | WooCommerce | Orders with revenue, status, customer data |
-| `get_salesforce_deals` | Salesforce | Opportunities: value, stage, close date, owner |
-
-Each tool:
-1. Looks up `connectionId` from `context.nangoConnections` for the given integration
-2. Returns `{ summary: string, content: string }` — same `ToolResult` interface as all existing tools
-3. Returns `"Shopify is not connected"` if no active connection exists — agent handles gracefully
-
-All tools call `lib/nango.ts` proxy helper, never Nango SDK directly.
-
-### Nango Proxy Helper
-
-New `src/lib/nango.ts`:
+`src/lib/nango.ts`
 
 ```typescript
-export async function nangoGet(
-  connectionId: string,
-  integration: string,
-  path: string,
-  params?: Record<string, string>
-): Promise<unknown>
-
-export async function nangoPost(
-  connectionId: string,
-  integration: string,
-  path: string,
-  body: unknown
-): Promise<unknown>
+nangoGet(connectionId, integration, path, params?)  → Promise<unknown>
+nangoPost(connectionId, integration, path, body?)   → Promise<unknown>
 ```
 
-Calls `NANGO_BASE_URL/proxy/{path}` with headers:
+Uses `NANGO_BASE_URL` + `NANGO_SECRET_KEY`. Injects three required headers per call:
 - `Authorization: Bearer {NANGO_SECRET_KEY}`
 - `Connection-Id: {connectionId}`
 - `Provider-Config-Key: {integration}`
 
+Returns clean error objects on failure (does not throw past caller).
+
 ---
 
-## UI
+### C. Lightweight Cache
 
-### Sidebar Change
+Simple Mongo-backed cache in `src/lib/integration-cache.ts`.
 
-Add **Integrations** link to the footer section of `Sidebar.tsx`, between Alerts and Settings:
+Cache key: `userId + integration + toolName + hash(params)`
+TTL: 10 minutes default
 
-```
-Alerts      (existing)
-Integrations  (new — plug icon)
-Settings    (existing)
-```
-
-### Integrations Page — `/integrations`
-
-**Route:** `src/app/(dashboard)/integrations/page.tsx`
-**Layout:** 3-column grid of cards matching existing Marvyn dark theme (CSS vars)
-
-Page structure:
-```
-<heading> Integrations
-<subheading> Connect your data sources — agents use them automatically
-
-[IntegrationsGrid]
-  [IntegrationCard × 6]
-```
-
-**IntegrationCard props:**
 ```typescript
-{
-  integration: string      // 'shopify'
-  name: string             // 'Shopify'
-  description: string      // 'Orders, revenue, and customer data'
-  color: string            // brand hex '#95BF47'
-  connected: boolean
-  metadata?: { shopDomain?: string }
-  onConnect: () => void
-  onDisconnect: () => void
-}
+getCachedIntegrationResult(key: string): Promise<unknown | null>
+setCachedIntegrationResult(key: string, data: unknown, ttlMs?: number): Promise<void>
 ```
+
+Uses a `IntegrationCache` Mongo collection: `{ key, data, expiresAt }` with a TTL index on `expiresAt`. Mongo TTL index handles expiry automatically — no cron needed.
+
+---
+
+### D. API Routes
+
+#### `POST /api/nango/session`
+- Auth required
+- Body: `{ integration: 'shopify' | 'hubspot' | 'stripe' }`
+- Creates a Nango Connect session for current user
+- Uses deterministic `connectionId: ${integration}_${userId}`
+- Returns: `{ sessionToken: string }`
+
+#### `POST /api/nango/webhook`
+- Verified via HMAC-SHA256 using `NANGO_WEBHOOK_SECRET`
+- Handles `auth.creation` → upserts `NangoConnection` with `status: 'active'`
+- Handles `auth.refresh_error` → sets `status: 'error'` on matching connection
+- Returns: `{ ok: true }`
+
+#### `GET /api/integrations`
+- Auth required
+- Returns current user's NangoConnections: `[{ integration, status, connectedAt, metadata }]`
+
+#### `DELETE /api/integrations/[integration]`
+- Auth required
+- Calls Nango API to delete the connection
+- Deletes NangoConnection record from Mongo
+- Returns: `{ ok: true }`
+
+---
+
+### E. Integrations Page
+
+`src/app/(dashboard)/integrations/page.tsx`
+
+Sidebar: add **Integrations** link in footer section between Alerts and Settings (plug icon).
+
+**Layout:** 3-column card grid, Marvyn-native styling (CSS vars, dark theme compatible).
+
+**Cards (3 total):**
+
+| Integration | Description shown on card |
+|---|---|
+| Shopify | Orders, revenue, refunds, customer purchase signals |
+| HubSpot | Deals, pipeline movement, CRM revenue context |
+| Stripe | Revenue, subscriptions, charges, cash collection signals |
 
 **Card states:**
-- **Not connected:** muted border, "Connect" button (brand orange `#DA7756`)
-- **Connecting:** button shows spinner, disabled
-- **Connected:** green border tint `#22c55e33`, green "Connected" badge with dot, "Disconnect" link (small, destructive)
+- Not connected: muted border, orange "Connect" button
+- Connecting: spinner, disabled
+- Connected: green border tint, green "Connected" badge + dot, small "Disconnect" link
+- Error: amber border, "Reconnect" button
 
 **Connect flow:**
 1. User clicks "Connect"
-2. Frontend calls `POST /api/nango/session` → gets `sessionToken`
-3. `@nangohq/frontend` SDK opens Nango OAuth popup
-4. SDK's `onEvent` callback fires with `event.type === 'connect'` → card state immediately updates to "Connected"
-5. In parallel: Nango fires webhook to `POST /api/nango/webhook` → saves `NangoConnection` record in MongoDB (async, backend-only)
+2. `POST /api/nango/session` → `sessionToken`
+3. `@nangohq/frontend` SDK opens OAuth popup
+4. SDK `onEvent` fires `event.type === 'connect'` → card updates immediately
+5. In parallel: Nango webhook fires → backend saves NangoConnection
 
 **Disconnect flow:**
-1. User clicks "Disconnect"
-2. `DELETE /api/integrations/{integration}` → removes `NangoConnection` record, calls Nango API to delete the connection
-3. Card reverts to "not connected" state
+1. `DELETE /api/integrations/{integration}`
+2. Card reverts to not-connected state
+
+No Nango dashboard, no generic builder, no Nango branding visible.
 
 ---
 
-## API Routes
+### F. Agent Context — Structured Integration Awareness
 
-### `POST /api/nango/session`
-Auth: session required
-Body: `{ integration: string }`
-Returns: `{ sessionToken: string }`
-Creates a Nango Connect session scoped to the current user + integration.
+`AgentContext` gains a new structured field (not just string labels):
 
-### `POST /api/nango/webhook`
-Auth: HMAC-SHA256 signature verified (`NANGO_WEBHOOK_SECRET`)
-Handles `auth.creation` events — upserts `NangoConnection` record.
-Returns: `{ ok: true }`
+```typescript
+integrations: Array<{
+  integration: string
+  connectionId: string
+  metadata: Record<string, string>
+  capabilities: string[]
+}>
+```
 
-### `GET /api/integrations`
-Auth: session required
-Returns: array of `{ integration, status, connectedAt, metadata }` for the current user.
+Capabilities per integration:
+- `shopify`: `["orders", "revenue", "refunds", "aov"]`
+- `hubspot`: `["deals", "pipeline", "crm_revenue"]`
+- `stripe`: `["charges", "subscriptions", "mrr", "revenue"]`
 
-### `DELETE /api/integrations/[integration]`
-Auth: session required
-Deletes the `NangoConnection` record + calls Nango delete connection API.
-Returns: `{ ok: true }`
+In `api/agent/run/route.ts`, after loading native connections:
+
+```typescript
+const nangoConns = await NangoConnection.find({ userId, status: 'active' }).lean()
+
+const CAPABILITIES = {
+  shopify: ['orders', 'revenue', 'refunds', 'aov'],
+  hubspot: ['deals', 'pipeline', 'crm_revenue'],
+  stripe:  ['charges', 'subscriptions', 'mrr', 'revenue'],
+}
+
+const integrations = nangoConns.map(c => ({
+  integration: c.integration,
+  connectionId: c.connectionId,
+  metadata: c.metadata ?? {},
+  capabilities: CAPABILITIES[c.integration] ?? [],
+}))
+
+// Also inject into system prompt as structured context (not just labels):
+const integrationContext = integrations.length > 0
+  ? `\nCONNECTED INTEGRATIONS:\n` + integrations.map(i =>
+      `- ${i.integration} (capabilities: ${i.capabilities.join(', ')})${
+        i.metadata.shopDomain ? ` [${i.metadata.shopDomain}]` : ''
+      }`
+    ).join('\n')
+  : ''
+```
+
+This replaces appending to `connectedPlatforms` for Nango integrations. The structured `integrations` array is also passed into `AgentContext` so tools can resolve `connectionId` at runtime.
 
 ---
 
-## Phase 1 Integrations
+### G. New Agent Tools
 
-| Integration | Auth type | Key data fetched |
+Added to `src/lib/agent/tools.ts` — `TOOL_DEFINITIONS` and `executeTool`:
+
+| Tool | Integration | Data |
 |---|---|---|
-| Shopify | OAuth | Orders, revenue, AOV, fulfillment status |
-| HubSpot | OAuth | Deals, pipeline, contacts, revenue |
-| Klaviyo | API Key | Campaign revenue, flow revenue, list sizes |
-| Stripe | OAuth | MRR, charges, subscription counts |
-| WooCommerce | Basic Auth (consumer key/secret) | Orders, revenue, products |
-| Salesforce | OAuth | Opportunities, leads, pipeline value |
+| `get_shopify_orders` | Shopify | Recent orders: id, total, status, source, line items |
+| `get_shopify_revenue` | Shopify | Aggregated revenue: total, AOV, order count, by source |
+| `get_hubspot_deals` | HubSpot | Open deals: name, value, stage, close date |
+| `get_stripe_revenue` | Stripe | MRR, total charges, subscription count, recent transactions |
 
-**WooCommerce note:** Nango's WooCommerce auth requires the user to provide store URL + consumer key + secret. The Connect flow for this integration will use Nango's headless auth mode (not OAuth popup) — a small modal form collects credentials before calling `nango.auth()`.
+Each tool:
+1. Finds `connectionId` from `context.integrations` for the given integration
+2. Returns graceful `ToolResult` with `"not connected"` message if unavailable
+3. Checks cache first (`getCachedIntegrationResult`)
+4. On cache miss: calls `nangoGet` proxy
+5. Stores result in cache (`setCachedIntegrationResult`)
+6. Returns `{ summary: string, content: string }` — existing `ToolResult` shape
 
----
-
-## Error Handling
-
-- If Nango is unreachable, all Nango tools return `{ summary: "Integration data unavailable", content: "Nango service is unreachable" }` — agent continues with available data
-- If token refresh fails, Nango fires a `auth.refresh_error` webhook → NangoConnection status set to `error` → card shows "Reconnect" state
-- Disconnect errors are shown inline on the card (non-blocking)
+Tool descriptions in `TOOL_DEFINITIONS` explain when to call them (e.g. "call this when user asks about actual sales, order volume, or to cross-reference ad conversions against real Shopify revenue").
 
 ---
 
-## Env Variables Added
+### H. Tool Routing Support
+
+System prompt injection adds:
 
 ```
-NANGO_BASE_URL=http://localhost:3003
-NANGO_SECRET_KEY=
-NANGO_WEBHOOK_SECRET=
+CONNECTED INTEGRATIONS:
+- shopify (capabilities: orders, revenue, refunds, aov) [mystore.myshopify.com]
+- stripe (capabilities: charges, subscriptions, mrr, revenue)
+
+INTEGRATION TOOLS AVAILABLE:
+- get_shopify_orders / get_shopify_revenue: use when user asks about sales, actual conversions, order volume, or to verify ad attribution
+- get_hubspot_deals: use when user asks about pipeline, deal value, CRM, or lead-to-revenue tracking
+- get_stripe_revenue: use when user asks about MRR, subscriptions, cash revenue, or payment trends
+```
+
+Agent sees both what is connected and what each tool is good for.
+
+---
+
+## Environment Variables
+
+```
+NANGO_BASE_URL=          # http://localhost:3003 or hosted URL
+NANGO_SECRET_KEY=        # Nango secret key
+NANGO_WEBHOOK_SECRET=    # for HMAC webhook verification
 ```
 
 ---
 
-## Out of Scope
+## Files Changed / Created
 
-- Background data syncing / caching (Nango Syncs) — agents query live on demand only
-- More than 6 integrations in Phase 1
-- Custom integration builder for users
-- Nango dashboard embed (not needed — Marvyn has its own UI)
+**New:**
+- `src/models/NangoConnection.ts`
+- `src/lib/nango.ts`
+- `src/lib/integration-cache.ts`
+- `src/app/(dashboard)/integrations/page.tsx`
+- `src/components/integrations/IntegrationCard.tsx`
+- `src/components/integrations/IntegrationsGrid.tsx`
+- `src/app/api/nango/session/route.ts`
+- `src/app/api/nango/webhook/route.ts`
+- `src/app/api/integrations/route.ts`
+- `src/app/api/integrations/[integration]/route.ts`
+
+**Modified:**
+- `src/components/layout/Sidebar.tsx` — add Integrations nav item
+- `src/lib/agent/tools.ts` — add 4 tools + extend AgentContext
+- `src/app/api/agent/run/route.ts` — load integrations, inject structured context
