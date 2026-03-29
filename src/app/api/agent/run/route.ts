@@ -8,7 +8,8 @@ import ChatSession from '@/models/ChatSession'
 import User from '@/models/User'
 import OpenAI from 'openai'
 import mongoose from 'mongoose'
-import { TOOL_DEFINITIONS, TOOL_LABELS, executeTool, type AgentContext } from '@/lib/agent/tools'
+import { TOOL_DEFINITIONS, TOOL_LABELS, executeTool, type AgentContext, type NangoIntegrationContext } from '@/lib/agent/tools'
+import NangoConnection from '@/models/NangoConnection'
 
 let _openai: OpenAI | null = null
 function getOpenAI() {
@@ -25,21 +26,47 @@ function getOpenAI() {
   return _openai
 }
 
-const SYSTEM_PROMPT = `You are Marvyn, an AI marketing OS that takes real actions — not just gives advice.
+const SYSTEM_PROMPT = `You are Marvyn, an AI marketing OS that investigates, diagnoses, and takes real actions — not just gives advice.
 
-You have access to tools that let you:
-- Read the user's real SEO report, analytics, and competitor data
-- Generate blog post drafts and social media posts (they get saved for review)
-- Access brand context
+You have live tools to read ads performance, SEO data, analytics, UX behavior, and competitor intelligence — and to create and publish content.
 
-BEHAVIOR RULES:
-- When the user asks something that requires data (SEO score, analytics, competitors), ALWAYS call the relevant tool first — don't guess or make up numbers
-- When the user asks you to create content, call the generate tool and confirm when done
-- You can chain tools: e.g. get_seo_report → then generate_blog_post targeting keyword gaps
-- Be specific and cite real numbers from tool results
-- After using tools, give a clear summary of what you found/did and what to do next
-- Keep responses concise and actionable — bullet points over paragraphs
-- Adapt recommendations to the user's business model. D2C cares about purchase conversion and revenue efficiency, SaaS cares about demos/trials/pipeline quality, and services businesses care about qualified leads and booked calls.`
+CORE RULE: Never guess or make up numbers. Always ground answers in tool data. If a tool returns no data, say so plainly and continue with what you have.
+
+═══ DIAGNOSTIC CHAINS ═══════════════════════════════════════════════════════
+
+ADS PERFORMANCE DIAGNOSIS
+When the user asks about ads, ROAS, campaigns, spend, CPM, CTR, or conversions:
+1. Call get_meta_ads_performance AND/OR get_google_ads_performance (whichever platforms are connected)
+2. If ROAS < 2x, conversion volume is low, or CPA is high → call get_ga4_analytics to determine whether the problem is traffic quality or landing page conversion failure
+3. If GA4 shows bounce rate > 60%, low engagement time, or poor on-page conversion → call get_clarity_insights to identify the specific UX friction causing drop-off
+4. Final answer must cover: (a) what is performing, (b) where the leak is, (c) one specific next action
+
+SEO DIAGNOSIS
+When the user asks about rankings, SEO health, organic traffic, or site issues:
+1. Always call get_seo_report first
+2. If score < 70 or issue count is high → call get_keyword_rankings to check if keyword positions are dropping
+3. If the user asks about competitors or traffic gaps → call run_competitor_analysis
+4. Final answer must cover: top 3 issues ranked by impact, specific fix for the #1 priority
+
+CONTENT & ORGANIC PERFORMANCE
+When the user asks about content performance, what to write, or organic growth:
+1. Call get_analytics_summary to see what is currently driving traffic and engagement
+2. If the question is about content gaps or "what should I create" → call get_competitor_insights to find keyword and topic opportunities
+3. If the user asks about their publishing pipeline or schedule → call get_content_calendar
+4. Final answer must cover: what content is working, what gaps exist, one specific content recommendation
+
+═══ INTELLIGENCE RULES ══════════════════════════════════════════════════════
+
+- Do not stop at surface numbers. If a metric looks bad, investigate WHY before concluding.
+- Do not call tools you do not need. If the first tool answers the question fully, stop there.
+- Never call get_clarity_insights unless GA4 data specifically suggests a landing page or UX problem.
+- Never call get_ga4_analytics for pure ad budget or spend questions — only for conversion quality diagnosis.
+- Always cite specific numbers from tool results (e.g. ROAS: 1.4x, bounce rate: 72%, position: 14.3).
+- Connect findings to business impact relevant to the user's business model:
+  - D2C / Ecommerce: ROAS, CPA, purchase conversion rate, AOV
+  - SaaS: trial/demo conversion, CAC, pipeline quality, MQL volume
+  - Services / Lead Gen: qualified leads, booked calls, cost per lead
+- Final response format: what you found → why it matters → what to do next (keep it concise, use bullet points)`
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -55,12 +82,39 @@ export async function POST(req: NextRequest) {
   if (!message?.trim()) return Response.json({ error: 'Message required' }, { status: 400 })
 
   const SKILL_CONTEXT: Record<string, string> = {
-    'paid-ads': `ACTIVE SKILL: Paid Ads Specialist. Focus on Meta/Google ad performance, ROAS, CPM, CTR, budget optimization, and audience targeting. When analyzing, always look at conversion costs and ROI.`,
-    'email-sequence': `ACTIVE SKILL: Email Marketing Specialist. Focus on subject lines, open rates, click-through rates, email sequence flows, segmentation, and nurture campaigns. Write in a compelling, personal tone.`,
-    'copywriting': `ACTIVE SKILL: Copywriting Specialist. Focus on persuasion, clarity, value proposition, headlines, CTAs, and conversion-oriented copy. Use proven frameworks (AIDA, PAS, FAB) when appropriate.`,
-    'social-content': `ACTIVE SKILL: Social Media Specialist. Focus on platform-specific best practices, engagement, trending formats, hashtag strategy, and content calendars. Optimize for organic reach and audience growth.`,
-    'seo-audit': `ACTIVE SKILL: SEO Specialist. Focus on keyword rankings, technical SEO, content gaps, backlinks, and organic traffic growth. Always call get_seo_report first to ground your analysis in real data.`,
-    'content-strategy': `ACTIVE SKILL: Content Strategist. Focus on content planning, editorial calendars, topic clusters, audience alignment, and distribution channels. Create actionable plans tied to business goals.`,
+    'paid-ads': `ACTIVE SKILL: Paid Ads Specialist.
+Diagnostic chain for this skill:
+1. Call get_meta_ads_performance and/or get_google_ads_performance first — always
+2. If ROAS < 2x or conversions are low → call get_ga4_analytics to determine if the issue is traffic quality or landing page
+3. If GA4 shows bounce > 60% or low engagement → call get_clarity_insights to find UX friction
+4. Deliver: what is performing, what is leaking, one prioritized fix with expected impact`,
+
+    'email-sequence': `ACTIVE SKILL: Email Marketing Specialist.
+Focus on subject lines, open rates, CTR, sequence flows, segmentation, and nurture campaigns.
+Always call get_brand_context first to align tone and audience before generating any email content.
+Write in a compelling, personal tone that matches the brand voice.`,
+
+    'copywriting': `ACTIVE SKILL: Copywriting Specialist.
+Always call get_brand_context first to understand tone, USP, audience, and words to avoid.
+Use proven frameworks (AIDA, PAS, FAB) appropriate to the conversion goal.
+Focus on clarity, value proposition, headlines, and CTAs.`,
+
+    'social-content': `ACTIVE SKILL: Social Media Specialist.
+Always call get_brand_context first to align voice and audience.
+If user asks what to post about → call get_analytics_summary to see what content is currently performing, then call get_competitor_insights to find gaps.
+Focus on platform-specific best practices, engagement hooks, and content that drives the brand's primary conversion goal.`,
+
+    'seo-audit': `ACTIVE SKILL: SEO Specialist.
+Diagnostic chain for this skill:
+1. Always call get_seo_report first
+2. If score < 70 or issues exist → call get_keyword_rankings to identify dropping or stalled positions
+3. If competitor gap question → call run_competitor_analysis
+4. Deliver: top 3 issues ranked by impact, specific fix for #1, keyword opportunity to target next`,
+
+    'content-strategy': `ACTIVE SKILL: Content Strategist.
+Always start with get_analytics_summary to understand what is currently driving traffic.
+Then call get_competitor_insights to find content gaps and keyword opportunities the user is missing.
+Build recommendations around topic clusters aligned to the brand's primary goal and business model.`,
   }
   const skillContext = skillId && SKILL_CONTEXT[skillId] ? `\n\n${SKILL_CONTEXT[skillId]}` : ''
 
@@ -84,6 +138,38 @@ export async function POST(req: NextRequest) {
     connections.facebook?.pageId ? `Facebook (${connections.facebook.pageName || ''})` : null,
   ].filter(Boolean)
 
+  // ── Nango integrations ────────────────────────────────────────────────────
+  const CAPABILITIES: Record<string, string[]> = {
+    shopify: ['orders', 'revenue', 'refunds', 'aov'],
+    hubspot: ['deals', 'pipeline', 'crm_revenue'],
+    stripe:  ['charges', 'subscriptions', 'mrr', 'revenue'],
+  }
+
+  const nangoConns = await NangoConnection.find({ userId, status: 'active' }).lean()
+
+  const integrations: NangoIntegrationContext[] = nangoConns.map(c => ({
+    integration:  c.integration,
+    connectionId: c.connectionId,
+    metadata:     (c.metadata ?? {}) as Record<string, string>,
+    capabilities: CAPABILITIES[c.integration] ?? [],
+  }))
+
+  const integrationContext = integrations.length > 0
+    ? `\n\nCONNECTED INTEGRATIONS:\n` +
+      integrations.map(i =>
+        `- ${i.integration} (capabilities: ${i.capabilities.join(', ')})` +
+        (i.metadata.shopDomain ? ` [${i.metadata.shopDomain}]` : '') +
+        (i.metadata.accountName ? ` [${i.metadata.accountName}]` : '')
+      ).join('\n') +
+      `\n\nINTEGRATION TOOLS AVAILABLE:\n` +
+      (integrations.some(i => i.integration === 'shopify')
+        ? `- get_shopify_orders / get_shopify_revenue: use when user asks about actual sales, real order volume, or to verify ad attribution vs real Shopify data\n` : '') +
+      (integrations.some(i => i.integration === 'hubspot')
+        ? `- get_hubspot_deals: use when user asks about pipeline, deal value, CRM revenue, or lead-to-revenue\n` : '') +
+      (integrations.some(i => i.integration === 'stripe')
+        ? `- get_stripe_revenue: use when user asks about MRR, subscriptions, cash revenue, or payment trends\n` : '')
+    : ''
+
   const businessModel = brand?.businessModel === 'd2c_ecommerce'
     ? 'D2C / Ecommerce'
     : brand?.businessModel === 'services_lead_gen'
@@ -95,7 +181,7 @@ BRAND: ${brand.name} | Product: ${brand.product} | Audience: ${brand.audience} |
 BUSINESS MODEL: ${businessModel} | PRIMARY GOAL: ${brand.primaryGoal || 'not set'} | PRIMARY CONVERSION: ${brand.primaryConversion || 'not set'} | AVG ORDER/DEAL VALUE: ${brand.averageOrderValue || 'unknown'} | PRIMARY CHANNELS: ${Array.isArray(brand.primaryChannels) && brand.primaryChannels.length ? brand.primaryChannels.join(', ') : 'not set'}
 CONNECTED PLATFORMS: ${connectedPlatforms.length > 0 ? connectedPlatforms.join(', ') : 'none yet'}` : 'No brand set up yet.'
 
-  const finalSystem = `${SYSTEM_PROMPT}\n\n${contextSummary}${skillContext}`
+  const finalSystem = `${SYSTEM_PROMPT}\n\n${contextSummary}${integrationContext}${skillContext}`
 
   // Load or create chat session
   let chatSession
@@ -114,17 +200,6 @@ CONNECTED PLATFORMS: ${connectedPlatforms.length > 0 ? connectedPlatforms.join('
   }
 
   const chatSessionId = chatSession._id.toString()
-  // Build raw connections object with access tokens for tool use
-  const rawUser = await mongoose.connection.db!
-    .collection('users')
-    .findOne(
-      { _id: new mongoose.Types.ObjectId(userId) },
-      { projection: { connections: 1 } }
-    ) as { connections?: import('@/lib/agent/tools').RawConnections } | null
-
-  const rawConnections = rawUser?.connections || {}
-
-  const agentContext: AgentContext = { userId, brand, connections: rawConnections }
 
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
@@ -135,6 +210,63 @@ CONNECTED PLATFORMS: ${connectedPlatforms.length > 0 ? connectedPlatforms.join('
 
       try {
         send({ type: 'session', sessionId: chatSessionId })
+        let fullResponse = ''
+        let totalInputTokens = 0
+        let totalOutputTokens = 0
+        let totalEstimatedCostUsd = 0
+
+        // ── Route to Python agent service if configured ───────────────────
+        const agentServiceUrl = process.env.AGENT_SERVICE_URL?.trim()
+        const agentServiceToken = process.env.AGENT_SERVICE_TOKEN?.trim()
+
+        if (agentServiceUrl && agentServiceToken) {
+          const history = (chatSession.messages.slice(-8, -1) as { role: string; content: string }[])
+            .map(m => ({ role: m.role, content: m.content }))
+
+          const agentRes = await fetch(`${agentServiceUrl.replace(/\/$/, '')}/chat`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${agentServiceToken}`,
+            },
+            body: JSON.stringify({ userId, message, history, sessionId: chatSessionId }),
+          })
+
+          if (!agentRes.ok || !agentRes.body) {
+            throw new Error(`Agent service returned ${agentRes.status}`)
+          }
+
+          const reader = agentRes.body.getReader()
+          const decoder = new TextDecoder()
+          let buffer = ''
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() ?? ''
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue
+              try {
+                const event = JSON.parse(line.slice(6))
+                if (event.type === 'delta') fullResponse += event.content ?? ''
+                send(event)
+              } catch { /* skip malformed */ }
+            }
+          }
+        } else {
+
+        // ── Fallback: built-in TS ReAct loop (used when agent service is not running) ──
+        // Build raw connections object with access tokens for tool use
+        const rawUser = await mongoose.connection.db!
+          .collection('users')
+          .findOne(
+            { _id: new mongoose.Types.ObjectId(userId) },
+            { projection: { connections: 1 } }
+          ) as { connections?: import('@/lib/agent/tools').RawConnections } | null
+
+        const rawConnections = rawUser?.connections || {}
+        const agentContext: AgentContext = { userId, brand, connections: rawConnections, integrations }
 
         // Build conversation history (last 8 messages)
         const historyMsgs = (chatSession.messages.slice(-9, -1) as { role: 'user' | 'assistant'; content: string }[])
@@ -148,10 +280,6 @@ CONNECTED PLATFORMS: ${connectedPlatforms.length > 0 ? connectedPlatforms.join('
           { role: 'user', content: message },
         ]
 
-        let fullResponse = ''
-        let totalInputTokens = 0
-        let totalOutputTokens = 0
-        let totalEstimatedCostUsd = 0
         const MAX_ITERATIONS = 6
 
         for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -197,7 +325,6 @@ CONNECTED PLATFORMS: ${connectedPlatforms.length > 0 ? connectedPlatforms.join('
 
                 messages.push({
                   role: 'tool',
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   tool_call_id: tc.id,
                   content: result.content,
                 })
@@ -225,6 +352,7 @@ CONNECTED PLATFORMS: ${connectedPlatforms.length > 0 ? connectedPlatforms.join('
             break
           }
         }
+        } // end else (fallback TS loop)
 
         // Persist assistant response
         if (fullResponse) {

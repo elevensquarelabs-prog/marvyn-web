@@ -1,6 +1,8 @@
 import { connectDB } from '@/lib/mongodb'
 import { llm } from '@/lib/llm'
 import { skills } from '@/lib/skills'
+import { buildCacheKey, getCachedIntegrationResult, setCachedIntegrationResult } from '@/lib/integration-cache'
+import { nangoGet } from '@/lib/nango'
 import Brand from '@/models/Brand'
 import BlogPost from '@/models/BlogPost'
 import SocialPost from '@/models/SocialPost'
@@ -10,21 +12,31 @@ import mongoose from 'mongoose'
 import axios from 'axios'
 import { getAdsInsightsForUser } from '@/lib/ads-performance'
 import { publishToLinkedIn, publishToFacebook, publishToInstagram } from '@/lib/social-publish'
+import { getValidGoogleToken } from '@/lib/google-auth'
 
 export interface RawConnections {
   meta?: { accessToken?: string; accountId?: string; accountName?: string }
   google?: { accessToken?: string; refreshToken?: string; customerId?: string }
   searchConsole?: { accessToken?: string; refreshToken?: string; siteUrl?: string }
+  ga4?: { accessToken?: string; refreshToken?: string; propertyId?: string; propertyName?: string; accountName?: string; connectedAt?: Date }
   linkedin?: { accessToken?: string; profileId?: string; profileName?: string; pageId?: string; pageName?: string; adAccountId?: string }
   facebook?: { pageAccessToken?: string; accessToken?: string; pageId?: string; pageName?: string }
   instagram?: { accountId?: string }
   clarity?: { projectId?: string; apiToken?: string; clarityCache?: { data?: Record<string, unknown>; cachedAt?: Date } }
 }
 
+export interface NangoIntegrationContext {
+  integration: string
+  connectionId: string
+  metadata: Record<string, string>
+  capabilities: string[]
+}
+
 export interface AgentContext {
   userId: string
   brand: Record<string, unknown> | null
   connections: RawConnections
+  integrations: NangoIntegrationContext[]
 }
 
 export interface ToolResult {
@@ -40,7 +52,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'get_brand_context',
-      description: 'Get full brand details: name, product, audience, tone, USP, website, currency, connected platforms, and competitor list.',
+      description: 'Get full brand details: name, product, audience, tone, USP, website, currency, connected platforms, and competitor list. Call this when you need business model, audience, or tone context to interpret other data correctly — or before generating any content. Usually the first call when brand context is missing.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -48,7 +60,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'get_seo_report',
-      description: 'Get the latest SEO audit report including score, issues, competitors, keyword data, and AI recommendations. Use this to answer questions about site health, rankings, or what to improve.',
+      description: 'Get the latest SEO audit: score, issues by severity, keyword data, and AI recommendations. ALWAYS call this first for any SEO question — never skip to other SEO tools without calling this first. If the score is below 70 or issue count is high, follow up with get_keyword_rankings to check if positions are dropping.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -56,7 +68,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'run_seo_audit',
-      description: 'Check if a fresh SEO audit is needed and return the current audit status. If the audit is stale (>7 days old), advise the user to run a fresh one from the SEO workspace.',
+      description: 'Check if a fresh SEO audit is needed and return current audit status. Call this ONLY if get_seo_report returns stale data (older than 7 days) or the user explicitly asks to run a new audit. Do not call this as a first step — always call get_seo_report first.',
       parameters: {
         type: 'object',
         properties: {
@@ -70,7 +82,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'get_keyword_rankings',
-      description: 'Get GSC keyword rankings: clicks, impressions, CTR, and position for the connected website.',
+      description: 'Get GSC keyword rankings: clicks, impressions, CTR, and average position. Call this AFTER get_seo_report when: (a) SEO score is below 70, (b) the user asks about specific keyword positions, or (c) organic traffic appears to be dropping. Do not call this without first calling get_seo_report.',
       parameters: {
         type: 'object',
         properties: {
@@ -85,7 +97,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'get_analytics_summary',
-      description: 'Get organic search analytics: keyword rankings, click data from Google Search Console, and content performance stats (blog/social post counts).',
+      description: 'Get organic search performance: GSC click data, keyword traffic trends, and content output stats. Call this first for questions about organic traffic, content performance, or what is driving site visits. If results show traffic is flat or dropping, follow up with get_competitor_insights to find gaps.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -93,7 +105,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'get_competitor_insights',
-      description: 'Get competitor intelligence: domains being tracked, their organic traffic, keyword counts, and how they compare to the user\'s site.',
+      description: 'Get competitor intelligence: tracked competitor domains, their organic traffic, keyword counts, and comparison to the user\'s site. Call this AFTER get_analytics_summary or get_seo_report when: (a) user asks what content to create, (b) organic traffic is flat or dropping, or (c) user asks how they compare to competitors.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -101,7 +113,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'run_competitor_analysis',
-      description: 'Deep competitor analysis: compare your SEO metrics to each competitor, identify their strengths and weaknesses, and surface opportunities.',
+      description: 'Deep competitor SEO comparison: keyword gaps, traffic differences, and content opportunities. Call this when the user explicitly asks for competitor analysis or when get_seo_report shows the user is losing ground to specific competitors. More detailed and slower than get_competitor_insights.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -109,7 +121,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'get_meta_ads_performance',
-      description: 'Get Meta (Facebook/Instagram) Ads performance: total spend, clicks, impressions, ROAS, CPM, and top campaigns for a date range.',
+      description: 'Get Meta (Facebook/Instagram) Ads performance: total spend, clicks, impressions, ROAS, CPM, CTR, and top campaigns. Call this FIRST for any Meta or Facebook or Instagram ads question. After reviewing results: if ROAS is below 2x or conversions are lower than expected, call get_ga4_analytics next to check whether the problem is traffic quality or landing page conversion.',
       parameters: {
         type: 'object',
         properties: {
@@ -123,7 +135,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'get_google_ads_performance',
-      description: 'Get Google Ads performance: total spend, clicks, impressions, conversions, ROAS, and top campaigns for a date range.',
+      description: 'Get Google Ads performance: total spend, clicks, impressions, conversions, ROAS, and top campaigns. Call this FIRST for any Google Ads question. After reviewing results: if ROAS is below 2x or conversion volume is low, call get_ga4_analytics next to determine whether the problem is at the ad level or the landing page level.',
       parameters: {
         type: 'object',
         properties: {
@@ -137,15 +149,29 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'get_linkedin_analytics',
-      description: 'Get LinkedIn post activity: published posts, recent content, and engagement summary.',
+      description: 'Get LinkedIn post activity: published posts, recent content, and engagement summary. Call this for LinkedIn-specific content performance questions or when the user asks about their LinkedIn presence.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
   {
     type: 'function' as const,
     function: {
+      name: 'get_ga4_analytics',
+      description: 'Get GA4 session and conversion data: sessions, users, engaged sessions, conversions, bounce rate by channel and landing page. Call this ONLY AFTER get_meta_ads_performance or get_google_ads_performance, and ONLY when: ROAS is below target, conversion volume is low, or you need to determine if the problem is traffic quality vs landing page performance. After reviewing results: if bounce rate is above 60% or landing page conversion rate is very low, call get_clarity_insights to find the specific UX friction. Do NOT call this for pure ad spend or budget questions.',
+      parameters: {
+        type: 'object',
+        properties: {
+          days: { type: 'number', description: 'Number of days to look back (default 30)' },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'get_clarity_insights',
-      description: 'Get Microsoft Clarity UX behavior insights: sessions, scroll depth, dead clicks, rage clicks by device/browser, and AI UX analysis.',
+      description: 'Get Microsoft Clarity UX behavior data: scroll depth, rage clicks, dead clicks, session counts by device and browser, plus AI UX analysis. Call this ONLY AFTER get_ga4_analytics, and ONLY when GA4 shows: bounce rate above 60%, low average engagement time, or poor on-page conversion rate. Use it to identify the specific UX friction (e.g. rage clicks on CTA, low scroll depth on landing page) that explains why paid traffic is not converting. Do NOT call this for general questions or without GA4 data first.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -153,7 +179,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'get_content_calendar',
-      description: 'Get the content calendar: scheduled posts, pending approval drafts, and recent published content across blog and social.',
+      description: 'Get the content calendar: scheduled posts, drafts pending approval, and recently published content across blog and social. Call this when the user asks about their content pipeline, what is scheduled, or what has been published recently.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -162,7 +188,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'generate_blog_post',
-      description: 'Generate a complete SEO-optimized blog post draft and save it for review. Returns the title and ID of the created draft.',
+      description: 'Generate a complete SEO-optimized blog post draft and save it for the user to review. Returns the title and ID of the created draft. When generating based on SEO data, use the target keyword from get_keyword_rankings or get_seo_report gaps.',
       parameters: {
         type: 'object',
         properties: {
@@ -178,7 +204,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'generate_social_post',
-      description: 'Generate a social media post draft and save it for review. Returns a preview and the post ID.',
+      description: 'Generate a social media post draft and save it for review. Returns a preview and the post ID. Call get_brand_context first if you do not already have brand tone and audience context.',
       parameters: {
         type: 'object',
         properties: {
@@ -195,7 +221,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'publish_post',
-      description: 'Publish a saved social media post immediately to LinkedIn, Facebook, or Instagram. Requires the post ID from generate_social_post or the content calendar.',
+      description: 'Publish a saved social media post immediately to LinkedIn, Facebook, or Instagram. Requires the post ID from generate_social_post or get_content_calendar. Always confirm the post exists before calling this.',
       parameters: {
         type: 'object',
         properties: {
@@ -209,7 +235,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'schedule_post',
-      description: 'Schedule a saved social media post to be published at a specific date and time.',
+      description: 'Schedule a saved social media post to be published at a specific date and time. Requires the post ID from generate_social_post or get_content_calendar.',
       parameters: {
         type: 'object',
         properties: {
@@ -225,7 +251,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'get_alerts',
-      description: 'Get the user\'s unread proactive alerts: traffic drops, content gaps, weekly digests, and budget alerts. Call this when the user asks about notifications, alerts, or what Marvyn has detected automatically.',
+      description: 'Get the user\'s unread proactive alerts: traffic drops, content gaps, weekly digests, and budget anomalies. Call this when the user asks about notifications, alerts, or what Marvyn has automatically detected.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -248,7 +274,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'update_brand_info',
-      description: 'Update a brand profile field. Use when the user wants to change their brand name, product description, target audience, tone, USP, website URL, words to avoid, or currency.',
+      description: 'Update a brand profile field. Call this when the user explicitly asks to change their brand name, product description, target audience, tone, USP, website URL, words to avoid, or currency.',
       parameters: {
         type: 'object',
         properties: {
@@ -260,6 +286,65 @@ export const TOOL_DEFINITIONS = [
           value: { type: 'string', description: 'New value for the field' },
         },
         required: ['field', 'value'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_shopify_orders',
+      description: 'Fetch recent Shopify orders: order IDs, totals, status, source, line items. Call this when the user asks about actual sales, real conversion volume, or wants to cross-reference ad-reported conversions against real Shopify orders. Requires Shopify to be connected.',
+      parameters: {
+        type: 'object',
+        properties: {
+          days:   { type: 'number', description: 'Look back N days (default 30, max 90)' },
+          limit:  { type: 'number', description: 'Number of orders to return (default 50, max 250)' },
+          status: { type: 'string', enum: ['any', 'open', 'closed', 'cancelled'], description: 'Order status filter (default: any)' },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_shopify_revenue',
+      description: 'Fetch aggregated Shopify revenue summary: total revenue, AOV, order count. Call this when the user asks about total sales, average order value, or revenue trends. Use instead of get_shopify_orders when aggregate numbers are sufficient.',
+      parameters: {
+        type: 'object',
+        properties: {
+          days: { type: 'number', description: 'Look back N days (default 30, max 90)' },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_hubspot_deals',
+      description: 'Fetch open HubSpot deals: deal name, value, pipeline stage, close date. Call this when the user asks about pipeline health, deal flow, CRM revenue potential, or wants to understand their sales funnel performance.',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: { type: 'number', description: 'Number of deals to return (default 50, max 100)' },
+          stage: { type: 'string', description: 'Filter by pipeline stage name (optional)' },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_stripe_revenue',
+      description: 'Fetch Stripe revenue data: MRR estimate, total charges, subscription count, recent transactions. Call this when the user asks about recurring revenue, subscription health, cash collection, or payment trends.',
+      parameters: {
+        type: 'object',
+        properties: {
+          days: { type: 'number', description: 'Look back N days for charges (default 30, max 90)' },
+        },
+        required: [],
       },
     },
   },
@@ -275,6 +360,7 @@ export const TOOL_LABELS: Record<string, string> = {
   run_competitor_analysis: 'Running competitor analysis…',
   get_meta_ads_performance: 'Fetching Meta Ads data…',
   get_google_ads_performance: 'Fetching Google Ads data…',
+  get_ga4_analytics: 'Fetching GA4 analytics…',
   get_linkedin_analytics: 'Loading LinkedIn activity…',
   get_clarity_insights: 'Reading Clarity insights…',
   get_content_calendar: 'Loading content calendar…',
@@ -285,6 +371,10 @@ export const TOOL_LABELS: Record<string, string> = {
   update_brand_info: 'Updating brand profile…',
   get_alerts: 'Checking alerts…',
   dismiss_alert: 'Dismissing alert…',
+  get_shopify_orders:  'Fetching Shopify orders…',
+  get_shopify_revenue: 'Fetching Shopify revenue…',
+  get_hubspot_deals:   'Fetching HubSpot deals…',
+  get_stripe_revenue:  'Fetching Stripe revenue…',
 }
 
 // ── Tool Executors ─────────────────────────────────────────────────────────────
@@ -723,6 +813,125 @@ async function get_google_ads_performance(
         ? 'Google Ads requires Standard Access approval for the developer token — contact Google Ads API support.'
         : `Google Ads fetch failed: ${String(detail).slice(0, 120)}`,
       content: JSON.stringify({ error: detail, connected: true, isDevTokenIssue: isDevToken }),
+    }
+  }
+}
+
+interface Ga4MetricValue { value: string }
+interface Ga4DimensionValue { value: string }
+interface Ga4Row {
+  dimensionValues?: Ga4DimensionValue[]
+  metricValues?: Ga4MetricValue[]
+}
+function toNumber(value?: string) {
+  const n = Number(value ?? 0)
+  return Number.isFinite(n) ? n : 0
+}
+
+async function get_ga4_analytics(
+  args: { days?: number },
+  context: AgentContext
+): Promise<ToolResult> {
+  const ga4 = context.connections.ga4
+  if (!ga4?.accessToken) {
+    return {
+      summary: 'GA4 not connected.',
+      content: JSON.stringify({ connected: false, message: 'Connect GA4 in Settings > Connections to see conversion and session data.' }),
+    }
+  }
+  if (!ga4.propertyId) {
+    return {
+      summary: 'GA4 connected but no property selected.',
+      content: JSON.stringify({ connected: true, configured: false, message: 'Select a GA4 property in Settings before running analytics.' }),
+    }
+  }
+
+  const accessToken = await getValidGoogleToken(context.userId, 'ga4')
+  if (!accessToken) {
+    return {
+      summary: 'GA4 token refresh failed.',
+      content: JSON.stringify({ connected: true, configured: true, message: 'Reconnect GA4 in Settings to refresh access.' }),
+    }
+  }
+
+  const days = args.days || 30
+  const endpoint = `https://analyticsdata.googleapis.com/v1beta/properties/${ga4.propertyId}:runReport`
+  const headers = { Authorization: `Bearer ${accessToken}` }
+  const range = [{ startDate: `${days}daysAgo`, endDate: 'yesterday' }]
+
+  try {
+    const [overviewRes, channelRes, landingPageRes] = await Promise.all([
+      axios.post(endpoint, {
+        dateRanges: range,
+        metrics: [
+          { name: 'sessions' },
+          { name: 'totalUsers' },
+          { name: 'engagedSessions' },
+          { name: 'conversions' },
+          { name: 'bounceRate' },
+        ],
+      }, { headers }),
+      axios.post(endpoint, {
+        dateRanges: range,
+        dimensions: [{ name: 'sessionSourceMedium' }],
+        metrics: [{ name: 'sessions' }, { name: 'conversions' }],
+        orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+        limit: 8,
+      }, { headers }),
+      axios.post(endpoint, {
+        dateRanges: range,
+        dimensions: [{ name: 'landingPagePlusQueryString' }],
+        metrics: [{ name: 'sessions' }, { name: 'conversions' }, { name: 'engagementRate' }, { name: 'bounceRate' }],
+        orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+        limit: 8,
+      }, { headers }),
+    ])
+
+    const ov = overviewRes.data.totals?.[0]?.metricValues || []
+    const bounceRate = Math.round(toNumber(ov[4]?.value) * 10000) / 100
+
+    const byChannel = ((channelRes.data.rows || []) as Ga4Row[]).map(row => ({
+      channel: row.dimensionValues?.[0]?.value || 'Unknown',
+      sessions: toNumber(row.metricValues?.[0]?.value),
+      conversions: toNumber(row.metricValues?.[1]?.value),
+    }))
+
+    const topLandingPages = ((landingPageRes.data.rows || []) as Ga4Row[]).map(row => ({
+      path: row.dimensionValues?.[0]?.value || '/',
+      sessions: toNumber(row.metricValues?.[0]?.value),
+      conversions: toNumber(row.metricValues?.[1]?.value),
+      engagementRate: Math.round(toNumber(row.metricValues?.[2]?.value) * 10000) / 100,
+      bounceRate: Math.round(toNumber(row.metricValues?.[3]?.value) * 10000) / 100,
+    }))
+
+    const overview = {
+      sessions: toNumber(ov[0]?.value),
+      users: toNumber(ov[1]?.value),
+      engagedSessions: toNumber(ov[2]?.value),
+      conversions: toNumber(ov[3]?.value),
+      bounceRate,
+    }
+
+    return {
+      summary: `GA4 (${days}d): ${overview.sessions} sessions | ${overview.conversions} conversions | bounce ${overview.bounceRate}% | ${byChannel.length} channels`,
+      content: JSON.stringify({
+        connected: true,
+        configured: true,
+        propertyId: ga4.propertyId,
+        propertyName: ga4.propertyName || '',
+        dateRangeDays: days,
+        overview,
+        byChannel,
+        topLandingPages,
+      }),
+    }
+  } catch (err) {
+    const detail = axios.isAxiosError(err)
+      ? JSON.stringify(err.response?.data || err.message)
+      : String(err)
+    return {
+      summary: `GA4 fetch failed: ${detail.slice(0, 120)}`,
+      content: JSON.stringify({ connected: true, configured: true, propertyId: ga4.propertyId, error: detail }),
     }
   }
 }
@@ -1238,6 +1447,147 @@ async function dismiss_alert(
   }
 }
 
+// ── Nango Integration Tools ───────────────────────────────────────────────────
+
+async function get_shopify_orders(
+  args: { days?: number; limit?: number; status?: string },
+  context: AgentContext,
+): Promise<ToolResult> {
+  const conn = context.integrations.find(i => i.integration === 'shopify')
+  if (!conn) return { summary: 'Shopify not connected', content: 'Shopify integration is not connected. Ask the user to connect it from the Integrations page.' }
+
+  const days   = Math.min(args.days ?? 30, 90)
+  const limit  = Math.min(args.limit ?? 50, 250)
+  const status = args.status ?? 'any'
+
+  const cacheKey = buildCacheKey(context.userId, 'shopify', 'orders', { days, limit, status })
+  const cached   = await getCachedIntegrationResult(cacheKey)
+  if (cached) return cached as ToolResult
+
+  const createdAtMin = new Date(Date.now() - days * 86400000).toISOString()
+  const data = await nangoGet(conn.connectionId, 'shopify', '/admin/api/2024-01/orders.json', {
+    status,
+    limit:          String(limit),
+    created_at_min: createdAtMin,
+  }) as { orders?: Array<Record<string, unknown>> }
+
+  const orders  = data.orders ?? []
+  const summary = `Fetched ${orders.length} Shopify orders (last ${days} days)`
+  const content = JSON.stringify({ orderCount: orders.length, orders: orders.slice(0, 20) })
+
+  const result: ToolResult = { summary, content }
+  await setCachedIntegrationResult(cacheKey, result)
+  return result
+}
+
+async function get_shopify_revenue(
+  args: { days?: number },
+  context: AgentContext,
+): Promise<ToolResult> {
+  const conn = context.integrations.find(i => i.integration === 'shopify')
+  if (!conn) return { summary: 'Shopify not connected', content: 'Shopify integration is not connected.' }
+
+  const days     = Math.min(args.days ?? 30, 90)
+  const cacheKey = buildCacheKey(context.userId, 'shopify', 'revenue', { days })
+  const cached   = await getCachedIntegrationResult(cacheKey)
+  if (cached) return cached as ToolResult
+
+  const createdAtMin = new Date(Date.now() - days * 86400000).toISOString()
+  const data = await nangoGet(conn.connectionId, 'shopify', '/admin/api/2024-01/orders.json', {
+    status:           'any',
+    limit:            '250',
+    created_at_min:   createdAtMin,
+    financial_status: 'paid',
+  }) as { orders?: Array<{ total_price?: string }> }
+
+  const orders       = data.orders ?? []
+  const totalRevenue = orders.reduce((sum, o) => sum + parseFloat(o.total_price ?? '0'), 0)
+  const aov          = orders.length > 0 ? totalRevenue / orders.length : 0
+
+  const summary = `Shopify revenue last ${days}d: $${totalRevenue.toFixed(2)} across ${orders.length} paid orders (AOV $${aov.toFixed(2)})`
+  const content = JSON.stringify({ days, orderCount: orders.length, totalRevenue: totalRevenue.toFixed(2), aov: aov.toFixed(2) })
+
+  const result: ToolResult = { summary, content }
+  await setCachedIntegrationResult(cacheKey, result)
+  return result
+}
+
+async function get_hubspot_deals(
+  args: { limit?: number; stage?: string },
+  context: AgentContext,
+): Promise<ToolResult> {
+  const conn = context.integrations.find(i => i.integration === 'hubspot')
+  if (!conn) return { summary: 'HubSpot not connected', content: 'HubSpot integration is not connected.' }
+
+  const limit    = Math.min(args.limit ?? 50, 100)
+  const cacheKey = buildCacheKey(context.userId, 'hubspot', 'deals', { limit, stage: args.stage })
+  const cached   = await getCachedIntegrationResult(cacheKey)
+  if (cached) return cached as ToolResult
+
+  const params: Record<string, string> = {
+    limit:      String(limit),
+    properties: 'dealname,amount,dealstage,closedate,hubspot_owner_id',
+    archived:   'false',
+  }
+  if (args.stage) params.dealstage = args.stage
+
+  const data = await nangoGet(conn.connectionId, 'hubspot', '/crm/v3/objects/deals', params) as {
+    results?: Array<{ id: string; properties: Record<string, string> }>
+  }
+
+  const deals      = data.results ?? []
+  const totalValue = deals.reduce((sum, d) => sum + parseFloat(d.properties.amount ?? '0'), 0)
+  const summary    = `Fetched ${deals.length} HubSpot deals, total pipeline value: $${totalValue.toFixed(2)}`
+  const content    = JSON.stringify({ dealCount: deals.length, totalPipelineValue: totalValue.toFixed(2), deals: deals.slice(0, 20) })
+
+  const result: ToolResult = { summary, content }
+  await setCachedIntegrationResult(cacheKey, result)
+  return result
+}
+
+async function get_stripe_revenue(
+  args: { days?: number },
+  context: AgentContext,
+): Promise<ToolResult> {
+  const conn = context.integrations.find(i => i.integration === 'stripe')
+  if (!conn) return { summary: 'Stripe not connected', content: 'Stripe integration is not connected.' }
+
+  const days         = Math.min(args.days ?? 30, 90)
+  const cacheKey     = buildCacheKey(context.userId, 'stripe', 'revenue', { days })
+  const cached       = await getCachedIntegrationResult(cacheKey)
+  if (cached) return cached as ToolResult
+
+  const createdAfter = Math.floor((Date.now() - days * 86400000) / 1000)
+
+  const chargesData = await nangoGet(conn.connectionId, 'stripe', '/v1/charges', {
+    limit:   '100',
+    created: String(createdAfter),
+  }) as { data?: Array<{ amount: number; status: string }> }
+
+  const subsData = await nangoGet(conn.connectionId, 'stripe', '/v1/subscriptions', {
+    limit:  '100',
+    status: 'active',
+  }) as { data?: Array<{ plan?: { amount?: number; interval?: string } }> }
+
+  const charges          = chargesData.data ?? []
+  const subs             = subsData.data ?? []
+  const successfulCharges = charges.filter(c => c.status === 'succeeded')
+  const totalRevenue     = successfulCharges.reduce((sum, c) => sum + c.amount, 0) / 100
+  const mrrCents         = subs.reduce((sum, s) => {
+    const amount   = s.plan?.amount ?? 0
+    const interval = s.plan?.interval ?? 'month'
+    return sum + (interval === 'year' ? Math.round(amount / 12) : amount)
+  }, 0)
+  const mrr = mrrCents / 100
+
+  const summary = `Stripe last ${days}d: $${totalRevenue.toFixed(2)} revenue, ${subs.length} active subscriptions, MRR ~$${mrr.toFixed(2)}`
+  const content = JSON.stringify({ days, totalRevenue: totalRevenue.toFixed(2), chargeCount: successfulCharges.length, activeSubscriptions: subs.length, estimatedMrr: mrr.toFixed(2) })
+
+  const result: ToolResult = { summary, content }
+  await setCachedIntegrationResult(cacheKey, result)
+  return result
+}
+
 // ── Dispatcher ─────────────────────────────────────────────────────────────────
 
 export async function executeTool(
@@ -1264,6 +1614,8 @@ export async function executeTool(
       return get_meta_ads_performance(args as { days?: number }, context)
     case 'get_google_ads_performance':
       return get_google_ads_performance(args as { days?: number }, context)
+    case 'get_ga4_analytics':
+      return get_ga4_analytics(args as { days?: number }, context)
     case 'get_linkedin_analytics':
       return get_linkedin_analytics(context)
     case 'get_clarity_insights':
@@ -1284,6 +1636,14 @@ export async function executeTool(
       return get_alerts(context)
     case 'dismiss_alert':
       return dismiss_alert(args as { alert_id: string }, context)
+    case 'get_shopify_orders':
+      return get_shopify_orders(args as { days?: number; limit?: number; status?: string }, context)
+    case 'get_shopify_revenue':
+      return get_shopify_revenue(args as { days?: number }, context)
+    case 'get_hubspot_deals':
+      return get_hubspot_deals(args as { limit?: number; stage?: string }, context)
+    case 'get_stripe_revenue':
+      return get_stripe_revenue(args as { days?: number }, context)
     default:
       return { summary: `Unknown tool: ${name}`, content: `Tool "${name}" not found.` }
   }
