@@ -6,10 +6,11 @@ import {
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 
-interface DailyEntry { date: string; meta: number; google: number }
+interface DailyEntry { date: string; meta: number; google: number; linkedin: number }
 interface PlatformBreakdown {
   meta: { spend: number; impressions: number }
   google: { spend: number; impressions: number }
+  linkedin: { spend: number; impressions: number }
 }
 
 function fmtDate(iso: string) {
@@ -24,7 +25,8 @@ function SkeletonBlock({ h = 'h-40' }: { h?: string }) {
 
 function PlatformBar({ platform, spend, total, color, symbol }: { platform: string; spend: number; total: number; color: string; symbol: string }) {
   const pct = total > 0 ? (spend / total) * 100 : 0
-  const logos: Record<string, string> = { meta: 'M', google: 'G' }
+  const logos: Record<string, string> = { meta: 'M', google: 'G', linkedin: 'in' }
+  const labels: Record<string, string> = { meta: 'Meta Ads', google: 'Google Ads', linkedin: 'LinkedIn Ads' }
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-xs">
@@ -32,7 +34,7 @@ function PlatformBar({ platform, spend, total, color, symbol }: { platform: stri
           <span className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-white`} style={{ background: color }}>
             {logos[platform]}
           </span>
-          <span className="text-[#A0A0A0] capitalize">{platform === 'meta' ? 'Meta Ads' : 'Google Ads'}</span>
+          <span className="text-[#A0A0A0] capitalize">{labels[platform] ?? platform}</span>
         </div>
         <div className="text-right">
           <span className="text-white font-medium">{fmtCurrency(spend, symbol)}</span>
@@ -73,14 +75,16 @@ function renderTooltip(symbol: string) {
 }
 
 export function SpendChart({ dailySpend, platformBreakdown, loading, symbol }: Props) {
-  const totalSpend = platformBreakdown.meta.spend + platformBreakdown.google.spend
+  const totalSpend = platformBreakdown.meta.spend + platformBreakdown.google.spend + platformBreakdown.linkedin.spend
   const hasMeta = platformBreakdown.meta.spend > 0
   const hasGoogle = platformBreakdown.google.spend > 0
+  const hasLinkedIn = platformBreakdown.linkedin.spend > 0
 
   const chartData = dailySpend.map(d => ({
     date: fmtDate(d.date),
     Meta: parseFloat(d.meta.toFixed(2)),
     Google: parseFloat(d.google.toFixed(2)),
+    LinkedIn: parseFloat((d.linkedin ?? 0).toFixed(2)),
   }))
 
   return (
@@ -99,6 +103,7 @@ export function SpendChart({ dailySpend, platformBreakdown, loading, symbol }: P
           <div className="space-y-5">
             {hasMeta && <PlatformBar platform="meta" spend={platformBreakdown.meta.spend} total={totalSpend} color="#1877F2" symbol={symbol} />}
             {hasGoogle && <PlatformBar platform="google" spend={platformBreakdown.google.spend} total={totalSpend} color="#34A853" symbol={symbol} />}
+            {hasLinkedIn && <PlatformBar platform="linkedin" spend={platformBreakdown.linkedin.spend} total={totalSpend} color="#0A66C2" symbol={symbol} />}
             <div className="pt-3 border-t border-[#1E1E1E] flex justify-between text-xs">
               <span className="text-[#555]">Total</span>
               <span className="text-white font-semibold">{fmtCurrency(totalSpend, symbol)}</span>
@@ -141,6 +146,7 @@ export function SpendChart({ dailySpend, platformBreakdown, loading, symbol }: P
               />
               {hasMeta && <Line type="monotone" dataKey="Meta" stroke="#1877F2" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />}
               {hasGoogle && <Line type="monotone" dataKey="Google" stroke="#34A853" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />}
+              {hasLinkedIn && <Line type="monotone" dataKey="LinkedIn" stroke="#0A66C2" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />}
             </LineChart>
           </ResponsiveContainer>
         )}

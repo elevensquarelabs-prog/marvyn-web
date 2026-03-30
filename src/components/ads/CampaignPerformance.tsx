@@ -5,7 +5,7 @@ import { fmtCurrency } from '@/lib/currency'
 export interface CampaignInsight {
   id: string
   name: string
-  platform: 'meta' | 'google'
+  platform: 'meta' | 'google' | 'linkedin'
   status: string
   spend: number
   impressions: number
@@ -23,11 +23,15 @@ function truncate(s: string, n = 30) {
 }
 
 function PlatformBadge({ platform }: { platform: string }) {
+  const styles: Record<string, string> = {
+    meta: 'bg-blue-900/30 text-blue-400',
+    google: 'bg-green-900/30 text-green-400',
+    linkedin: 'bg-sky-900/30 text-sky-400',
+  }
+  const labels: Record<string, string> = { meta: 'Meta', google: 'Google', linkedin: 'LinkedIn' }
   return (
-    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
-      platform === 'meta' ? 'bg-blue-900/30 text-blue-400' : 'bg-green-900/30 text-green-400'
-    }`}>
-      {platform === 'meta' ? 'Meta' : 'Google'}
+    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${styles[platform] ?? 'bg-[#1E1E1E] text-[#555]'}`}>
+      {labels[platform] ?? platform}
     </span>
   )
 }

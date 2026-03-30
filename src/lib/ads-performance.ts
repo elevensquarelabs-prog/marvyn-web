@@ -1,4 +1,5 @@
 import axios from 'axios'
+import mongoose from 'mongoose'
 import Brand from '@/models/Brand'
 import User from '@/models/User'
 import { connectDB } from '@/lib/mongodb'
@@ -8,7 +9,7 @@ import { makeConnectionError, parseMetaApiError, type ConnectionError } from '@/
 export interface CampaignInsight {
   id: string
   name: string
-  platform: 'meta' | 'google'
+  platform: 'meta' | 'google' | 'linkedin'
   status: string
   spend: number
   impressions: number
@@ -24,6 +25,7 @@ export interface DailyEntry {
   date: string
   meta: number
   google: number
+  linkedin: number
 }
 
 export interface AdsInsightsPayload {
@@ -40,18 +42,20 @@ export interface AdsInsightsPayload {
   platformBreakdown: {
     meta: { spend: number; impressions: number; clicks: number; conversions: number; revenue: number }
     google: { spend: number; impressions: number; clicks: number; conversions: number; revenue: number }
+    linkedin: { spend: number; impressions: number; clicks: number; conversions: number; revenue: number }
   }
   previous: { spend: number; impressions: number; clicks: number; conversions: number; roas: number | null }
   errors: string[]
   connectionErrors: ConnectionError[]
   allPaused: boolean
-  connected: { meta: boolean; google: boolean }
+  connected: { meta: boolean; google: boolean; linkedin: boolean }
   currency: string
 }
 
 type UserConnections = {
   meta?: { accessToken?: string; accountId?: string; accountName?: string }
   google?: { customerId?: string }
+  linkedin?: { accessToken?: string; adAccountId?: string; adAccountName?: string }
 }
 
 function fmt(d: Date) {
@@ -152,6 +156,7 @@ export async function getAdsInsightsForUser(params: {
 
   const meta = user?.connections?.meta
   const google = user?.connections?.google
+  const linkedin = user?.connections?.linkedin
   const convTypes = ['purchase', 'omni_purchase', 'complete_registration', 'lead']
   const revTypes = ['purchase', 'omni_purchase']
 
@@ -190,7 +195,7 @@ export async function getAdsInsightsForUser(params: {
       for (const row of (insRes.data.data ?? [])) {
         const date = row.date_start as string
         const spend = parseFloat(row.spend ?? '0')
-        const entry = dailyMap.get(date) ?? { date, meta: 0, google: 0 }
+        const entry = dailyMap.get(date) ?? { date, meta: 0, google: 0, linkedin: 0 }
         entry.meta += spend
         dailyMap.set(date, entry)
 
@@ -282,7 +287,7 @@ export async function getAdsInsightsForUser(params: {
       }>) {
         const date = row.segments?.date || curr.until
         const spend = Number(row.metrics?.costMicros || 0) / 1_000_000
-        const entry = dailyMap.get(date) ?? { date, meta: 0, google: 0 }
+        const entry = dailyMap.get(date) ?? { date, meta: 0, google: 0, linkedin: 0 }
         entry.google += spend
         dailyMap.set(date, entry)
 
@@ -332,6 +337,94 @@ export async function getAdsInsightsForUser(params: {
     }
   }
 
+  // ─── LinkedIn Ads ──────────────────────────────────────────────────────────
+  if (linkedin?.accessToken && linkedin.adAccountId) {
+    try {
+      const liHeaders = {
+        Authorization: `Bearer ${linkedin.accessToken}`,
+        'LinkedIn-Version': '202504',
+        'X-Restli-Protocol-Version': '2.0.0',
+      }
+      const accountUrn = `urn:li:sponsoredAccount:${linkedin.adAccountId}`
+      const [sy, sm, sd] = curr.since.split('-').map(Number)
+      const [ey, em, ed] = curr.until.split('-').map(Number)
+      const [psy, psm, psd] = prev.since.split('-').map(Number)
+      const [pey, pem, ped] = prev.until.split('-').map(Number)
+      const dateRangeCurr = `(start:(year:${sy},month:${sm},day:${sd}),end:(year:${ey},month:${em},day:${ed}))`
+      const dateRangePrev = `(start:(year:${psy},month:${psm},day:${psd}),end:(year:${pey},month:${pem},day:${ped}))`
+      const dateRangeDaily = dateRangeCurr
+      const accounts = `List(${accountUrn})`
+
+      const campAnalyticsUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=CAMPAIGN&dateRange=${encodeURIComponent(dateRangeCurr)}&timeGranularity=ALL&accounts=${encodeURIComponent(accounts)}&fields=costInLocalCurrency,impressions,clicks,externalWebsiteConversions,pivotValues`
+      const dailyUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=ACCOUNT&dateRange=${encodeURIComponent(dateRangeDaily)}&timeGranularity=DAILY&accounts=${encodeURIComponent(accounts)}&fields=costInLocalCurrency,dateRange`
+      const prevUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=ACCOUNT&dateRange=${encodeURIComponent(dateRangePrev)}&timeGranularity=ALL&accounts=${encodeURIComponent(accounts)}&fields=costInLocalCurrency,impressions,clicks,externalWebsiteConversions`
+      const campListUrl = `https://api.linkedin.com/rest/adCampaigns?q=search&accounts=${encodeURIComponent(accounts)}`
+
+      const [campAnalyticsRes, dailyRes, prevRes, campListRes] = await Promise.all([
+        axios.get(campAnalyticsUrl, { headers: liHeaders }),
+        axios.get(dailyUrl, { headers: liHeaders }),
+        axios.get(prevUrl, { headers: liHeaders }),
+        axios.get(campListUrl, { headers: liHeaders }),
+      ])
+
+      // Build campaign name map from list
+      const campNameMap = new Map<string, { name: string; status: string }>()
+      for (const c of (campListRes.data?.elements ?? [])) {
+        campNameMap.set(String(c.id), { name: c.name ?? 'Unknown', status: c.status ?? 'UNKNOWN' })
+      }
+
+      // Campaign-level analytics
+      for (const row of (campAnalyticsRes.data?.elements ?? [])) {
+        const urnStr = (row.pivotValues?.[0] as string | undefined) ?? ''
+        const campId = urnStr.split(':').pop() ?? urnStr
+        const spend = parseFloat(row.costInLocalCurrency ?? '0')
+        const impressions = Number(row.impressions ?? 0)
+        const clicks = Number(row.clicks ?? 0)
+        const conversions = Number(row.externalWebsiteConversions ?? 0)
+        const campInfo = campNameMap.get(campId)
+        campaigns.push({
+          id: campId,
+          name: campInfo?.name ?? `Campaign ${campId}`,
+          platform: 'linkedin',
+          status: campInfo?.status ?? 'UNKNOWN',
+          spend,
+          impressions,
+          clicks,
+          conversions,
+          revenue: 0,
+          roas: null,
+          ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+          cpa: conversions > 0 ? spend / conversions : null,
+        })
+      }
+
+      // Daily spend breakdown
+      for (const row of (dailyRes.data?.elements ?? [])) {
+        const dr = row.dateRange?.start as { year?: number; month?: number; day?: number } | undefined
+        if (!dr?.year) continue
+        const date = `${dr.year}-${String(dr.month ?? 1).padStart(2, '0')}-${String(dr.day ?? 1).padStart(2, '0')}`
+        const spend = parseFloat(row.costInLocalCurrency ?? '0')
+        const entry = dailyMap.get(date) ?? { date, meta: 0, google: 0, linkedin: 0 }
+        entry.linkedin += spend
+        dailyMap.set(date, entry)
+      }
+
+      // Previous period totals
+      const prevData = prevRes.data?.elements?.[0]
+      if (prevData) {
+        prevSpend += parseFloat(prevData.costInLocalCurrency ?? '0')
+        prevImpr += Number(prevData.impressions ?? 0)
+        prevClicks += Number(prevData.clicks ?? 0)
+        prevConv += Number(prevData.externalWebsiteConversions ?? 0)
+      }
+    } catch (error) {
+      const err = error as { response?: { data?: unknown; status?: number }; message?: string }
+      const detail = err.response?.data ? JSON.stringify(err.response.data) : err.message || 'Unknown error'
+      console.error('[linkedin ads] fetch failed:', detail)
+      errors.push(`LinkedIn Ads insights failed: ${detail.slice(0, 200)}`)
+    }
+  }
+
   const totalSpend = campaigns.reduce((sum, item) => sum + item.spend, 0)
   const totalImpr = campaigns.reduce((sum, item) => sum + item.impressions, 0)
   const totalClicks = campaigns.reduce((sum, item) => sum + item.clicks, 0)
@@ -340,6 +433,7 @@ export async function getAdsInsightsForUser(params: {
 
   const metaCampaigns = campaigns.filter(item => item.platform === 'meta')
   const googleCampaigns = campaigns.filter(item => item.platform === 'google')
+  const linkedinCampaigns = campaigns.filter(item => item.platform === 'linkedin')
   const summarize = (items: CampaignInsight[]) => ({
     spend: items.reduce((sum, item) => sum + item.spend, 0),
     impressions: items.reduce((sum, item) => sum + item.impressions, 0),
@@ -364,6 +458,7 @@ export async function getAdsInsightsForUser(params: {
     platformBreakdown: {
       meta: summarize(metaCampaigns),
       google: summarize(googleCampaigns),
+      linkedin: summarize(linkedinCampaigns),
     },
     previous: {
       spend: prevSpend,
@@ -378,6 +473,7 @@ export async function getAdsInsightsForUser(params: {
     connected: {
       meta: Boolean(meta?.accessToken && meta?.accountId),
       google: Boolean(google?.customerId),
+      linkedin: Boolean(linkedin?.accessToken && linkedin?.adAccountId),
     },
     currency,
   }
@@ -426,5 +522,61 @@ export async function getGoogleCampaignsForUser(params: { userId: string }) {
       platform: 'google',
     })),
     errors: [] as string[],
+  }
+}
+
+export async function getLinkedInCampaignsForUser(params: { userId: string }) {
+  await connectDB()
+  const rawUser = await mongoose.connection.db!
+    .collection('users')
+    .findOne(
+      { _id: new mongoose.Types.ObjectId(params.userId) },
+      { projection: { 'connections.linkedin.accessToken': 1, 'connections.linkedin.adAccountId': 1 } }
+    ) as { connections?: { linkedin?: { accessToken?: string; adAccountId?: string } } } | null
+
+  const linkedin = rawUser?.connections?.linkedin
+  if (!linkedin?.accessToken || !linkedin.adAccountId) {
+    return { campaigns: [], errors: ['LinkedIn Ads not connected or no ad account selected'] }
+  }
+
+  try {
+    const headers = {
+      Authorization: `Bearer ${linkedin.accessToken}`,
+      'LinkedIn-Version': '202504',
+      'X-Restli-Protocol-Version': '2.0.0',
+    }
+    const accountUrn = `urn:li:sponsoredAccount:${linkedin.adAccountId}`
+    const res = await axios.get(
+      `https://api.linkedin.com/rest/adCampaigns?q=search&accounts=${encodeURIComponent(`List(${accountUrn})`)}`,
+      { headers }
+    )
+    const elements = (res.data?.elements ?? []) as Array<{
+      id?: number
+      name?: string
+      status?: string
+      type?: string
+      dailyBudget?: { amount?: string }
+      totalBudget?: { amount?: string }
+    }>
+    return {
+      campaigns: elements.map(c => ({
+        id: String(c.id ?? ''),
+        name: c.name ?? 'Unknown',
+        status: c.status ?? 'UNKNOWN',
+        objective: c.type,
+        daily_budget: c.dailyBudget?.amount
+          ? String(Math.round(parseFloat(c.dailyBudget.amount) * 100))
+          : undefined,
+        lifetime_budget: c.totalBudget?.amount
+          ? String(Math.round(parseFloat(c.totalBudget.amount) * 100))
+          : undefined,
+        platform: 'linkedin',
+      })),
+      errors: [] as string[],
+    }
+  } catch (err) {
+    const msg = axios.isAxiosError(err) ? JSON.stringify(err.response?.data) : String(err)
+    console.error('[linkedin campaigns] fetch failed:', msg)
+    return { campaigns: [], errors: [`LinkedIn campaigns failed: ${msg.slice(0, 200)}`] }
   }
 }

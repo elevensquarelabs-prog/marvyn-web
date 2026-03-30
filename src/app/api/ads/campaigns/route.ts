@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getUserConnections, makeConnectionError, parseMetaApiError, type ConnectionError } from '@/lib/get-user-connections'
-import { getGoogleCampaignsForUser } from '@/lib/ads-performance'
+import { getGoogleCampaignsForUser, getLinkedInCampaignsForUser } from '@/lib/ads-performance'
 import axios from 'axios'
 
 export async function GET(_req: NextRequest) {
@@ -68,6 +68,19 @@ export async function GET(_req: NextRequest) {
       console.error('[campaigns] Google Ads fetch failed status:', e.response?.status)
       console.error('[campaigns] Google Ads fetch failed detail:', detail)
       errors.push(`Google Ads fetch failed: ${detail?.slice(0, 300)}`)
+    }
+  }
+
+  // ─── LinkedIn Ads ─────────────────────────────────────────────────
+  const linkedin = user.connections?.linkedin as { accessToken?: string; adAccountId?: string } | undefined
+  if (linkedin?.accessToken && linkedin.adAccountId) {
+    try {
+      const result = await getLinkedInCampaignsForUser({ userId })
+      campaigns.push(...result.campaigns)
+      errors.push(...result.errors)
+    } catch (err) {
+      const e = err as { message?: string }
+      errors.push(`LinkedIn campaigns failed: ${e.message ?? 'Unknown error'}`)
     }
   }
 

@@ -5,6 +5,7 @@ import { Button } from '@/components/shared/Button'
 import { Badge } from '@/components/shared/Badge'
 import { AdsDashboard, type InsightsData } from '@/components/ads/AdsDashboard'
 import { currencySymbol } from '@/lib/currency'
+import { AD_PLATFORM_REGISTRY } from '@/lib/ad-platforms'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,7 +24,7 @@ type RangePreset = '7D' | '14D' | '30D' | '90D'
 
 const PRESET_DAYS: Record<RangePreset, number> = { '7D': 7, '14D': 14, '30D': 30, '90D': 90 }
 const PRESETS: RangePreset[] = ['7D', '14D', '30D', '90D']
-const AD_PLATFORMS = ['google', 'meta', 'linkedin']
+const AD_PLATFORMS = Object.keys(AD_PLATFORM_REGISTRY)
 const AD_GOALS = ['awareness', 'traffic', 'leads', 'conversions', 'app installs']
 const LS_RANGE_KEY = 'ads_date_range'
 
@@ -337,15 +338,18 @@ CTA: [Learn More / Register / Download / Sign Up / etc]
       {tab === 'campaigns' && (
         <div className="p-6 space-y-4">
           <div className="flex gap-4 border-b border-[#1E1E1E] pb-3">
-            {['all', 'meta', 'google'].map(p => (
+            {[
+              { key: 'all', label: 'All Platforms' },
+              ...Object.values(AD_PLATFORM_REGISTRY).map(p => ({ key: p.key, label: p.label })),
+            ].map(p => (
               <button
-                key={p}
-                onClick={() => setCampaignPlatform(p)}
+                key={p.key}
+                onClick={() => setCampaignPlatform(p.key)}
                 className={`text-sm capitalize border-b-2 border-transparent transition-colors pb-1 ${
-                  campaignPlatform === p ? 'border-[#DA7756] text-white' : 'text-[#555] hover:text-[#A0A0A0]'
+                  campaignPlatform === p.key ? 'border-[#DA7756] text-white' : 'text-[#555] hover:text-[#A0A0A0]'
                 }`}
               >
-                {p === 'all' ? 'All Platforms' : p === 'meta' ? 'Meta Ads' : 'Google Ads'}
+                {p.label}
               </button>
             ))}
           </div>
@@ -424,17 +428,17 @@ CTA: [Learn More / Register / Download / Sign Up / etc]
             <div>
               <label className="text-xs text-[#555] block mb-1">Platform</label>
               <div className="flex gap-1.5 flex-wrap">
-                {AD_PLATFORMS.map(p => (
+                {Object.values(AD_PLATFORM_REGISTRY).map(p => (
                   <button
-                    key={p}
-                    onClick={() => setAdPlatform(p)}
-                    className={`px-2.5 py-1 rounded-full text-xs capitalize transition-colors ${
-                      adPlatform === p
+                    key={p.key}
+                    onClick={() => setAdPlatform(p.key)}
+                    className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
+                      adPlatform === p.key
                         ? 'bg-[#DA7756] text-white'
                         : 'bg-[#1A1A1A] text-[#A0A0A0] border border-[#2A2A2A] hover:text-white'
                     }`}
                   >
-                    {p}
+                    {p.label}
                   </button>
                 ))}
               </div>
@@ -501,7 +505,7 @@ CTA: [Learn More / Register / Download / Sign Up / etc]
               <div className="max-w-3xl mx-auto space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-white capitalize">{adPlatform} Ads</span>
+                    <span className="text-sm font-medium text-white">{AD_PLATFORM_REGISTRY[adPlatform]?.label ?? adPlatform}</span>
                     {generating && (
                       <span className="flex items-center gap-1.5 text-xs text-[#DA7756]">
                         <span className="w-1.5 h-1.5 rounded-full bg-[#DA7756] animate-pulse" />

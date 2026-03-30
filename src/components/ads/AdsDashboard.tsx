@@ -29,6 +29,7 @@ export interface InsightsData {
   platformBreakdown: {
     meta: { spend: number; impressions: number }
     google: { spend: number; impressions: number }
+    linkedin: { spend: number; impressions: number }
   }
   previous: {
     spend: number
@@ -40,7 +41,7 @@ export interface InsightsData {
   errors: string[]
   connectionErrors: ConnectionError[]
   allPaused: boolean
-  connected: { meta: boolean; google: boolean }
+  connected: { meta: boolean; google: boolean; linkedin: boolean }
   currency: string
 }
 
@@ -86,8 +87,8 @@ interface Props {
 }
 
 export function AdsDashboard({ data, loading, platformFilter, setPlatformFilter }: Props) {
-  // Neither platform connected — show full-page prompt
-  if (!loading && data && !data.connected.meta && !data.connected.google) {
+  // No ad platform connected — show full-page prompt
+  if (!loading && data && !data.connected.meta && !data.connected.google && !data.connected.linkedin) {
     return <NoPlatformsPrompt />
   }
 
@@ -137,17 +138,22 @@ export function AdsDashboard({ data, loading, platformFilter, setPlatformFilter 
 
       {/* Platform filter */}
       <div className="flex items-center gap-1">
-        {['all', 'meta', 'google'].map(p => (
+        {[
+          { key: 'all', label: 'All Platforms' },
+          { key: 'meta', label: 'Meta Ads' },
+          { key: 'google', label: 'Google Ads' },
+          { key: 'linkedin', label: 'LinkedIn Ads' },
+        ].map(p => (
           <button
-            key={p}
-            onClick={() => setPlatformFilter(p)}
+            key={p.key}
+            onClick={() => setPlatformFilter(p.key)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              platformFilter === p
+              platformFilter === p.key
                 ? 'bg-[#DA7756]/10 text-[#DA7756] border border-[#DA7756]/30'
                 : 'text-[#555] hover:text-[#A0A0A0] border border-transparent'
             }`}
           >
-            {p === 'all' ? 'All Platforms' : p === 'meta' ? 'Meta Ads' : 'Google Ads'}
+            {p.label}
           </button>
         ))}
       </div>
@@ -158,7 +164,7 @@ export function AdsDashboard({ data, loading, platformFilter, setPlatformFilter 
       {/* Row 2: Spend by Platform + Spend Over Time */}
       <SpendChart
         dailySpend={data?.dailySpend ?? []}
-        platformBreakdown={data?.platformBreakdown ?? { meta: { spend: 0, impressions: 0 }, google: { spend: 0, impressions: 0 } }}
+        platformBreakdown={data?.platformBreakdown ?? { meta: { spend: 0, impressions: 0 }, google: { spend: 0, impressions: 0 }, linkedin: { spend: 0, impressions: 0 } }}
         loading={loading}
         symbol={symbol}
       />

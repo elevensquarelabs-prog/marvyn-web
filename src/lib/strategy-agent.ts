@@ -102,7 +102,7 @@ type StrategyContext = {
       roas: number | null
       ctr: number
       cpa: number | null
-      topCampaigns: Array<{ name: string; platform: 'meta' | 'google'; spend: number; conversions: number; roas: number | null }>
+      topCampaigns: Array<{ name: string; platform: 'meta' | 'google' | 'linkedin'; spend: number; conversions: number; roas: number | null }>
       errors: string[]
     } | null
     connected: string[]
