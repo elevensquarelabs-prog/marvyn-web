@@ -356,11 +356,14 @@ export async function getAdsInsightsForUser(params: {
       const accounts = `List(${accountUrn})`
 
       // LinkedIn REST API uses Restli encoding — parentheses/colons must NOT be percent-encoded
-      const campAnalyticsUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=CAMPAIGN&dateRange=${dateRangeCurr}&timeGranularity=ALL&accounts=${accounts}&fields=costInLocalCurrency,impressions,clicks,externalWebsiteConversions,pivotValues`
-      const dailyUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=ACCOUNT&dateRange=${dateRangeDaily}&timeGranularity=DAILY&accounts=${accounts}&fields=costInLocalCurrency,dateRange`
-      const prevUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=ACCOUNT&dateRange=${dateRangePrev}&timeGranularity=ALL&accounts=${accounts}&fields=costInLocalCurrency,impressions,clicks,externalWebsiteConversions`
+      // Do NOT include a fields param: pivotValues is auto-included, and some field names
+      // differ across API versions — omitting fields returns all available metrics safely.
+      const campAnalyticsUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=CAMPAIGN&dateRange=${dateRangeCurr}&timeGranularity=ALL&accounts=${accounts}`
+      const dailyUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=ACCOUNT&dateRange=${dateRangeDaily}&timeGranularity=DAILY&accounts=${accounts}`
+      const prevUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=ACCOUNT&dateRange=${dateRangePrev}&timeGranularity=ALL&accounts=${accounts}`
       // adCampaigns uses search.account.values[0], not accounts
       const campListUrl = `https://api.linkedin.com/rest/adCampaigns?q=search&search.account.values[0]=${accountUrn}`
+      console.log('[linkedin ads] campAnalyticsUrl:', campAnalyticsUrl)
 
       const [campAnalyticsRes, dailyRes, prevRes, campListRes] = await Promise.all([
         axios.get(campAnalyticsUrl, { headers: liHeaders }),
@@ -373,6 +376,11 @@ export async function getAdsInsightsForUser(params: {
       const campNameMap = new Map<string, { name: string; status: string }>()
       for (const c of (campListRes.data?.elements ?? [])) {
         campNameMap.set(String(c.id), { name: c.name ?? 'Unknown', status: c.status ?? 'UNKNOWN' })
+      }
+
+      // Log first element to reveal actual field names from this API version
+      if (campAnalyticsRes.data?.elements?.[0]) {
+        console.log('[linkedin ads] sample element keys:', Object.keys(campAnalyticsRes.data.elements[0]))
       }
 
       // Campaign-level analytics
