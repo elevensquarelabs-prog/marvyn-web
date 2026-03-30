@@ -338,6 +338,12 @@ export async function getAdsInsightsForUser(params: {
   }
 
   // ─── LinkedIn Ads ──────────────────────────────────────────────────────────
+  // Account-level totals only (pivot=ACCOUNT) — campaign-level breakdown requires
+  // specifying campaign IDs which we don't have at query time.
+  // LinkedIn spend/impressions/clicks appear in KPI cards, spend chart, and
+  // platform breakdown. Campaign names come from the /api/ads/campaigns route.
+  let liSpend = 0, liImpr = 0, liClicks = 0, liConv = 0
+
   if (linkedin?.accessToken && linkedin.adAccountId) {
     try {
       const liHeaders = {
@@ -350,69 +356,41 @@ export async function getAdsInsightsForUser(params: {
       const [ey, em, ed] = curr.until.split('-').map(Number)
       const [psy, psm, psd] = prev.since.split('-').map(Number)
       const [pey, pem, ped] = prev.until.split('-').map(Number)
-      const dateRangeCurr = `(start:(year:${sy},month:${sm},day:${sd}),end:(year:${ey},month:${em},day:${ed}))`
-      const dateRangePrev = `(start:(year:${psy},month:${psm},day:${psd}),end:(year:${pey},month:${pem},day:${ped}))`
-      const dateRangeDaily = dateRangeCurr
-      const accounts = `List(${accountUrn})`
+      // Restli compound format — parentheses/colons sent raw (NOT percent-encoded)
+      const dr = `(start:(year:${sy},month:${sm},day:${sd}),end:(year:${ey},month:${em},day:${ed}))`
+      const drPrev = `(start:(year:${psy},month:${psm},day:${psd}),end:(year:${pey},month:${pem},day:${ped}))`
+      const accts = `List(${accountUrn})`
 
-      // LinkedIn REST API uses Restli encoding — parentheses/colons must NOT be percent-encoded
-      // Do NOT include a fields param: pivotValues is auto-included, and some field names
-      // differ across API versions — omitting fields returns all available metrics safely.
-      const campAnalyticsUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=CAMPAIGN&dateRange=${dateRangeCurr}&timeGranularity=ALL&accounts=${accounts}`
-      const dailyUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=ACCOUNT&dateRange=${dateRangeDaily}&timeGranularity=DAILY&accounts=${accounts}`
-      const prevUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=ACCOUNT&dateRange=${dateRangePrev}&timeGranularity=ALL&accounts=${accounts}`
-      // adCampaigns uses search.account.values[0], not accounts
-      const campListUrl = `https://api.linkedin.com/rest/adCampaigns?q=search&search.account.values[0]=${accountUrn}`
-      console.log('[linkedin ads] campAnalyticsUrl:', campAnalyticsUrl)
+      const totalsUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=ACCOUNT&dateRange=${dr}&timeGranularity=ALL&accounts=${accts}`
+      const dailyUrl  = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=ACCOUNT&dateRange=${dr}&timeGranularity=DAILY&accounts=${accts}`
+      const prevUrl   = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=ACCOUNT&dateRange=${drPrev}&timeGranularity=ALL&accounts=${accts}`
+      console.log('[linkedin ads] totalsUrl:', totalsUrl)
 
-      const [campAnalyticsRes, dailyRes, prevRes, campListRes] = await Promise.all([
-        axios.get(campAnalyticsUrl, { headers: liHeaders }),
-        axios.get(dailyUrl, { headers: liHeaders }),
-        axios.get(prevUrl, { headers: liHeaders }),
-        axios.get(campListUrl, { headers: liHeaders }),
+      const [totalsRes, dailyRes, prevRes] = await Promise.all([
+        axios.get(totalsUrl, { headers: liHeaders }),
+        axios.get(dailyUrl,  { headers: liHeaders }),
+        axios.get(prevUrl,   { headers: liHeaders }),
       ])
 
-      // Build campaign name map from list
-      const campNameMap = new Map<string, { name: string; status: string }>()
-      for (const c of (campListRes.data?.elements ?? [])) {
-        campNameMap.set(String(c.id), { name: c.name ?? 'Unknown', status: c.status ?? 'UNKNOWN' })
+      // Log first element keys so we can verify actual field names
+      if (totalsRes.data?.elements?.[0]) {
+        console.log('[linkedin ads] sample element keys:', Object.keys(totalsRes.data.elements[0]))
       }
 
-      // Log first element to reveal actual field names from this API version
-      if (campAnalyticsRes.data?.elements?.[0]) {
-        console.log('[linkedin ads] sample element keys:', Object.keys(campAnalyticsRes.data.elements[0]))
+      // Account-level totals
+      const totData = totalsRes.data?.elements?.[0]
+      if (totData) {
+        liSpend  = parseFloat(totData.costInLocalCurrency ?? '0')
+        liImpr   = Number(totData.impressions ?? 0)
+        liClicks = Number(totData.clicks ?? 0)
+        liConv   = Number(totData.externalWebsiteConversions ?? totData.oneClickLeads ?? 0)
       }
 
-      // Campaign-level analytics
-      for (const row of (campAnalyticsRes.data?.elements ?? [])) {
-        const urnStr = (row.pivotValues?.[0] as string | undefined) ?? ''
-        const campId = urnStr.split(':').pop() ?? urnStr
-        const spend = parseFloat(row.costInLocalCurrency ?? '0')
-        const impressions = Number(row.impressions ?? 0)
-        const clicks = Number(row.clicks ?? 0)
-        const conversions = Number(row.externalWebsiteConversions ?? 0)
-        const campInfo = campNameMap.get(campId)
-        campaigns.push({
-          id: campId,
-          name: campInfo?.name ?? `Campaign ${campId}`,
-          platform: 'linkedin',
-          status: campInfo?.status ?? 'UNKNOWN',
-          spend,
-          impressions,
-          clicks,
-          conversions,
-          revenue: 0,
-          roas: null,
-          ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
-          cpa: conversions > 0 ? spend / conversions : null,
-        })
-      }
-
-      // Daily spend breakdown
+      // Daily spend breakdown for chart
       for (const row of (dailyRes.data?.elements ?? [])) {
-        const dr = row.dateRange?.start as { year?: number; month?: number; day?: number } | undefined
-        if (!dr?.year) continue
-        const date = `${dr.year}-${String(dr.month ?? 1).padStart(2, '0')}-${String(dr.day ?? 1).padStart(2, '0')}`
+        const dr2 = row.dateRange?.start as { year?: number; month?: number; day?: number } | undefined
+        if (!dr2?.year) continue
+        const date = `${dr2.year}-${String(dr2.month ?? 1).padStart(2, '0')}-${String(dr2.day ?? 1).padStart(2, '0')}`
         const spend = parseFloat(row.costInLocalCurrency ?? '0')
         const entry = dailyMap.get(date) ?? { date, meta: 0, google: 0, linkedin: 0 }
         entry.linkedin += spend
@@ -422,10 +400,10 @@ export async function getAdsInsightsForUser(params: {
       // Previous period totals
       const prevData = prevRes.data?.elements?.[0]
       if (prevData) {
-        prevSpend += parseFloat(prevData.costInLocalCurrency ?? '0')
-        prevImpr += Number(prevData.impressions ?? 0)
+        prevSpend  += parseFloat(prevData.costInLocalCurrency ?? '0')
+        prevImpr   += Number(prevData.impressions ?? 0)
         prevClicks += Number(prevData.clicks ?? 0)
-        prevConv += Number(prevData.externalWebsiteConversions ?? 0)
+        prevConv   += Number(prevData.externalWebsiteConversions ?? prevData.oneClickLeads ?? 0)
       }
     } catch (error) {
       const err = error as { response?: { data?: unknown; status?: number }; message?: string }
@@ -435,15 +413,15 @@ export async function getAdsInsightsForUser(params: {
     }
   }
 
-  const totalSpend = campaigns.reduce((sum, item) => sum + item.spend, 0)
-  const totalImpr = campaigns.reduce((sum, item) => sum + item.impressions, 0)
-  const totalClicks = campaigns.reduce((sum, item) => sum + item.clicks, 0)
-  const totalConv = campaigns.reduce((sum, item) => sum + item.conversions, 0)
-  const totalRev = campaigns.reduce((sum, item) => sum + item.revenue, 0)
+  // Meta + Google totals come from the campaigns array; LinkedIn totals are separate
+  const totalSpend  = campaigns.reduce((sum, item) => sum + item.spend, 0)  + liSpend
+  const totalImpr   = campaigns.reduce((sum, item) => sum + item.impressions, 0) + liImpr
+  const totalClicks = campaigns.reduce((sum, item) => sum + item.clicks, 0) + liClicks
+  const totalConv   = campaigns.reduce((sum, item) => sum + item.conversions, 0) + liConv
+  const totalRev    = campaigns.reduce((sum, item) => sum + item.revenue, 0)
 
-  const metaCampaigns = campaigns.filter(item => item.platform === 'meta')
-  const googleCampaigns = campaigns.filter(item => item.platform === 'google')
-  const linkedinCampaigns = campaigns.filter(item => item.platform === 'linkedin')
+  const metaCampaigns    = campaigns.filter(item => item.platform === 'meta')
+  const googleCampaigns  = campaigns.filter(item => item.platform === 'google')
   const summarize = (items: CampaignInsight[]) => ({
     spend: items.reduce((sum, item) => sum + item.spend, 0),
     impressions: items.reduce((sum, item) => sum + item.impressions, 0),
@@ -468,7 +446,7 @@ export async function getAdsInsightsForUser(params: {
     platformBreakdown: {
       meta: summarize(metaCampaigns),
       google: summarize(googleCampaigns),
-      linkedin: summarize(linkedinCampaigns),
+      linkedin: { spend: liSpend, impressions: liImpr, clicks: liClicks, conversions: liConv, revenue: 0 },
     },
     previous: {
       spend: prevSpend,
@@ -556,8 +534,10 @@ export async function getLinkedInCampaignsForUser(params: { userId: string }) {
       'X-Restli-Protocol-Version': '2.0.0',
     }
     const accountUrn = `urn:li:sponsoredAccount:${linkedin.adAccountId}`
+    // Restli compound search: search=(account:(values:List(urn:li:sponsoredAccount:ID)))
+    const searchParam = `(account:(values:List(${accountUrn})))`
     const res = await axios.get(
-      `https://api.linkedin.com/rest/adCampaigns?q=search&search.account.values[0]=${accountUrn}`,
+      `https://api.linkedin.com/rest/adCampaigns?q=search&search=${searchParam}`,
       { headers }
     )
     const elements = (res.data?.elements ?? []) as Array<{
