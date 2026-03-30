@@ -355,10 +355,12 @@ export async function getAdsInsightsForUser(params: {
       const dateRangeDaily = dateRangeCurr
       const accounts = `List(${accountUrn})`
 
-      const campAnalyticsUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=CAMPAIGN&dateRange=${encodeURIComponent(dateRangeCurr)}&timeGranularity=ALL&accounts=${encodeURIComponent(accounts)}&fields=costInLocalCurrency,impressions,clicks,externalWebsiteConversions,pivotValues`
-      const dailyUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=ACCOUNT&dateRange=${encodeURIComponent(dateRangeDaily)}&timeGranularity=DAILY&accounts=${encodeURIComponent(accounts)}&fields=costInLocalCurrency,dateRange`
-      const prevUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=ACCOUNT&dateRange=${encodeURIComponent(dateRangePrev)}&timeGranularity=ALL&accounts=${encodeURIComponent(accounts)}&fields=costInLocalCurrency,impressions,clicks,externalWebsiteConversions`
-      const campListUrl = `https://api.linkedin.com/rest/adCampaigns?q=search&accounts=${encodeURIComponent(accounts)}`
+      // LinkedIn REST API uses Restli encoding — parentheses/colons must NOT be percent-encoded
+      const campAnalyticsUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=CAMPAIGN&dateRange=${dateRangeCurr}&timeGranularity=ALL&accounts=${accounts}&fields=costInLocalCurrency,impressions,clicks,externalWebsiteConversions,pivotValues`
+      const dailyUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=ACCOUNT&dateRange=${dateRangeDaily}&timeGranularity=DAILY&accounts=${accounts}&fields=costInLocalCurrency,dateRange`
+      const prevUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=ACCOUNT&dateRange=${dateRangePrev}&timeGranularity=ALL&accounts=${accounts}&fields=costInLocalCurrency,impressions,clicks,externalWebsiteConversions`
+      // adCampaigns uses search.account.values[0], not accounts
+      const campListUrl = `https://api.linkedin.com/rest/adCampaigns?q=search&search.account.values[0]=${accountUrn}`
 
       const [campAnalyticsRes, dailyRes, prevRes, campListRes] = await Promise.all([
         axios.get(campAnalyticsUrl, { headers: liHeaders }),
@@ -547,7 +549,7 @@ export async function getLinkedInCampaignsForUser(params: { userId: string }) {
     }
     const accountUrn = `urn:li:sponsoredAccount:${linkedin.adAccountId}`
     const res = await axios.get(
-      `https://api.linkedin.com/rest/adCampaigns?q=search&accounts=${encodeURIComponent(`List(${accountUrn})`)}`,
+      `https://api.linkedin.com/rest/adCampaigns?q=search&search.account.values[0]=${accountUrn}`,
       { headers }
     )
     const elements = (res.data?.elements ?? []) as Array<{
