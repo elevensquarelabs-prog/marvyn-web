@@ -2,6 +2,7 @@
 
 import { Badge } from '@/components/shared/Badge'
 import { Button } from '@/components/shared/Button'
+import { BrandIcon } from '@/components/shared/BrandIcon'
 
 interface SocialPost {
   _id: string
@@ -11,12 +12,6 @@ interface SocialPost {
   status: string
   scheduledAt?: string
   mediaUrl?: string
-}
-
-const platformIcon: Record<string, string> = {
-  linkedin: 'in',
-  facebook: 'f',
-  instagram: 'ig',
 }
 
 const platformColor: Record<string, string> = {
@@ -49,8 +44,9 @@ export function SocialPostCard({
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2">
-          <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${platformColor[post.platform] || 'bg-[#1E1E1E] text-[#A0A0A0]'}`}>
-            {platformIcon[post.platform] || post.platform}
+          <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-1.5 py-0.5 rounded ${platformColor[post.platform] || 'bg-[#1E1E1E] text-[#A0A0A0]'}`}>
+            <BrandIcon brand={post.platform} alt={post.platform} size={14} background={post.platform === 'linkedin' ? 'white' : undefined} rounded />
+            {post.platform}
           </span>
           <Badge variant={statusVariant[post.status] || 'default'}>
             {post.status.replace('_', ' ')}

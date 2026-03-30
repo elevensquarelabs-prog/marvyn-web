@@ -10,10 +10,17 @@ export async function GET(_req: NextRequest) {
 
   const clientId = (process.env.GOOGLE_CLIENT_ID || '').trim()
   const redirectUri = `${BASE_URL()}/api/oauth/google/callback`
-  console.log('[Google OAuth] NEXTAUTH_URL:', BASE_URL())
-  console.log('[Google OAuth] redirect_uri:', redirectUri)
-  const scope = encodeURIComponent('https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/webmasters.readonly')
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&access_type=offline&prompt=consent&state=${session.user.id}`
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/webmasters.readonly',
+    access_type: 'offline',
+    prompt: 'consent select_account',
+    include_granted_scopes: 'false',
+    state: session.user.id,
+  })
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
 
   return Response.json({ authUrl })
 }

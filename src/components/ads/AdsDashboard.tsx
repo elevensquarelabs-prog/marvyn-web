@@ -5,8 +5,9 @@ import { SpendChart } from './SpendChart'
 import { CampaignPerformance } from './CampaignPerformance'
 import { AIInsights } from './AIInsights'
 import { CreativePerformance } from './CreativePerformance'
-import type { CampaignInsight, DailyEntry } from '@/lib/ads-performance'
+import type { BreakdownBucket, BreakdownSeriesEntry, CampaignInsight, DailyEntry } from '@/lib/ads-performance'
 import { currencySymbol } from '@/lib/currency'
+import { BrandIcon } from '@/components/shared/BrandIcon'
 
 export interface ConnectionError {
   code: string
@@ -27,9 +28,19 @@ export interface InsightsData {
   dailySpend: DailyEntry[]
   campaigns: CampaignInsight[]
   platformBreakdown: {
-    meta: { spend: number; impressions: number }
-    google: { spend: number; impressions: number }
-    linkedin: { spend: number; impressions: number }
+    meta: { spend: number; impressions: number; clicks: number; conversions: number; revenue: number }
+    google: { spend: number; impressions: number; clicks: number; conversions: number; revenue: number }
+    linkedin: { spend: number; impressions: number; clicks: number; conversions: number; revenue: number }
+  }
+  detailBreakdowns: {
+    meta: BreakdownBucket[]
+    google: BreakdownBucket[]
+    linkedin: BreakdownBucket[]
+  }
+  detailDailySpend: {
+    meta: BreakdownSeriesEntry[]
+    google: BreakdownSeriesEntry[]
+    linkedin: BreakdownSeriesEntry[]
   }
   previous: {
     spend: number
@@ -45,16 +56,24 @@ export interface InsightsData {
   currency: string
 }
 
-const PLATFORM_ICONS: Record<string, string> = { meta: '𝕄', google: 'G', searchConsole: 'SC', linkedin: 'in', facebook: 'f', unknown: '?' }
 const PLATFORM_COLORS: Record<string, string> = { meta: 'bg-blue-900/20 border-blue-900/30 text-blue-400', google: 'bg-green-900/20 border-green-900/30 text-green-400' }
+const EMPTY_BREAKDOWN = {
+  meta: { spend: 0, impressions: 0, clicks: 0, conversions: 0, revenue: 0 },
+  google: { spend: 0, impressions: 0, clicks: 0, conversions: 0, revenue: 0 },
+  linkedin: { spend: 0, impressions: 0, clicks: 0, conversions: 0, revenue: 0 },
+}
 
 function ConnectionErrorBanner({ err }: { err: ConnectionError }) {
   const color = PLATFORM_COLORS[err.platform] ?? 'bg-yellow-900/20 border-yellow-900/30 text-yellow-400'
-  const icon = PLATFORM_ICONS[err.platform] ?? '?'
+  const iconBrand = err.platform === 'google'
+    ? 'adwords'
+    : err.platform === 'searchConsole'
+      ? 'google'
+      : err.platform
   return (
     <div className={`border rounded-xl px-4 py-3 flex items-center justify-between ${color}`}>
       <div className="flex items-center gap-3">
-        <span className="text-sm font-bold">{icon}</span>
+        <BrandIcon brand={iconBrand} alt={err.platform} size={18} background={err.platform === 'linkedin' ? 'white' : undefined} />
         <p className="text-sm">{err.message}</p>
       </div>
       <a href={err.settingsUrl} className="text-xs underline hover:no-underline shrink-0 ml-4">
@@ -92,8 +111,100 @@ export function AdsDashboard({ data, loading, platformFilter, setPlatformFilter 
     return <NoPlatformsPrompt />
   }
 
+  const platformKey = platformFilter === 'all'
+    ? null
+    : (platformFilter as 'meta' | 'google' | 'linkedin')
+
   const filteredCampaigns = data?.campaigns
     ? (platformFilter === 'all' ? data.campaigns : data.campaigns.filter(c => c.platform === platformFilter))
+    : []
+
+  const derivedBreakdown = data
+    ? (platformKey
+        ? {
+            ...EMPTY_BREAKDOWN,
+            [platformKey]: data.platformBreakdown[platformKey],
+          }
+        : data.platformBreakdown)
+    : EMPTY_BREAKDOWN
+
+  const derivedDailySpend = data?.dailySpend
+    ? data.dailySpend.map(entry => ({
+        ...entry,
+        meta: platformKey && platformKey !== 'meta' ? 0 : entry.meta,
+        google: platformKey && platformKey !== 'google' ? 0 : entry.google,
+        linkedin: platformKey && platformKey !== 'linkedin' ? 0 : entry.linkedin,
+      }))
+    : []
+
+  const derivedSummary = (() => {
+    if (!data) return null
+
+    if (!platformKey) {
+      return {
+        spend: data.spend,
+        impressions: data.impressions,
+        clicks: data.clicks,
+        conversions: data.conversions,
+        revenue: data.revenue,
+        roas: data.roas,
+        ctr: data.ctr,
+        cpa: data.cpa,
+        cpc: data.clicks > 0 ? data.spend / data.clicks : null,
+        activeCampaigns: data.campaigns.filter(c => c.status !== 'PAUSED').length,
+        campaignCount: data.campaigns.length,
+        previous: data.previous,
+      }
+    }
+
+    if (platformKey === 'linkedin') {
+      const linkedIn = data.platformBreakdown.linkedin
+      return {
+        spend: linkedIn.spend,
+        impressions: linkedIn.impressions,
+        clicks: linkedIn.clicks,
+        conversions: linkedIn.conversions,
+        revenue: linkedIn.revenue,
+        roas: linkedIn.spend > 0 && linkedIn.revenue > 0 ? linkedIn.revenue / linkedIn.spend : null,
+        ctr: linkedIn.impressions > 0 ? (linkedIn.clicks / linkedIn.impressions) * 100 : 0,
+        cpa: linkedIn.conversions > 0 ? linkedIn.spend / linkedIn.conversions : null,
+        cpc: linkedIn.clicks > 0 ? linkedIn.spend / linkedIn.clicks : null,
+        activeCampaigns: filteredCampaigns.filter(c => c.status !== 'PAUSED').length,
+        campaignCount: filteredCampaigns.length,
+        previous: { spend: 0, impressions: 0, clicks: 0, conversions: 0, roas: null },
+      }
+    }
+
+    const spend = filteredCampaigns.reduce((sum, c) => sum + c.spend, 0)
+    const impressions = filteredCampaigns.reduce((sum, c) => sum + c.impressions, 0)
+    const clicks = filteredCampaigns.reduce((sum, c) => sum + c.clicks, 0)
+    const conversions = filteredCampaigns.reduce((sum, c) => sum + c.conversions, 0)
+    const revenue = filteredCampaigns.reduce((sum, c) => sum + c.revenue, 0)
+
+    return {
+      spend,
+      impressions,
+      clicks,
+      conversions,
+      revenue,
+      roas: spend > 0 && revenue > 0 ? revenue / spend : null,
+      ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+      cpa: conversions > 0 ? spend / conversions : null,
+      cpc: clicks > 0 ? spend / clicks : null,
+      activeCampaigns: filteredCampaigns.filter(c => c.status !== 'PAUSED').length,
+      campaignCount: filteredCampaigns.length,
+      previous: { spend: 0, impressions: 0, clicks: 0, conversions: 0, roas: null },
+    }
+  })()
+
+  const topSummaryLabel = platformKey
+    ? `${platformKey === 'meta' ? 'Meta' : platformKey === 'google' ? 'Google' : 'LinkedIn'} view`
+    : 'Cross-platform view'
+  const derivedDetailBreakdown = platformKey
+    ? data?.detailBreakdowns[platformKey] ?? []
+    : []
+  const derivedDetailDaily = platformKey
+    ? data?.detailDailySpend[platformKey] ?? []
     : []
 
   const symbol = currencySymbol(data?.currency ?? 'INR')
@@ -158,15 +269,27 @@ export function AdsDashboard({ data, loading, platformFilter, setPlatformFilter 
         ))}
       </div>
 
+      <div className="flex items-center justify-between text-xs text-[#555] px-1">
+        <span>{topSummaryLabel}</span>
+        <span>
+          {platformKey
+            ? `${filteredCampaigns.length} campaign${filteredCampaigns.length === 1 ? '' : 's'} in current filter`
+            : `${data?.campaigns.length ?? 0} campaigns across connected platforms`}
+        </span>
+      </div>
+
       {/* Row 1: KPI Cards */}
-      <KPICards data={data} loading={loading} symbol={symbol} />
+      <KPICards data={derivedSummary} loading={loading} symbol={symbol} platformFilter={platformFilter} />
 
       {/* Row 2: Spend by Platform + Spend Over Time */}
       <SpendChart
-        dailySpend={data?.dailySpend ?? []}
-        platformBreakdown={data?.platformBreakdown ?? { meta: { spend: 0, impressions: 0 }, google: { spend: 0, impressions: 0 }, linkedin: { spend: 0, impressions: 0 } }}
+        dailySpend={derivedDailySpend}
+        platformBreakdown={derivedBreakdown}
+        detailBreakdown={derivedDetailBreakdown}
+        detailDailySpend={derivedDetailDaily}
         loading={loading}
         symbol={symbol}
+        platformFilter={platformFilter}
       />
 
       {/* Row 3: Best vs Worst */}
@@ -175,8 +298,8 @@ export function AdsDashboard({ data, loading, platformFilter, setPlatformFilter 
       {/* Row 4: AI Insights */}
       <AIInsights
         campaigns={filteredCampaigns}
-        spend={data?.spend ?? 0}
-        roas={data?.roas ?? null}
+        spend={derivedSummary?.spend ?? 0}
+        roas={derivedSummary?.roas ?? null}
         symbol={symbol}
       />
 

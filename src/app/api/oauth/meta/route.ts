@@ -10,8 +10,15 @@ export async function GET(_req: NextRequest) {
 
   const appId = (process.env.META_APP_ID || '').trim()
   const redirectUri = `${BASE_URL()}/api/oauth/meta/callback`
-  const scope = 'ads_read,ads_management,business_management'
-  const authUrl = `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&response_type=code&state=${session.user.id}`
+  const params = new URLSearchParams({
+    client_id: appId,
+    redirect_uri: redirectUri,
+    scope: 'ads_read,ads_management,business_management',
+    response_type: 'code',
+    auth_type: 'rerequest',
+    state: session.user.id,
+  })
+  const authUrl = `https://www.facebook.com/v21.0/dialog/oauth?${params.toString()}`
 
   return Response.json({ authUrl })
 }

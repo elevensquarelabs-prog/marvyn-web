@@ -128,15 +128,7 @@ export default function AdsPage() {
   const [platformFilter, setPlatformFilter] = useState('all')
 
   // Date range — persisted in localStorage
-  const [dateRange, setDateRange] = useState<DateRangeState>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem(LS_RANGE_KEY)
-        if (stored) return JSON.parse(stored)
-      } catch {}
-    }
-    return { preset: '30D' }
-  })
+  const [dateRange, setDateRange] = useState<DateRangeState>({ preset: '30D' })
 
   // Insights data
   const [insights, setInsights] = useState<InsightsData | null>(null)
@@ -181,6 +173,17 @@ export default function AdsPage() {
       setInsightsLoading(false)
     }
   }, [buildInsightsUrl])
+
+  // Hydrate persisted date range after mount so server/client initial HTML matches.
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(LS_RANGE_KEY)
+      if (!stored) return
+      const parsed = JSON.parse(stored) as DateRangeState
+      setDateRange(parsed)
+      loadInsights(parsed)
+    } catch {}
+  }, [loadInsights])
 
   const loadCampaigns = useCallback(async () => {
     setCampaignsLoading(true)

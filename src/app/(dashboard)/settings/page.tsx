@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/shared/Button'
 import { Badge } from '@/components/shared/Badge'
+import { BrandIcon } from '@/components/shared/BrandIcon'
 import { useSession } from 'next-auth/react'
 import { buildTimezoneOptions } from '@/lib/timezone-list'
 import { BillingCreditsPanel } from '@/components/settings/BillingCreditsPanel'
@@ -577,6 +578,11 @@ export default function SettingsPage() {
     if (data.authUrl) window.location.href = data.authUrl
   }
 
+  const reconnectOAuth = async (provider: 'meta' | 'google' | 'ga4') => {
+    await disconnectConnection(provider)
+    await connectOAuth(provider)
+  }
+
   const saveAlertPrefs = async () => {
     setSavingAlerts(true)
     try {
@@ -848,9 +854,12 @@ export default function SettingsPage() {
               <div className="p-4 bg-[#111] border border-[#1E1E1E] rounded-xl space-y-4">
                 {/* Header row */}
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="flex items-center gap-3">
+                    <BrandIcon brand="meta" alt="Meta" size={28} />
+                    <div>
                     <p className="text-sm font-medium text-white">Meta</p>
                     <p className="text-xs text-[#555]">Facebook, Instagram & Ads</p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {(connections.meta?.accountId || connections.facebook?.pageId) && (
@@ -861,7 +870,11 @@ export default function SettingsPage() {
                         Disconnect
                       </Button>
                     )}
-                    <Button size="sm" variant="secondary" onClick={() => connectOAuth('meta')}>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => connections.meta?.accountId ? reconnectOAuth('meta') : connectOAuth('meta')}
+                    >
                       {connections.meta?.accountId ? 'Reconnect' : 'Connect'}
                     </Button>
                   </div>
@@ -971,7 +984,9 @@ export default function SettingsPage() {
               {/* Google */}
               <div className="p-4 bg-[#111] border border-[#1E1E1E] rounded-xl space-y-3">
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="flex items-center gap-3">
+                    <BrandIcon brand="adwords" alt="Google Ads" size={28} />
+                    <div>
                     <p className="text-sm font-medium text-white">Google Ads + Search Console</p>
                     <p className="text-xs text-[#555]">
                       {connections.google?.connected
@@ -980,6 +995,7 @@ export default function SettingsPage() {
                           : 'Token saved · Customer ID not yet set'
                         : 'Google advertising & SEO data'}
                     </p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {connections.google?.connected && (
@@ -990,7 +1006,11 @@ export default function SettingsPage() {
                         Disconnect
                       </Button>
                     )}
-                    <Button size="sm" variant="secondary" onClick={() => connectOAuth('google')}>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => connections.google?.connected ? reconnectOAuth('google') : connectOAuth('google')}
+                    >
                       {connections.google?.connected ? 'Reconnect' : 'Connect'}
                     </Button>
                   </div>
@@ -1116,7 +1136,9 @@ export default function SettingsPage() {
               {/* Google Analytics 4 */}
               <div className="p-4 bg-[#111] border border-[#1E1E1E] rounded-xl space-y-3">
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="flex items-center gap-3">
+                    <BrandIcon brand="google" alt="Google Analytics" size={28} />
+                    <div>
                     <p className="text-sm font-medium text-white">Google Analytics 4</p>
                     <p className="text-xs text-[#555]">
                       {connections.ga4?.propertyId
@@ -1125,6 +1147,7 @@ export default function SettingsPage() {
                           ? 'Token saved · Property not selected yet'
                           : 'Sessions, channels, landing pages & conversions'}
                     </p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {connections.ga4?.connected && (
@@ -1135,7 +1158,11 @@ export default function SettingsPage() {
                         Disconnect
                       </Button>
                     )}
-                    <Button size="sm" variant="secondary" onClick={() => connectOAuth('ga4')}>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => connections.ga4?.connected ? reconnectOAuth('ga4') : connectOAuth('ga4')}
+                    >
                       {connections.ga4?.connected ? 'Reconnect' : 'Connect'}
                     </Button>
                   </div>
@@ -1204,11 +1231,14 @@ export default function SettingsPage() {
               {/* LinkedIn */}
               <div className="p-4 bg-[#111] border border-[#1E1E1E] rounded-xl space-y-3">
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="flex items-center gap-3">
+                    <BrandIcon brand="linkedin" alt="LinkedIn" size={28} background="white" />
+                    <div>
                     <p className="text-sm font-medium text-white">LinkedIn</p>
                     <p className="text-xs text-[#555]">
                       {connections.linkedin?.profileName || 'LinkedIn posting & analytics'}
                     </p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {connections.linkedin?.profileId && (

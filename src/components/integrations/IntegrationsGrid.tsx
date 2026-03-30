@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { IntegrationCard } from './IntegrationCard'
+import { BrandIcon } from '@/components/shared/BrandIcon'
 
 interface Connection {
   integration: 'shopify' | 'hubspot' | 'stripe'
@@ -16,21 +17,21 @@ const INTEGRATIONS = [
     name:        'Shopify',
     description: 'Orders, revenue, refunds, and customer purchase signals',
     color:       '#95BF47',
-    logo:        <span className="text-white font-bold text-sm">S</span>,
+    logo:        <BrandIcon brand="shopify" alt="Shopify" size={24} />,
   },
   {
     integration: 'hubspot' as const,
     name:        'HubSpot',
     description: 'Deals, pipeline movement, and CRM revenue context',
     color:       '#FF7A59',
-    logo:        <span className="text-white font-bold text-sm">H</span>,
+    logo:        <BrandIcon brand="hubspot" alt="HubSpot" size={24} />,
   },
   {
     integration: 'stripe' as const,
     name:        'Stripe',
     description: 'Revenue, subscriptions, charges, and cash collection signals',
     color:       '#635BFF',
-    logo:        <span className="text-white font-bold text-sm">S</span>,
+    logo:        <BrandIcon brand="stripe" alt="Stripe" size={24} />,
   },
 ]
 

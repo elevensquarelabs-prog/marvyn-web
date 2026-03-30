@@ -2,6 +2,7 @@
 
 import type { CampaignInsight } from './CampaignPerformance'
 import { fmtCurrency } from '@/lib/currency'
+import { BrandIcon } from '@/components/shared/BrandIcon'
 
 function fmtNum(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
@@ -36,8 +37,7 @@ function Skeleton() {
   )
 }
 
-// Treat campaigns as "creatives" since ad-level data requires a separate scoped API call
-// Show top 5 by CTR with available data
+// This is a campaign-level CTR snapshot, not true ad-level creative reporting.
 interface Props {
   campaigns: CampaignInsight[]
   loading: boolean
@@ -51,26 +51,25 @@ export function CreativePerformance({ campaigns, loading, platformFilter, symbol
     .sort((a, b) => b.ctr - a.ctr)
     .slice(0, 5)
 
-  const PLATFORM_ICONS: Record<string, string> = {
-    meta: '𝕄',
-    google: 'G',
-  }
   const PLATFORM_BG: Record<string, string> = {
     meta: 'bg-blue-900/30 text-blue-400',
     google: 'bg-green-900/30 text-green-400',
+    linkedin: 'bg-cyan-900/30 text-cyan-400',
   }
 
   return (
     <div className="bg-[#111] border border-[#1E1E1E] rounded-xl p-5">
-      <p className="text-xs font-semibold text-[#555] uppercase tracking-wider mb-4">Creative Performance</p>
-      <p className="text-[11px] text-[#333] mb-4">Top campaigns by CTR — upgrade to ad-level data for creative thumbnails</p>
+      <p className="text-xs font-semibold text-[#555] uppercase tracking-wider mb-4">Campaign CTR Snapshot</p>
+      <p className="text-[11px] text-[#333] mb-4">
+        Ranked from real campaign CTR data. Ad-level creative reporting is not wired yet.
+      </p>
 
       {loading ? (
         <Skeleton />
       ) : filtered.length === 0 ? (
         <div className="text-center py-8">
-          <p className="text-[#555] text-sm">No creative data available</p>
-          <p className="text-[#333] text-xs mt-1">Run campaigns to see creative performance</p>
+          <p className="text-[#555] text-sm">No campaign CTR data available</p>
+          <p className="text-[#333] text-xs mt-1">We only show this section when the selected platform has campaign-level delivery data.</p>
         </div>
       ) : (
         <>
@@ -89,11 +88,13 @@ export function CreativePerformance({ campaigns, loading, platformFilter, symbol
                 {/* Rank + name */}
                 <div className="col-span-5 flex items-center gap-3">
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold shrink-0 ${PLATFORM_BG[c.platform]}`}>
-                    {PLATFORM_ICONS[c.platform]}
+                    <BrandIcon brand={c.platform === 'google' ? 'adwords' : c.platform} alt={c.platform} size={18} background={c.platform === 'linkedin' ? 'white' : undefined} rounded={false} />
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm text-white truncate">{truncate(c.name)}</p>
-                    <p className="text-[10px] text-[#555] capitalize">{c.platform === 'meta' ? 'Meta Ads' : 'Google Ads'} · #{i + 1}</p>
+                    <p className="text-[10px] text-[#555] capitalize">
+                      {c.platform === 'meta' ? 'Meta Ads' : c.platform === 'google' ? 'Google Ads' : 'LinkedIn Ads'} · #{i + 1}
+                    </p>
                   </div>
                 </div>
 

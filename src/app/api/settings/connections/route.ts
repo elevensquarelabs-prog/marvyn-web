@@ -97,6 +97,48 @@ export async function DELETE(req: NextRequest) {
     return Response.json({ error: 'Invalid platform' }, { status: 400 })
   }
 
+  const doc = await mongoose.connection.db!
+    .collection('users')
+    .findOne(
+      { _id: new mongoose.Types.ObjectId(session.user.id) },
+      { projection: { connections: 1 } }
+    ) as { connections?: RawConnections } | null
+
+  const connections = doc?.connections || {}
+
+  try {
+    if (platform === 'google' || platform === 'searchConsole') {
+      const token = connections.google?.accessToken || connections.searchConsole?.accessToken
+      if (token) {
+        await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        })
+      }
+    }
+
+    if (platform === 'ga4') {
+      const token = connections.ga4?.accessToken
+      if (token) {
+        await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        })
+      }
+    }
+
+    if (platform === 'meta') {
+      const token = connections.meta?.accessToken
+      if (token) {
+        await fetch(`https://graph.facebook.com/v21.0/me/permissions?access_token=${encodeURIComponent(token)}`, {
+          method: 'DELETE',
+        })
+      }
+    }
+  } catch (err) {
+    console.error(`[settings/connections] provider revoke failed for ${platform}:`, err)
+  }
+
   await mongoose.connection.db!.collection('users').updateOne(
     { _id: new mongoose.Types.ObjectId(session.user.id) },
     { $unset: { [`connections.${platform}`]: '' } }

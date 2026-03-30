@@ -182,48 +182,7 @@ CONNECTED PLATFORMS: ${connectedPlatforms.length > 0 ? connectedPlatforms.join('
         let totalOutputTokens = 0
         let totalEstimatedCostUsd = 0
 
-        // ── Route to Python agent service if configured ───────────────────
-        const agentServiceUrl = process.env.AGENT_SERVICE_URL?.trim()
-        const agentServiceToken = process.env.AGENT_SERVICE_TOKEN?.trim()
-
-        if (agentServiceUrl && agentServiceToken) {
-          const history = (chatSession.messages.slice(-8, -1) as { role: string; content: string }[])
-            .map(m => ({ role: m.role, content: m.content }))
-
-          const agentRes = await fetch(`${agentServiceUrl.replace(/\/$/, '')}/chat`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${agentServiceToken}`,
-            },
-            body: JSON.stringify({ userId, message, history, sessionId: chatSessionId }),
-          })
-
-          if (!agentRes.ok || !agentRes.body) {
-            throw new Error(`Agent service returned ${agentRes.status}`)
-          }
-
-          const reader = agentRes.body.getReader()
-          const decoder = new TextDecoder()
-          let buffer = ''
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split('\n')
-            buffer = lines.pop() ?? ''
-            for (const line of lines) {
-              if (!line.startsWith('data: ')) continue
-              try {
-                const event = JSON.parse(line.slice(6))
-                if (event.type === 'delta') fullResponse += event.content ?? ''
-                send(event)
-              } catch { /* skip malformed */ }
-            }
-          }
-        } else {
-
-        // ── Fallback: built-in TS ReAct loop (used when agent service is not running) ──
+        // ── Built-in TS ReAct loop ───────────────────────────────────────
         // Build raw connections object with access tokens for tool use
         const rawUser = await mongoose.connection.db!
           .collection('users')
@@ -319,7 +278,6 @@ CONNECTED PLATFORMS: ${connectedPlatforms.length > 0 ? connectedPlatforms.join('
             break
           }
         }
-        } // end else (fallback TS loop)
 
         // Persist assistant response
         if (fullResponse) {

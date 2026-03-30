@@ -145,17 +145,17 @@ ${JSON.stringify({
 }, null, 2)}
 ` : ''
 
-  return `Analyze these Meta Ads campaign results and provide specific actionable recommendations:
+  return `Analyze these paid media campaign results and provide specific actionable recommendations:
 
 Campaign Data:
 ${JSON.stringify(campaignData, null, 2)}
 ${claritySection}
 
 Focus on:
-1. Budget reallocation between campaigns
-2. Audience optimization suggestions
-3. Creative fatigue indicators
-4. Specific actions to improve ROAS
+1. Budget reallocation between campaigns and platforms
+2. Audience or targeting optimization suggestions
+3. Creative fatigue or weak message-market fit indicators
+4. Specific actions to improve ROAS or conversion efficiency
 5. Use landing-page behavior issues from Clarity when relevant. If Clarity shows dead clicks, rage clicks, or poor engagement, mention the UX fix explicitly instead of only changing campaign settings.
 
 Return EXACTLY 4 recommendations in this structured format (do not deviate from it):

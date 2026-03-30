@@ -7,9 +7,12 @@ interface KPIData {
   impressions: number
   clicks: number
   conversions: number
+  activeCampaigns: number
+  campaignCount: number
   roas: number | null
   ctr: number
   cpa: number | null
+  cpc: number | null
   previous: {
     spend: number
     impressions: number
@@ -74,8 +77,39 @@ function KPICard({ label, value, sub, delta, loading }: CardProps) {
   )
 }
 
-export function KPICards({ data, loading, symbol }: { data: KPIData | null; loading: boolean; symbol: string }) {
+export function KPICards({
+  data,
+  loading,
+  symbol,
+  platformFilter,
+}: {
+  data: KPIData | null
+  loading: boolean
+  symbol: string
+  platformFilter: string
+}) {
   const d = data
+  const conversionRate = d && d.clicks > 0 ? (d.conversions / d.clicks) * 100 : null
+  const secondCard = platformFilter === 'all'
+    ? {
+        label: 'Blended ROAS',
+        value: d?.roas != null ? d.roas.toFixed(2) + 'x' : '—',
+        sub: d?.roas == null ? 'No conversion tracking' : undefined,
+        delta: d && d.roas != null && d.previous.roas != null ? pctChange(d.roas, d.previous.roas) : null,
+      }
+    : d?.roas != null
+      ? {
+          label: 'Platform ROAS',
+          value: d.roas.toFixed(2) + 'x',
+          sub: 'Revenue attributed from this platform',
+          delta: null,
+        }
+      : {
+          label: 'Conversion Rate',
+          value: conversionRate != null ? `${conversionRate.toFixed(2)}%` : '—',
+          sub: 'Conversions divided by clicks',
+          delta: null,
+        }
 
   const cards = [
     {
@@ -83,12 +117,7 @@ export function KPICards({ data, loading, symbol }: { data: KPIData | null; load
       value: d ? fmtCurrency(d.spend, symbol) : '—',
       delta: d ? pctChange(d.spend, d.previous.spend) : null,
     },
-    {
-      label: 'Blended ROAS',
-      value: d?.roas != null ? d.roas.toFixed(2) + 'x' : '—',
-      sub: d?.roas == null ? 'No conversion tracking' : undefined,
-      delta: d && d.roas != null && d.previous.roas != null ? pctChange(d.roas, d.previous.roas) : null,
-    },
+    secondCard,
     {
       label: 'Impressions',
       value: d ? fmt(d.impressions) : '—',
@@ -106,10 +135,20 @@ export function KPICards({ data, loading, symbol }: { data: KPIData | null; load
       sub: d?.cpa != null ? `${fmtCurrency(d.cpa, symbol)} CPA` : undefined,
       delta: d ? pctChange(d.conversions, d.previous.conversions) : null,
     },
+    {
+      label: 'Avg CPC',
+      value: d?.cpc != null ? fmtCurrency(d.cpc, symbol) : '—',
+      sub: d
+        ? d.activeCampaigns > 0
+          ? `${d.activeCampaigns} active of ${d.campaignCount} campaigns`
+          : `${d.campaignCount} campaigns • all paused`
+        : undefined,
+      delta: null,
+    },
   ]
 
   return (
-    <div className="grid grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-3">
       {cards.map(c => (
         <KPICard key={c.label} loading={loading} {...c} />
       ))}
