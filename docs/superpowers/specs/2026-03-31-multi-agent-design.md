@@ -279,7 +279,9 @@ Today: {currentDate}
   a low-confidence summary explaining why.
 ```
 
-### Contract B: CMO orchestration prompt
+### Contract B1: CMO task planning prompt → returns `taskList[]`
+
+Called once, before specialists run.
 
 ```
 ## Identity
@@ -294,18 +296,49 @@ You are the CMO of {brand.name}. You lead a specialist team: Ads, SEO, Content, 
 ## Current Goal
 {goal fields}
 
-## Orchestration Rules
-- Construct a taskList assigning only the agents needed for this request.
-- Set domainTags, dependsOn, successCriteria, and requestedBy on every task.
-- Strategist only runs when planning/synthesis is genuinely needed.
-- Return a valid JSON taskList array. No prose.
+## Available Context
+Connected integrations: {integrationList}
+Context bundle keys loaded: {contextBundle.keys}
+Agent histories loaded for: {agentHistories.keys}
 
-## Review Rules (used after specialists complete)
-- Review agentAttempts[agent].at(-1) for each completed task against its successCriteria.
+## Task
+Decide which specialists to run and what each should do.
+
+## Output Rules
+- Return a valid JSON array of task objects matching the taskList schema. No prose outside JSON.
+- Assign domainTags, dependsOn, successCriteria, and requestedBy on every task.
+- Only include Strategist if this request genuinely requires cross-channel synthesis or planning.
+- Do not assign agents for integrations that are not connected.
+```
+
+### Contract B2: CMO review prompt → returns `CMOReviewDecision[]`
+
+Called once per correction round, after specialists write their outputs.
+
+```
+## Identity
+You are the CMO of {brand.name} reviewing your team's work.
+
+## Brand Context
+{brand fields}
+
+## Current Goal
+{goal fields}
+
+## Specialist Outputs to Review
+{for each completed task: agent name, task, successCriteria, agentAttempts[agent] (all versions), correctionHistory[agent] (all prior requests)}
+
+## Review Rules
+- Evaluate each agent's latest output (agentAttempts[agent].at(-1)) against its successCriteria.
 - Verdict options: pass | correction_needed | escalate
-- correction_needed: provide CorrectionRequest with typed issues[] and a note.
-- escalate only after 2 failed corrections — surface all agentAttempts + correctionHistory to user.
-- persistRecommendationIds: list RecommendationItem.id values worth saving. Omit low-value outputs.
+- correction_needed: provide typed issues[] (from IssueType enum) and a specific note telling the
+  agent exactly what is wrong and what it must fix.
+- escalate only when correctionHistory[agent] already has 2 entries — do not escalate earlier.
+- persistRecommendationIds: list only the RecommendationItem.id values that are material,
+  data-grounded, and new enough to save. Omit noise.
+
+## Output Rules
+- Return a valid JSON array of CMOReviewDecision objects. One object per agent reviewed. No prose.
 ```
 
 ### Contract C: Analyst
@@ -371,12 +404,18 @@ interface AgentMemory {
 Extract @mention from message → set goal.selectedAgent
 No @mention → goal.selectedAgent = null → CMO decides
 Valid: @ads · @seo · @content · @strategist
-Invalid/none: CMO infers from userRequest + domainTags
 ```
 
+Note: `domainTags` are NOT available at parse time — they are created later by CMO when it
+builds `taskList`. Routing inference must rely only on signals that exist before CMO runs.
+
 ### Routing precedence
-1. `goal.selectedAgent` — user's explicit @mention
-2. CMO inference from `goal.userRequest` + domain keywords
+1. `goal.selectedAgent` — user's explicit @mention (highest priority)
+2. CMO inference from:
+   - `goal.userRequest` keyword signals (e.g. "campaign", "ROAS" → ads; "ranking", "crawl" → seo)
+   - `goal.selectedAgent` hint if partially set
+   - Connected integrations (e.g. no GSC connected → don't infer seo without warning)
+   - `contextBundle` keys loaded by Analyst (what data is actually available)
 3. CMO direct fallback — handles general queries without delegating
 
 ### CMO Override Rules
@@ -440,7 +479,7 @@ Max 3 total specialist runs per task (original + 2 corrections). All versions pr
 | `src/lib/agent/specialists/strategist.ts` | Strategist runner |
 | `src/lib/agent/routing.ts` | @mention parse + CMO routing |
 | `src/lib/agent/memory.ts` | AgentMemory read/write + RecommendationItem → AgentMemory mapping |
-| `src/lib/agent/prompts.ts` | Contract A (specialist) + Contract B (CMO) builders |
+| `src/lib/agent/prompts.ts` | Contract A (specialist) + Contract B1 (CMO planning) + Contract B2 (CMO review) builders |
 | `src/models/AgentMemory.ts` | Mongoose model |
 | `src/lib/skills/cmo-overview.md` | CMO skill markdown |
 
