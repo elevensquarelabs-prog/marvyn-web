@@ -68,9 +68,10 @@ export function usdToInr(usd: number, exchangeRateInr = DEFAULT_EXCHANGE_RATE_IN
   return Number((usd * exchangeRateInr).toFixed(4))
 }
 
-export function getModelNameFromComplexity(complexity: 'fast' | 'medium' | 'powerful') {
+export function getModelNameFromComplexity(complexity: 'fast' | 'medium' | 'powerful' | 'opus') {
   if (complexity === 'fast') return 'minimax/minimax-m2.5'
   if (complexity === 'powerful') return 'anthropic/claude-sonnet-4-6'
+  if (complexity === 'opus') return 'anthropic/claude-opus-4-6'
   return 'anthropic/claude-haiku-4-5'
 }
 
