@@ -158,7 +158,10 @@ Schema for each task:
   "status": "pending"
 }
 
-Return [] if no specialist is needed (handle the request directly as fallback).`
+If no specialist is needed, return this object instead:
+{ "tasks": [], "directResponse": "your complete answer to the user here" }
+
+Otherwise return: { "tasks": [...taskList items...] }`
 
   const user = `## Current Goal
 ${goalBlock(board)}
@@ -172,7 +175,7 @@ ${Object.keys(board.contextBundle).join(', ') || 'none'}
 ## Agent Histories Loaded
 ${Object.keys(board.agentHistories).join(', ') || 'none'}
 
-Decide which specialist agents to run and what each should do. Return JSON taskList array.`
+Decide which specialist agents to run and what each should do. Return JSON object with "tasks" array (and optionally "directResponse" if handling yourself).`
 
   return { system, user }
 }

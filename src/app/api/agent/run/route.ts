@@ -95,12 +95,15 @@ export async function POST(req: NextRequest) {
         send({ type: 'agent_status', agent: 'analyst', message: 'Data ready' })
 
         // ── Step 3: CMO orchestration — build task graph ─────────────────
-        await cmoOrchestrate(board, connections, send)
+        const cmoDirectResponse = await cmoOrchestrate(board, connections, send)
 
-        // If CMO returned empty task list, it's handling the request directly
+        // If CMO handled the request directly (empty task list + directResponse)
         if (board.taskList.length === 0) {
-          // CMO handles general/fallback queries directly
-          send({ type: 'delta', content: 'I\'ve reviewed your request. Please provide more details or connect your marketing platforms so I can give you data-driven recommendations.' })
+          const fallbackText = cmoDirectResponse ?? 'Please connect your marketing platforms so I can give you data-driven recommendations.'
+          const chunkSize = 20
+          for (let i = 0; i < fallbackText.length; i += chunkSize) {
+            send({ type: 'delta', content: fallbackText.slice(i, i + chunkSize) })
+          }
           send({ type: 'done' })
           controller.close()
           return

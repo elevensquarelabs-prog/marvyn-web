@@ -46,12 +46,12 @@ function getIntegrationLabels(connections: RawConnections): string[] {
   return labels
 }
 
-/** Phase 1: CMO builds the task graph (Contract B1). */
+/** Phase 1: CMO builds the task graph (Contract B1). Returns directResponse if CMO handles itself. */
 export async function cmoOrchestrate(
   board: ContextBoard,
   connections: RawConnections,
   send: SendFn
-): Promise<void> {
+): Promise<string | null> {
   const cmoSkill = loadCMOSkill()
   const integrations = getIntegrationLabels(connections)
   const model = chooseCMOModel(board, false)
@@ -60,13 +60,19 @@ export async function cmoOrchestrate(
 
   send({ type: 'agent_status', agent: 'cmo', message: 'Planning task graph…' })
 
-  const taskList = await llmJson<ContextBoard['taskList']>(user, system, model, 2000)
-  board.taskList = taskList
+  const result = await llmJson<{ tasks: ContextBoard['taskList']; directResponse?: string }>(
+    user, system, model, 2000
+  )
 
-  if (taskList.length > 0) {
-    const agentNames = [...new Set(taskList.map((t) => t.agent))]
+  board.taskList = Array.isArray(result) ? result : (result.tasks ?? [])
+  const directResponse = Array.isArray(result) ? null : (result.directResponse ?? null)
+
+  if (board.taskList.length > 0) {
+    const agentNames = [...new Set(board.taskList.map((t) => t.agent))]
     send({ type: 'agent_status', agent: 'cmo', message: `Delegating to: ${agentNames.join(', ')}` })
   }
+
+  return directResponse
 }
 
 /** Phase 2: Run specialist agents in dependency order. */
@@ -78,7 +84,10 @@ export async function runSpecialists(board: ContextBoard, send: SendFn): Promise
     strategist: runStrategistAgent,
   }
 
-  const completed = new Set<string>()
+  // Pre-populate completed with already-done tasks so retry runs satisfy dependsOn correctly
+  const completed = new Set<string>(
+    board.taskList.filter((t) => t.status === 'done').map((t) => t.taskId)
+  )
 
   // Simple topological execution: keep looping until all tasks are done
   const MAX_PASSES = 10
@@ -112,6 +121,21 @@ export async function runSpecialists(board: ContextBoard, send: SendFn): Promise
   }
 }
 
+/** Extract top-level metrics from contextBundle relevant to a given agent for memory baseline. */
+function extractMetricSnapshot(board: ContextBoard, agent: AgentName): Record<string, unknown> {
+  const keysByAgent: Record<AgentName, string[]> = {
+    ads: ['metaAds', 'googleAds', 'ga4Conversions'],
+    seo: ['seoAudit', 'gsc'],
+    content: ['ga4Organic', 'socialLinkedIn', 'socialPerformance'],
+    strategist: [],
+  }
+  const snapshot: Record<string, unknown> = {}
+  for (const key of keysByAgent[agent]) {
+    if (board.contextBundle[key] !== undefined) snapshot[key] = board.contextBundle[key]
+  }
+  return snapshot
+}
+
 /** Phase 3: CMO reviews all outputs (Contract B2). Correction loop max 2x per agent. */
 export async function cmoReview(
   board: ContextBoard,
@@ -122,6 +146,7 @@ export async function cmoReview(
 ): Promise<string> {
   const MAX_CORRECTION_ROUNDS = 2
   const cmoSkill = loadCMOSkill()
+  let loopPassed = false
 
   for (let round = 0; round <= MAX_CORRECTION_ROUNDS; round++) {
     const model = chooseCMOModel(board, true)
@@ -139,16 +164,18 @@ export async function cmoReview(
 
       if (verdict === 'pass') {
         send({ type: 'cmo_review', agent, verdict: 'pass' })
-        // Persist material recommendations
         if (persistRecommendationIds?.length) {
-          await persistRecommendations(board, agent, persistRecommendationIds, sessionId, userId)
+          await persistRecommendations(
+            board, agent, persistRecommendationIds, sessionId, userId,
+            extractMetricSnapshot(board, agent)
+          )
         }
       } else if (verdict === 'correction_needed' && correctionRequest) {
         const history = board.correctionHistory[agent] ?? []
         history.push(correctionRequest)
         board.correctionHistory[agent] = history
 
-        // Reset task status so it can be re-run
+        // Reset task status so runSpecialists will pick it up on retry
         const task = board.taskList.find((t) => t.agent === agent)
         if (task) task.status = 'pending'
 
@@ -158,7 +185,6 @@ export async function cmoReview(
       } else if (verdict === 'escalate') {
         board.reviewStatus = 'escalated'
         send({ type: 'cmo_review', agent, verdict: 'escalate' })
-        // Return escalation message — CMO surfaces all attempts + diagnosis
         const attempts = board.agentAttempts[agent] ?? []
         const corrections = board.correctionHistory[agent] ?? []
         return buildEscalationMessage(agent, attempts, corrections, escalationSummary)
@@ -167,20 +193,36 @@ export async function cmoReview(
 
     if (allPassed) {
       board.reviewStatus = 'passed'
+      loopPassed = true
       break
     }
 
     if (agentsToRerun.length && round < MAX_CORRECTION_ROUNDS) {
-      // Re-run only failed agents before next review round
-      const rerunBoard = {
-        ...board,
-        taskList: board.taskList.filter((t) => agentsToRerun.includes(t.agent)),
-      }
-      await runSpecialists(rerunBoard, send)
+      // Run on the full board — completed set is seeded from status==='done' tasks,
+      // so dependsOn constraints across the full task graph are satisfied correctly.
+      await runSpecialists(board, send)
     }
   }
 
-  board.reviewStatus = board.reviewStatus === 'escalated' ? 'escalated' : 'passed'
+  // If the loop exhausted retries without all agents passing, escalate rather than
+  // silently marking as passed. This prevents "still unsatisfactory" being recorded as success.
+  if (!loopPassed && board.reviewStatus !== 'escalated') {
+    board.reviewStatus = 'escalated'
+    const stillFailing = board.taskList
+      .filter((t) => t.status === 'pending' || t.status === 'running')
+      .map((t) => t.agent as AgentName)
+
+    const agents = [...new Set(stillFailing)]
+    if (agents.length > 0) {
+      const parts = agents.map((agent) => {
+        const attempts = board.agentAttempts[agent] ?? []
+        const corrections = board.correctionHistory[agent] ?? []
+        return buildEscalationMessage(agent, attempts, corrections, undefined)
+      })
+      return parts.join('\n\n')
+    }
+  }
+
   return ''  // empty = no escalation, proceed to final response
 }
 
