@@ -75,7 +75,7 @@ const UserSchema = new Schema<IUser>({
   },
   usage: {
     tokensUsedThisMonth: { type: Number, default: 0 },
-    monthlyCredits: { type: Number, default: 300 },
+    monthlyCredits: { type: Number, default: 150 },
     creditsUsedThisMonth: { type: Number, default: 0 },
     extraCreditsBalance: { type: Number, default: 0 },
     estimatedCostUsdThisMonth: { type: Number, default: 0 },

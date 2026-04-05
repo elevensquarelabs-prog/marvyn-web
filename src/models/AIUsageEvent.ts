@@ -4,7 +4,7 @@ export interface IAIUsageEvent {
   userId: mongoose.Types.ObjectId
   feature: 'copy_generate' | 'blog_generate' | 'social_generate' | 'seo_audit' | 'seo_run' | 'agent_chat' | 'competitor_analysis' | 'clarity_insights' | 'competitor_tagging'
   model: string
-  provider: 'openrouter' | 'dataforseo' | 'platform'
+  provider: 'anthropic' | 'dataforseo' | 'platform'
   operation?: string
   estimatedInputTokens: number
   estimatedOutputTokens: number
@@ -24,7 +24,7 @@ const AIUsageEventSchema = new Schema<IAIUsageEvent>({
     index: true,
   },
   model: { type: String, required: true, default: 'unknown' },
-  provider: { type: String, enum: ['openrouter', 'dataforseo', 'platform'], required: true, default: 'openrouter' },
+  provider: { type: String, enum: ['anthropic', 'dataforseo', 'platform'], required: true, default: 'anthropic' },
   operation: { type: String },
   estimatedInputTokens: { type: Number, default: 0 },
   estimatedOutputTokens: { type: Number, default: 0 },

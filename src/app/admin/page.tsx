@@ -132,7 +132,7 @@ export default function AdminPage() {
     setModelTotals(costData.modelTotals || [])
     setProviderTotals(costData.providerTotals || [])
     setCreditDrafts(
-      Object.fromEntries((costData.users || []).map((user: CostUserRow) => [user._id, String(user.monthlyCredits ?? 300)]))
+      Object.fromEntries((costData.users || []).map((user: CostUserRow) => [user._id, String(user.monthlyCredits ?? 150)]))
     )
     setExtraCreditDrafts(
       Object.fromEntries((costData.users || []).map((user: CostUserRow) => [user._id, '50']))
