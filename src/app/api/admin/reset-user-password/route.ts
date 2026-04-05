@@ -1,19 +1,13 @@
 import { NextRequest } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { requireAdmin } from '@/lib/admin-auth'
 import { connectDB } from '@/lib/mongodb'
 import User from '@/models/User'
 import { randomBytes } from 'crypto'
 import bcrypt from 'bcryptjs'
 import { sendTempPasswordEmail } from '@/lib/email'
 
-const SUPER_ADMIN_EMAIL = 'raayed32@gmail.com'
-
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session || session.user?.email !== SUPER_ADMIN_EMAIL) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  try { await requireAdmin(req, 'support') } catch (r) { return r as Response }
 
   await connectDB()
   const { userId } = await req.json()

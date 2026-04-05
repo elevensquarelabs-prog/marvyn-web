@@ -1,6 +1,5 @@
 import { NextRequest } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { requireAdmin } from '@/lib/admin-auth'
 import { connectDB } from '@/lib/mongodb'
 import BetaRequest from '@/models/BetaRequest'
 import User from '@/models/User'
@@ -8,14 +7,10 @@ import { randomBytes } from 'crypto'
 import bcrypt from 'bcryptjs'
 import { sendWelcomeEmail, sendTempPasswordEmail } from '@/lib/email'
 
-const SUPER_ADMIN_EMAIL = 'raayed32@gmail.com'
 const BETA_EXPIRY = new Date('2099-12-31')
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session || session.user?.email !== SUPER_ADMIN_EMAIL) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  try { await requireAdmin(req, 'support') } catch (r) { return r as Response }
 
   await connectDB()
   const { betaRequestId } = await req.json()

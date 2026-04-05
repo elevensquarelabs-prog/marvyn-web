@@ -1,20 +1,18 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { NextRequest } from 'next/server'
+import { requireAdmin } from '@/lib/admin-auth'
 import {
   creditsForFeature,
   DATAFORSEO_OPERATION_COST_USD,
   DATAFORSEO_OPERATION_CREDITS,
   DEFAULT_EXCHANGE_RATE_INR,
   DEFAULT_MONTHLY_CREDITS,
-  estimateOpenRouterUsage,
-  OPENROUTER_MODEL_RATES_USD_PER_MILLION,
+  estimateAiUsage,
+  ANTHROPIC_MODEL_RATES_USD_PER_MILLION,
   usdToInr,
 } from '@/lib/ai-usage'
 import { connectDB } from '@/lib/mongodb'
 import AIUsageEvent from '@/models/AIUsageEvent'
 import User from '@/models/User'
-
-const SUPER_ADMIN_EMAIL = 'raayed32@gmail.com'
 
 function monthStart() {
   const start = new Date()
@@ -24,20 +22,20 @@ function monthStart() {
 }
 
 function getModelLabel(model: string) {
-  return OPENROUTER_MODEL_RATES_USD_PER_MILLION[model]?.label || model || 'Unknown model'
+  return ANTHROPIC_MODEL_RATES_USD_PER_MILLION[model]?.label || model || 'Unknown model'
 }
 
 function normalizeEvent(event: Record<string, unknown>) {
   const feature = String(event.feature || 'copy_generate')
-  const provider = String(event.provider || (String(event.model || '').includes('/') ? 'openrouter' : 'platform')) as 'openrouter' | 'dataforseo' | 'platform'
+  const provider = String(event.provider || 'anthropic') as 'anthropic' | 'dataforseo' | 'platform'
   const model = String(event.model || 'unknown')
   const operation = event.operation ? String(event.operation) : undefined
   const inputTokens = Number(event.estimatedInputTokens || 0)
   const outputTokens = Number(event.estimatedOutputTokens || 0)
 
   let estimatedCostUsd = Number(event.estimatedCostUsd || 0)
-  if (estimatedCostUsd <= 0 && provider === 'openrouter' && (inputTokens > 0 || outputTokens > 0)) {
-    estimatedCostUsd = estimateOpenRouterUsage({ model, inputTokens, outputTokens }).estimatedCostUsd
+  if (estimatedCostUsd <= 0 && provider === 'anthropic' && (inputTokens > 0 || outputTokens > 0)) {
+    estimatedCostUsd = estimateAiUsage({ model, inputTokens, outputTokens }).estimatedCostUsd
   }
   if (estimatedCostUsd <= 0 && provider === 'dataforseo' && operation && DATAFORSEO_OPERATION_COST_USD[operation]) {
     estimatedCostUsd = DATAFORSEO_OPERATION_COST_USD[operation]
@@ -65,11 +63,8 @@ function normalizeEvent(event: Record<string, unknown>) {
   }
 }
 
-export async function GET() {
-  const session = await getServerSession(authOptions)
-  if (!session || session.user?.email !== SUPER_ADMIN_EMAIL) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+export async function GET(req: NextRequest) {
+  try { await requireAdmin(req) } catch (r) { return r as Response }
 
   await connectDB()
   const currentMonthStart = monthStart()
@@ -89,10 +84,10 @@ export async function GET() {
   const modelTotals = new Map<string, { calls: number; estimatedCostUsd: number; creditsCharged: number; label: string }>()
   const providerTotals = new Map<string, { calls: number; estimatedCostUsd: number; creditsCharged: number }>()
 
-  for (const provider of ['openrouter', 'dataforseo', 'platform']) {
+  for (const provider of ['anthropic', 'dataforseo', 'platform']) {
     providerTotals.set(provider, { calls: 0, estimatedCostUsd: 0, creditsCharged: 0 })
   }
-  for (const [model, meta] of Object.entries(OPENROUTER_MODEL_RATES_USD_PER_MILLION)) {
+  for (const [model, meta] of Object.entries(ANTHROPIC_MODEL_RATES_USD_PER_MILLION)) {
     if (model === 'unknown') continue
     modelTotals.set(model, { calls: 0, estimatedCostUsd: 0, creditsCharged: 0, label: meta.label })
   }
