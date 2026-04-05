@@ -10,9 +10,13 @@ const getRazorpay = () => new Razorpay({
   key_secret: process.env.RAZORPAY_KEY_SECRET!,
 })
 
-const PLANS = {
-  monthly: { amount: 69900, period: 'monthly', interval: 1 }, // ₹699 in paise
-  yearly: { amount: 499900, period: 'yearly', interval: 1 },  // ₹4999 in paise
+const PLANS: Record<string, { amount: number; period: string; interval: number; label: string }> = {
+  // New canonical plan names
+  starter: { amount: 79900,  period: 'monthly', interval: 1, label: 'Starter Plan — ₹799/month' },
+  pro:     { amount: 149900, period: 'monthly', interval: 1, label: 'Pro Plan — ₹1,499/month' },
+  // Legacy aliases — existing subscribers keep these working
+  monthly: { amount: 79900,  period: 'monthly', interval: 1, label: 'Starter Plan — ₹799/month' },
+  yearly:  { amount: 149900, period: 'monthly', interval: 1, label: 'Pro Plan — ₹1,499/month' },
 }
 
 const CREDIT_PACKS = {
@@ -54,7 +58,7 @@ export async function POST(req: NextRequest) {
     keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
     userName: user.name,
     userEmail: user.email,
-    label: creditPack?.label ?? (plan === 'monthly' ? 'Monthly Plan' : 'Yearly Plan'),
+    label: creditPack?.label ?? planConfig?.label ?? plan,
     credits: creditPack?.credits ?? null,
   })
 }

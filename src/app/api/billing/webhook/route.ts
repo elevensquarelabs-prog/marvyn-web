@@ -30,15 +30,21 @@ export async function POST(req: NextRequest) {
           $set: { 'subscription.razorpayCustomerId': event.payload.payment.entity.customer_id || '' },
         })
       } else {
-        const periodEnd = plan === 'yearly'
-          ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
-          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        // Both starter and pro are monthly billing (30-day period).
+        // Legacy 'yearly' plan stored in old orders also maps to 30-day period now.
+        const periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+
+        // Normalise legacy plan names to canonical ones
+        const canonicalPlan = plan === 'monthly' ? 'starter' : plan === 'yearly' ? 'pro' : plan
+
+        const { PLAN_CREDITS } = await import('@/lib/ai-usage')
 
         await User.findByIdAndUpdate(userId, {
           'subscription.status': 'active',
-          'subscription.plan': plan,
+          'subscription.plan': canonicalPlan,
           'subscription.currentPeriodEnd': periodEnd,
           'subscription.razorpayCustomerId': event.payload.payment.entity.customer_id || '',
+          'usage.monthlyCredits': PLAN_CREDITS[canonicalPlan] ?? 150,
         })
       }
     }
