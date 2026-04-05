@@ -4,7 +4,7 @@ import { verifyAdminToken, COOKIE_NAME } from '@/lib/admin-auth'
 const ADMIN_HOSTNAME = 'admin.marvyn.tech'
 
 export async function middleware(req: NextRequest) {
-  const hostname = req.headers.get('host') ?? ''
+  const hostname = (req.headers.get('host') ?? '').replace(/:\d+$/, '')
   const isAdminDomain = hostname === ADMIN_HOSTNAME || hostname === `www.${ADMIN_HOSTNAME}`
 
   if (!isAdminDomain) return NextResponse.next()
@@ -25,7 +25,7 @@ export async function middleware(req: NextRequest) {
     : `/admin${pathname}`
 
   // Login page: allow without cookie
-  if (adminPath.startsWith('/admin/login')) {
+  if (adminPath === '/admin/login') {
     const url = req.nextUrl.clone()
     url.pathname = '/admin/login'
     return NextResponse.rewrite(url)
