@@ -148,6 +148,20 @@ export async function cmoReview(
   const cmoSkill = loadCMOSkill()
   let loopPassed = false
 
+  // If every specialist is blocked (none produced output), there is nothing to review.
+  // Treat this as escalation rather than a silent pass.
+  const doneTasks = board.taskList.filter((t) => t.status === 'done')
+  if (doneTasks.length === 0) {
+    board.reviewStatus = 'escalated'
+    const blockedAgents = [...new Set(
+      board.taskList.filter((t) => t.status === 'blocked').map((t) => t.agent as AgentName)
+    )]
+    const summary = blockedAgents.length
+      ? `Specialists failed to produce output: ${blockedAgents.join(', ')}. Check integrations and data availability.`
+      : 'No specialist tasks completed. Check integrations and data availability.'
+    return summary
+  }
+
   for (let round = 0; round <= MAX_CORRECTION_ROUNDS; round++) {
     const model = chooseCMOModel(board, true)
     const { system, user } = buildCMOReviewPrompt(board, cmoSkill)

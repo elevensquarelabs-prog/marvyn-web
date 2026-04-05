@@ -94,6 +94,33 @@ export async function POST(req: NextRequest) {
 
         send({ type: 'agent_status', agent: 'analyst', message: 'Data ready' })
 
+        // Shared persistence helper — called on every successful exit path
+        const persistRun = async (responseText: string) => {
+          try {
+            const freshSession = await ChatSession.findById(chatSessionId)
+            if (freshSession) {
+              freshSession.messages.push({ role: 'assistant', content: responseText, createdAt: new Date() })
+              if (freshSession.messages.length <= 3) freshSession.title = message.slice(0, 60)
+              await freshSession.save()
+            }
+          } catch (saveErr) {
+            console.error('[Agent] Failed to save response:', saveErr)
+          }
+          await User.updateOne(
+            { _id: userId },
+            { $inc: { 'usage.totalAiCalls': 1 }, $set: { 'usage.lastActive': new Date() } }
+          ).catch(() => {})
+          await recordAiUsage({
+            userId,
+            feature: 'agent_chat',
+            model: 'multi-agent',
+            estimatedInputTokens: 0,
+            estimatedOutputTokens: 0,
+            estimatedCostUsd: 0,
+            status: 'success',
+          })
+        }
+
         // ── Step 3: CMO orchestration — build task graph ─────────────────
         const cmoDirectResponse = await cmoOrchestrate(board, connections, send)
 
@@ -105,6 +132,7 @@ export async function POST(req: NextRequest) {
             send({ type: 'delta', content: fallbackText.slice(i, i + chunkSize) })
           }
           send({ type: 'done' })
+          await persistRun(fallbackText)
           controller.close()
           return
         }
@@ -124,34 +152,8 @@ export async function POST(req: NextRequest) {
         }
         send({ type: 'done' })
 
-        // ── Step 7: Persist chat session ────────────────────────────────
-        try {
-          const freshSession = await ChatSession.findById(chatSessionId)
-          if (freshSession) {
-            freshSession.messages.push({ role: 'assistant', content: finalText, createdAt: new Date() })
-            if (freshSession.messages.length <= 3) {
-              freshSession.title = message.slice(0, 60)
-            }
-            await freshSession.save()
-          }
-        } catch (saveErr) {
-          console.error('[Agent] Failed to save response:', saveErr)
-        }
-
-        await User.updateOne(
-          { _id: userId },
-          { $inc: { 'usage.totalAiCalls': 1 }, $set: { 'usage.lastActive': new Date() } }
-        ).catch(() => {})
-
-        await recordAiUsage({
-          userId,
-          feature: 'agent_chat',
-          model: 'multi-agent',
-          estimatedInputTokens: 0,
-          estimatedOutputTokens: 0,
-          estimatedCostUsd: 0,
-          status: 'success',
-        })
+        // ── Step 7: Persist ──────────────────────────────────────────────
+        await persistRun(finalText)
 
         controller.close()
       } catch (err: unknown) {
