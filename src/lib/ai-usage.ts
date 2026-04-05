@@ -15,17 +15,28 @@ export type AiFeature =
   | 'strategy_plan'
   | 'strategy_review'
 
-export type UsageProvider = 'openrouter' | 'dataforseo' | 'platform'
+export type UsageProvider = 'anthropic' | 'dataforseo' | 'platform'
 
-export const DEFAULT_MONTHLY_CREDITS = 300
+/** Credits allocated per plan per billing cycle */
+export const PLAN_CREDITS: Record<string, number> = {
+  starter: 150,
+  pro: 400,
+  beta: 300,
+  monthly: 150,
+  yearly: 400,
+}
+export const DEFAULT_MONTHLY_CREDITS = 150
 export const DEFAULT_EXCHANGE_RATE_INR = 83.5
 
-export const OPENROUTER_MODEL_RATES_USD_PER_MILLION: Record<string, { input: number; output: number; label: string }> = {
-  'minimax/minimax-m2.5': { input: 0.36, output: 1.44, label: 'Minimax M2.5 via OpenRouter' },
-  'anthropic/claude-haiku-4-5': { input: 0.79, output: 3.98, label: 'Claude Haiku 4.5 via OpenRouter' },
-  'anthropic/claude-sonnet-4-6': { input: 2.98, output: 14.91, label: 'Claude Sonnet 4.6 via OpenRouter' },
-  unknown: { input: 0.79, output: 3.98, label: 'Unknown OpenRouter model' },
+export const ANTHROPIC_MODEL_RATES_USD_PER_MILLION: Record<string, { input: number; output: number; label: string }> = {
+  'claude-haiku-4-5-20251001': { input: 0.80, output: 4.00, label: 'Claude Haiku 4.5' },
+  'claude-sonnet-4-6': { input: 3.00, output: 15.00, label: 'Claude Sonnet 4.6' },
+  'claude-opus-4-6': { input: 15.00, output: 75.00, label: 'Claude Opus 4.6' },
+  unknown: { input: 0.80, output: 4.00, label: 'Unknown Anthropic model' },
 }
+
+/** @deprecated Use ANTHROPIC_MODEL_RATES_USD_PER_MILLION */
+export const OPENROUTER_MODEL_RATES_USD_PER_MILLION = ANTHROPIC_MODEL_RATES_USD_PER_MILLION
 
 const FEATURE_CREDIT_COSTS: Record<AiFeature, number> = {
   copy_generate: 3,
@@ -33,7 +44,7 @@ const FEATURE_CREDIT_COSTS: Record<AiFeature, number> = {
   social_generate: 2,
   seo_audit: 12,
   seo_run: 30,
-  agent_chat: 5,
+  agent_chat: 8,
   competitor_analysis: 18,
   clarity_insights: 2,
   competitor_tagging: 2,
@@ -69,17 +80,16 @@ export function usdToInr(usd: number, exchangeRateInr = DEFAULT_EXCHANGE_RATE_IN
 }
 
 export function getModelNameFromComplexity(complexity: 'fast' | 'medium' | 'powerful' | 'opus') {
-  if (complexity === 'fast') return 'minimax/minimax-m2.5'
-  if (complexity === 'powerful') return 'anthropic/claude-sonnet-4-6'
-  if (complexity === 'opus') return 'anthropic/claude-opus-4-6'
-  return 'anthropic/claude-haiku-4-5'
+  if (complexity === 'powerful') return 'claude-sonnet-4-6'
+  if (complexity === 'opus') return 'claude-opus-4-6'
+  return 'claude-haiku-4-5-20251001'
 }
 
 export function creditsForFeature(feature: AiFeature) {
   return FEATURE_CREDIT_COSTS[feature] ?? 1
 }
 
-export function estimateOpenRouterUsage(params: {
+export function estimateAiUsage(params: {
   model: string
   inputTokens?: number
   outputTokens?: number
@@ -88,7 +98,7 @@ export function estimateOpenRouterUsage(params: {
 }) {
   const inputTokens = params.inputTokens ?? estimateTokens(params.inputText || '')
   const outputTokens = params.outputTokens ?? estimateTokens(params.outputText || '')
-  const rate = OPENROUTER_MODEL_RATES_USD_PER_MILLION[params.model] || OPENROUTER_MODEL_RATES_USD_PER_MILLION.unknown
+  const rate = ANTHROPIC_MODEL_RATES_USD_PER_MILLION[params.model] || ANTHROPIC_MODEL_RATES_USD_PER_MILLION.unknown
 
   const inputCostUsd = (inputTokens / 1_000_000) * rate.input
   const outputCostUsd = (outputTokens / 1_000_000) * rate.output
@@ -102,6 +112,9 @@ export function estimateOpenRouterUsage(params: {
   }
 }
 
+/** @deprecated Use estimateAiUsage */
+export const estimateOpenRouterUsage = estimateAiUsage
+
 export function estimateCostInr(params: {
   model: string
   inputTokens?: number
@@ -109,7 +122,7 @@ export function estimateCostInr(params: {
   inputText?: string
   outputText?: string
 }) {
-  return estimateOpenRouterUsage(params)
+  return estimateAiUsage(params)
 }
 
 export function estimateDataforSeoUsage(operation: 'seo_audit_onpage' | 'seo_run_bundle' | 'competitor_analysis_bundle') {
@@ -122,7 +135,7 @@ export function estimateDataforSeoUsage(operation: 'seo_audit_onpage' | 'seo_run
 }
 
 export async function ensureMonthlyCreditsState(userId: string) {
-  const user = await User.findById(userId).select('usage').lean() as {
+  const user = await User.findById(userId).select('usage subscription').lean() as {
     usage?: {
       monthlyCredits?: number
       creditsUsedThisMonth?: number
@@ -130,18 +143,22 @@ export async function ensureMonthlyCreditsState(userId: string) {
       estimatedCostUsdThisMonth?: number
       lastCreditsResetAt?: Date
     }
+    subscription?: { plan?: string }
   } | null
 
   const lastResetAt = user?.usage?.lastCreditsResetAt ? new Date(user.usage.lastCreditsResetAt) : null
   const currentMonth = monthStart()
   const needsReset = !lastResetAt || lastResetAt < currentMonth
 
+  const plan = user?.subscription?.plan ?? 'starter'
+  const planCredits = PLAN_CREDITS[plan] ?? DEFAULT_MONTHLY_CREDITS
+
   if (needsReset) {
     await User.updateOne(
       { _id: userId },
       {
         $set: {
-          'usage.monthlyCredits': user?.usage?.monthlyCredits ?? DEFAULT_MONTHLY_CREDITS,
+          'usage.monthlyCredits': planCredits,
           'usage.creditsUsedThisMonth': 0,
           'usage.estimatedCostUsdThisMonth': 0,
           'usage.tokensUsedThisMonth': 0,
@@ -152,7 +169,7 @@ export async function ensureMonthlyCreditsState(userId: string) {
   } else if (typeof user?.usage?.monthlyCredits !== 'number') {
     await User.updateOne(
       { _id: userId },
-      { $set: { 'usage.monthlyCredits': DEFAULT_MONTHLY_CREDITS } }
+      { $set: { 'usage.monthlyCredits': planCredits } }
     ).catch(() => {})
   }
 }
@@ -224,7 +241,7 @@ export async function recordAiUsage(params: {
   creditsCharged?: number
   status?: 'success' | 'failed'
 }) {
-  const provider = params.provider ?? 'openrouter'
+  const provider = params.provider ?? 'anthropic'
   const status = params.status ?? 'success'
   const estimatedCostUsd =
     params.estimatedCostUsd ??

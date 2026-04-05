@@ -10,7 +10,7 @@ export interface IUser extends Document {
     razorpayCustomerId?: string
     razorpaySubscriptionId?: string
     currentPeriodEnd?: Date
-    plan?: 'monthly' | 'yearly' | 'beta'
+    plan?: 'starter' | 'pro' | 'monthly' | 'yearly' | 'beta'
   }
   connections: {
     meta?: { accessToken?: string; accountId?: string; accountName?: string }
@@ -61,7 +61,7 @@ const UserSchema = new Schema<IUser>({
     razorpayCustomerId: String,
     razorpaySubscriptionId: String,
     currentPeriodEnd: Date,
-    plan: { type: String, enum: ['monthly', 'yearly', 'beta'] },
+    plan: { type: String, enum: ['starter', 'pro', 'monthly', 'yearly', 'beta'] },
   },
   connections: {
     meta: { accessToken: String, accountId: String, accountName: String },
