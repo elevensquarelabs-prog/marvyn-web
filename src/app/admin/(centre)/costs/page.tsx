@@ -54,7 +54,7 @@ export default function CostsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800">
-            {data.featureTotals.sort((a, b) => b.estimatedCostInr - a.estimatedCostInr).map(row => (
+            {[...data.featureTotals].sort((a, b) => b.estimatedCostInr - a.estimatedCostInr).map(row => (
               <tr key={row.feature} className="hover:bg-zinc-800/30">
                 <td className="px-5 py-2.5 text-zinc-300">{row.feature.replace(/_/g, ' ')}</td>
                 <td className="px-5 py-2.5 text-zinc-400 text-right">{row.calls}</td>

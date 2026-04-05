@@ -24,13 +24,6 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: 'text-zinc-400 bg-zinc-800',
 }
 
-const PLAN_LABELS: Record<string, string> = {
-  starter: 'Starter',
-  pro: 'Pro',
-  beta: 'Beta',
-  monthly: 'Starter',
-  yearly: 'Pro',
-}
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([])
@@ -57,12 +50,17 @@ export default function UsersPage() {
 
   async function action(userId: string, act: string, extra?: Record<string, unknown>) {
     setActionLoading(userId + act)
-    await fetch('/api/admin/users', {
+    const res = await fetch('/api/admin/users', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: userId, action: act, ...extra }),
     })
-    await load()
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      alert(data.error || `Action "${act}" failed`)
+    } else {
+      await load()
+    }
     setActionLoading(null)
   }
 
