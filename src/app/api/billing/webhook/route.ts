@@ -37,14 +37,16 @@ export async function POST(req: NextRequest) {
         // Normalise legacy plan names to canonical ones
         const canonicalPlan = plan === 'monthly' ? 'starter' : plan === 'yearly' ? 'pro' : plan
 
-        const { PLAN_CREDITS } = await import('@/lib/ai-usage')
+        const { PLAN_CREDITS, DEFAULT_MONTHLY_CREDITS } = await import('@/lib/ai-usage')
 
         await User.findByIdAndUpdate(userId, {
-          'subscription.status': 'active',
-          'subscription.plan': canonicalPlan,
-          'subscription.currentPeriodEnd': periodEnd,
-          'subscription.razorpayCustomerId': event.payload.payment.entity.customer_id || '',
-          'usage.monthlyCredits': PLAN_CREDITS[canonicalPlan] ?? 150,
+          $set: {
+            'subscription.status': 'active',
+            'subscription.plan': canonicalPlan,
+            'subscription.currentPeriodEnd': periodEnd,
+            'subscription.razorpayCustomerId': event.payload.payment.entity.customer_id || '',
+            'usage.monthlyCredits': PLAN_CREDITS[canonicalPlan] ?? DEFAULT_MONTHLY_CREDITS,
+          },
         })
       }
     }
