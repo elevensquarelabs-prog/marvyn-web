@@ -17,21 +17,27 @@ export async function POST(req: NextRequest) {
   try { caller = await requireAdmin(req, 'super_admin') } catch (res) { return res as Response }
   await connectDB()
 
-  const { email, name, password, role } = await req.json()
+  const body = await req.json()
+  const email = (body.email || '').trim().toLowerCase()
+  const { name, password, role } = body
+
   if (!email || !name || !password || !role) {
     return Response.json({ error: 'email, name, password, role required' }, { status: 400 })
+  }
+  if (!password || password.length < 8) {
+    return Response.json({ error: 'Password must be at least 8 characters' }, { status: 400 })
   }
   const validRoles: AdminRole[] = ['super_admin', 'support', 'billing_viewer']
   if (!validRoles.includes(role)) {
     return Response.json({ error: 'Invalid role' }, { status: 400 })
   }
 
-  const existing = await AdminUser.findOne({ email: email.toLowerCase() })
+  const existing = await AdminUser.findOne({ email })
   if (existing) return Response.json({ error: 'Admin with this email already exists' }, { status: 409 })
 
   const hashed = await bcrypt.hash(password, 10)
   const admin = await AdminUser.create({
-    email: email.toLowerCase(),
+    email,
     name,
     password: hashed,
     role,
@@ -39,13 +45,7 @@ export async function POST(req: NextRequest) {
     createdBy: caller.adminId,
   })
 
-  return Response.json({
-    admin: {
-      _id: admin._id.toString(),
-      email: admin.email,
-      name: admin.name,
-      role: admin.role,
-      isActive: admin.isActive,
-    },
-  }, { status: 201 })
+  const adminObj = admin.toObject()
+  const { password: _pw, ...safeAdmin } = adminObj
+  return Response.json({ admin: { ...safeAdmin, _id: admin._id.toString() } }, { status: 201 })
 }

@@ -1,7 +1,10 @@
 import { NextRequest } from 'next/server'
 import { connectDB } from '@/lib/mongodb'
 import AdminUser from '@/models/AdminUser'
+import type { AdminRole } from '@/models/AdminUser'
 import { requireAdmin } from '@/lib/admin-auth'
+
+const VALID_ROLES: AdminRole[] = ['super_admin', 'support', 'billing_viewer']
 
 export async function PATCH(
   req: NextRequest,
@@ -19,17 +22,23 @@ export async function PATCH(
   }
 
   if (action === 'activate') {
-    await AdminUser.updateOne({ _id: id }, { $set: { isActive: true } })
+    const result = await AdminUser.updateOne({ _id: id }, { $set: { isActive: true } })
+    if (result.matchedCount === 0) return Response.json({ error: 'Admin not found' }, { status: 404 })
     return Response.json({ success: true, isActive: true })
   }
 
   if (action === 'deactivate') {
-    await AdminUser.updateOne({ _id: id }, { $set: { isActive: false } })
+    const result = await AdminUser.updateOne({ _id: id }, { $set: { isActive: false } })
+    if (result.matchedCount === 0) return Response.json({ error: 'Admin not found' }, { status: 404 })
     return Response.json({ success: true, isActive: false })
   }
 
   if (action === 'change_role') {
-    await AdminUser.updateOne({ _id: id }, { $set: { role } })
+    if (!role || !VALID_ROLES.includes(role)) {
+      return Response.json({ error: 'Invalid role' }, { status: 400 })
+    }
+    const result = await AdminUser.updateOne({ _id: id }, { $set: { role } })
+    if (result.matchedCount === 0) return Response.json({ error: 'Admin not found' }, { status: 404 })
     return Response.json({ success: true, role })
   }
 

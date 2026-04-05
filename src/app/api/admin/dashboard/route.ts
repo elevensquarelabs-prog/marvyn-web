@@ -14,16 +14,18 @@ export async function GET(req: NextRequest) {
   try { await requireAdmin(req) } catch (res) { return res as Response }
   await connectDB()
 
+  const start = monthStart()
+
   const [users, events] = await Promise.all([
     User.find({}).select('subscription usage createdAt').lean(),
-    AIUsageEvent.find({ createdAt: { $gte: monthStart() } }).select('estimatedCostUsd creditsCharged status').lean(),
+    AIUsageEvent.find({ createdAt: { $gte: start } }).select('estimatedCostUsd creditsCharged status').lean(),
   ])
 
   const totalUsers = users.length
   const activeUsers = users.filter(u => {
     const last = u.usage?.lastActive
     if (!last) return false
-    return new Date(last) >= monthStart()
+    return new Date(last) >= start
   }).length
 
   const byPlan: Record<string, number> = {}
