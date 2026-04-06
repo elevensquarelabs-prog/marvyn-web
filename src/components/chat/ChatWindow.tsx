@@ -5,6 +5,13 @@ import { MessageBubble } from './MessageBubble'
 import { ToolCallIndicator } from './ToolCallIndicator'
 import { Button } from '@/components/shared/Button'
 
+const AGENT_MENTIONS = [
+  { name: 'ads',        label: 'Ads Agent',    desc: 'Analyze paid campaigns & ROAS' },
+  { name: 'seo',        label: 'SEO Agent',     desc: 'SEO audit & keyword rankings' },
+  { name: 'content',    label: 'Content Agent', desc: 'Write & plan content' },
+  { name: 'strategist', label: 'Strategist',    desc: 'Strategy, priorities & roadmap' },
+]
+
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
@@ -44,8 +51,15 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
   const [activeSkill, setActiveSkill] = useState<string | null>(null)
   const [toolLabel, setToolLabel] = useState<string | null>(null)
   const [completedTools, setCompletedTools] = useState<string[]>([])
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [mentionIndex, setMentionIndex] = useState(0)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const mentionRef = useRef<HTMLDivElement>(null)
+
+  const mentionMatches = mentionQuery !== null
+    ? AGENT_MENTIONS.filter(a => a.name.startsWith(mentionQuery) || a.label.toLowerCase().startsWith(mentionQuery))
+    : []
 
   // Reset when switching sessions
   useEffect(() => {
@@ -104,6 +118,11 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
         body: JSON.stringify({ message: text, sessionId, skillId: skill }),
       })
 
+      if (!res.ok) {
+        let errMsg = 'Something went wrong. Please try again.'
+        try { const d = await res.json(); if (d.error) errMsg = d.error } catch {}
+        throw new Error(errMsg)
+      }
       if (!res.body) throw new Error('No response body')
 
       const reader = res.body.getReader()
@@ -129,6 +148,10 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
                 onSessionCreated?.(data.sessionId, text.slice(0, 60))
                 firstMessage = false
               }
+            } else if (data.type === 'agent_status') {
+              const label = data.message ? `${data.agent}: ${data.message}` : data.agent
+              setToolLabel(label)
+              onAgentStatusChange?.('running', label)
             } else if (data.type === 'tool_call') {
               setToolLabel(data.label || data.tool)
               onAgentStatusChange?.('running', data.label)
@@ -170,11 +193,59 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
     }
   }, [loading, sessionId, activeSkill, messages.length, onAgentStatusChange, onSessionCreated])
 
+  const insertMention = useCallback((agentName: string) => {
+    // Replace the trailing @query with @agentName followed by a space
+    const atIdx = input.lastIndexOf('@')
+    const newInput = input.slice(0, atIdx) + `@${agentName} `
+    setInput(newInput)
+    setMentionQuery(null)
+    setMentionIndex(0)
+    setTimeout(() => textareaRef.current?.focus(), 0)
+  }, [input])
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (mentionQuery !== null && mentionMatches.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setMentionIndex(i => (i + 1) % mentionMatches.length)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setMentionIndex(i => (i - 1 + mentionMatches.length) % mentionMatches.length)
+        return
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        insertMention(mentionMatches[mentionIndex].name)
+        return
+      }
+      if (e.key === 'Escape') {
+        setMentionQuery(null)
+        return
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       sendMessage(input)
     }
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value
+    setInput(val)
+    // Detect @mention trigger
+    const atIdx = val.lastIndexOf('@')
+    if (atIdx !== -1) {
+      const afterAt = val.slice(atIdx + 1)
+      // Only show picker if there's no space after the @ (still typing the mention)
+      if (!afterAt.includes(' ')) {
+        setMentionQuery(afterAt.toLowerCase())
+        setMentionIndex(0)
+        return
+      }
+    }
+    setMentionQuery(null)
   }
 
   const activateSkill = (chip: typeof SKILL_CHIPS[0]) => {
@@ -279,11 +350,27 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
 
       {/* Input */}
       <div className="px-6 pb-6 pt-3 border-t border-[#1E1E1E]">
+        {/* @mention picker */}
+        {mentionQuery !== null && mentionMatches.length > 0 && (
+          <div ref={mentionRef} className="mb-2 bg-[#181818] border border-[#2A2A2A] rounded-xl overflow-hidden shadow-lg">
+            {mentionMatches.map((agent, idx) => (
+              <button
+                key={agent.name}
+                onMouseDown={e => { e.preventDefault(); insertMention(agent.name) }}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${idx === mentionIndex ? 'bg-[#DA7756]/15' : 'hover:bg-[#222]'}`}
+              >
+                <span className="text-[#DA7756] font-mono text-xs">@{agent.name}</span>
+                <span className="text-xs text-[var(--text-primary)] font-medium">{agent.label}</span>
+                <span className="text-xs text-[#555] ml-auto">{agent.desc}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex gap-3 items-end bg-[#111] border border-[#2A2A2A] rounded-xl p-3 focus-within:border-[#DA7756]/50 transition-colors">
           <textarea
             ref={textareaRef}
             value={input}
-            onChange={e => setInput(e.target.value)}
+            onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder={activeSkillData ? `Ask ${activeSkillData.label} expert anything…` : 'Ask Marvyn anything…'}
             rows={1}
