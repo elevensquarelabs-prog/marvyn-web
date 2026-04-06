@@ -1,26 +1,21 @@
-import OpenAI from 'openai'
+import Anthropic from '@anthropic-ai/sdk'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _openai: any = null
-function getOpenAI() {
-  if (!_openai) {
-    _openai = new OpenAI({
-      baseURL: 'https://openrouter.ai/api/v1',
-      apiKey: process.env.OPENROUTER_API_KEY || 'placeholder',
-      defaultHeaders: {
-        'HTTP-Referer': process.env.NEXTAUTH_URL || 'http://localhost:3000',
-        'X-Title': 'Marvyn Marketing OS',
-      },
+let _client: Anthropic | null = null
+function getClient(): Anthropic {
+  if (!_client) {
+    _client = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      timeout: 90_000, // 90 seconds — default is 600s (too long for a chat UX)
     })
   }
-  return _openai
+  return _client
 }
 
 export const MODELS = {
-  fast: 'minimax/minimax-m2.5',
-  medium: 'anthropic/claude-haiku-4-5',
-  powerful: 'anthropic/claude-sonnet-4-6',
-  opus: 'anthropic/claude-opus-4-6',
+  fast: 'claude-haiku-4-5-20251001',
+  medium: 'claude-haiku-4-5-20251001',
+  powerful: 'claude-sonnet-4-6',
+  opus: 'claude-opus-4-6',
 } as const
 
 export type Complexity = keyof typeof MODELS
@@ -37,36 +32,39 @@ export async function llm(
   system: string,
   complexity: Complexity = 'medium'
 ): Promise<string> {
-  const response = await getOpenAI().chat.completions.create({
+  const response = await getClient().messages.create({
     model: MODELS[complexity],
-    messages: [
-      { role: 'system', content: system },
-      { role: 'user', content: prompt },
-    ],
+    system,
+    messages: [{ role: 'user', content: prompt }],
     max_tokens: maxTokens[complexity],
   })
-  return response.choices[0]?.message?.content || ''
+  const block = response.content[0]
+  return block.type === 'text' ? block.text : ''
 }
 
 /**
  * Call the LLM expecting a JSON response. Parses JSON from the response,
  * stripping markdown code fences if present.
+ * Optional onUsage callback receives actual token counts from the API response.
  */
 export async function llmJson<T>(
   prompt: string,
   system: string,
   model: string,
-  tokens = 4000
+  tokens = 4000,
+  onUsage?: (inputTokens: number, outputTokens: number) => void
 ): Promise<T> {
-  const response = await getOpenAI().chat.completions.create({
+  const response = await getClient().messages.create({
     model,
-    messages: [
-      { role: 'system', content: system },
-      { role: 'user', content: prompt },
-    ],
+    system,
+    messages: [{ role: 'user', content: prompt }],
     max_tokens: tokens,
   })
-  const raw = response.choices[0]?.message?.content ?? ''
+  if (onUsage) {
+    onUsage(response.usage.input_tokens, response.usage.output_tokens)
+  }
+  const block = response.content[0]
+  const raw = block.type === 'text' ? block.text : ''
   // Strip markdown fences if present
   const stripped = raw
     .replace(/^```(?:json)?\s*/m, '')
@@ -80,15 +78,10 @@ export async function llmStream(
   system: string,
   complexity: Complexity = 'powerful'
 ) {
-  return getOpenAI().chat.completions.create({
+  return getClient().messages.stream({
     model: MODELS[complexity],
-    messages: [
-      { role: 'system', content: system },
-      { role: 'user', content: prompt },
-    ],
-    stream: true,
+    system,
+    messages: [{ role: 'user', content: prompt }],
     max_tokens: maxTokens[complexity],
   })
 }
-
-export { getOpenAI as openai }

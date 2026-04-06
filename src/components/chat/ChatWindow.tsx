@@ -152,6 +152,18 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
               const label = data.message ? `${data.agent}: ${data.message}` : data.agent
               setToolLabel(label)
               onAgentStatusChange?.('running', label)
+            } else if (data.type === 'agent_start') {
+              const agentLabel = (data.agent as string).charAt(0).toUpperCase() + (data.agent as string).slice(1)
+              setToolLabel(`${agentLabel} agent running…`)
+              onAgentStatusChange?.('running', `${agentLabel} agent running…`)
+            } else if (data.type === 'agent_done') {
+              const agentLabel = (data.agent as string).charAt(0).toUpperCase() + (data.agent as string).slice(1)
+              setCompletedTools(prev => [...prev, `${agentLabel} analysis complete`])
+              setToolLabel(null)
+            } else if (data.type === 'agent_error') {
+              const agentLabel = (data.agent as string).charAt(0).toUpperCase() + (data.agent as string).slice(1)
+              setCompletedTools(prev => [...prev, `${agentLabel}: ${data.error ?? 'failed'}`])
+              setToolLabel(null)
             } else if (data.type === 'tool_call') {
               setToolLabel(data.label || data.tool)
               onAgentStatusChange?.('running', data.label)
