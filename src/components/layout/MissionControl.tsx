@@ -3,61 +3,34 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
-interface MCData {
-  brand: { name?: string; businessModel?: string; competitors?: unknown[] } | null
+interface ShellData {
+  brand: { name?: string; businessModel?: string; competitorCount?: number } | null
   blogPending: number
-  blogScheduled: number
   socialPending: number
-  credits?: {
+  unreadAlerts: number
+  credits: {
     monthlyCredits: number
     creditsUsedThisMonth: number
     extraCreditsBalance: number
     totalCreditsAvailable: number
     creditsRemaining: number
   } | null
-  recentSessions: { _id: string; title: string; updatedAt: string }[]
-  agentStatus: 'idle' | 'running'
-  activeTool: string | null
 }
 
 export function MissionControl({ agentStatus = 'idle', activeTool = null }: { agentStatus?: string; activeTool?: string | null }) {
-  const [data, setData] = useState<MCData>({
+  const [data, setData] = useState<ShellData>({
     brand: null,
     blogPending: 0,
-    blogScheduled: 0,
     socialPending: 0,
+    unreadAlerts: 0,
     credits: null,
-    recentSessions: [],
-    agentStatus: 'idle',
-    activeTool: null,
   })
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [brandRes, blogRes, socialRes, creditsRes] = await Promise.all([
-          fetch('/api/settings/brand'),
-          fetch('/api/blog?status=pending_approval'),
-          fetch('/api/social?status=pending_approval'),
-          fetch('/api/user/credits'),
-        ])
-        const brandData = await brandRes.json()
-        const blogData = await blogRes.json()
-        const socialData = await socialRes.json()
-        const creditsData = await creditsRes.json()
-
-        setData(prev => ({
-          ...prev,
-          brand: brandData.brand,
-          blogPending: blogData.posts?.length || 0,
-          socialPending: socialData.posts?.length || 0,
-          credits: creditsData.credits || null,
-        }))
-      } catch {
-        // silent
-      }
-    }
-    load()
+    fetch('/api/dashboard/shell')
+      .then(r => r.ok ? r.json() : null)
+      .then((d: ShellData | null) => { if (d) setData(d) })
+      .catch(() => {})
   }, [])
 
   return (
@@ -89,7 +62,7 @@ export function MissionControl({ agentStatus = 'idle', activeTool = null }: { ag
           </div>
           <div className="flex items-center justify-between">
             <span className="text-xs text-[#A0A0A0]">Competitors</span>
-            <span className="text-xs text-[#A0A0A0]">{(data.brand?.competitors as unknown[])?.length || 0} tracked</span>
+            <span className="text-xs text-[#A0A0A0]">{data.brand?.competitorCount ?? 0} tracked</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-xs text-[#A0A0A0]">Business mode</span>

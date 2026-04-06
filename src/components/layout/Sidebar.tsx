@@ -153,9 +153,13 @@ export function Sidebar() {
 
   useEffect(() => {
     if (!session) return
-    fetch('/api/alerts?unread=true&limit=1')
-      .then(r => r.json())
-      .then(d => setUnreadAlerts(d.unreadCount ?? 0))
+    // Reuse the shell endpoint — already fetched by MissionControl on the same render.
+    // Browser deduplicates the in-flight request; we just read unreadAlerts from it.
+    fetch('/api/dashboard/shell')
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { unreadAlerts?: number } | null) => {
+        if (d) setUnreadAlerts(d.unreadAlerts ?? 0)
+      })
       .catch(() => {})
   }, [session])
 
