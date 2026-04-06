@@ -33,6 +33,9 @@ export default function ChatPage() {
   const [activeMessages, setActiveMessages] = useState<ChatMessage[]>([])
   const [loadingSession, setLoadingSession] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  // Incremented only on explicit session switches so ChatWindow is never
+  // remounted mid-stream when handleSessionCreated fires during SSE.
+  const [chatKey, setChatKey] = useState(0)
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -59,6 +62,7 @@ export default function ChatPage() {
       }))
       setActiveMessages(msgs)
       setActiveSessionId(sessionId)
+      setChatKey(k => k + 1)  // explicit switch — remount with loaded messages
     } finally {
       setLoadingSession(false)
     }
@@ -67,6 +71,7 @@ export default function ChatPage() {
   function startNewChat() {
     setActiveSessionId(null)
     setActiveMessages([])
+    setChatKey(k => k + 1)  // explicit switch — remount with clean state
   }
 
   function handleSessionCreated(sessionId: string, title: string) {
@@ -192,7 +197,7 @@ export default function ChatPage() {
             </div>
           ) : (
             <ChatWindow
-              key={activeSessionId ?? 'new'}
+              key={chatKey}
               onAgentStatusChange={handleStatusChange}
               initialSessionId={activeSessionId}
               initialMessages={activeMessages}
