@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose'
+import type { AdminRole } from '@/lib/admin-auth'
 
-export type AdminRole = 'super_admin' | 'support' | 'billing_viewer'
+export type { AdminRole }
 
 export interface IAdminUser extends Document {
   email: string

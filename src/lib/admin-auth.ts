@@ -1,6 +1,9 @@
 import { SignJWT, jwtVerify } from 'jose'
 import { NextRequest } from 'next/server'
-import type { AdminRole } from '@/models/AdminUser'
+
+// Defined here (not imported from AdminUser) so this file stays Edge-Runtime-safe.
+// The middleware imports this file; any transitive import of mongoose would crash the Edge Runtime.
+export type AdminRole = 'super_admin' | 'support' | 'billing_viewer'
 
 const COOKIE_NAME = 'admin_session'
 const SECRET = new TextEncoder().encode(
