@@ -17,7 +17,10 @@ export async function runContentAgent(board: ContextBoard, taskId: string): Prom
   }
 
   const { system, user } = buildSpecialistPrompt('content', board, taskId, loadAgentSkills('content'))
-  const output = await llmJson<AgentOutput>(user, system, MODELS.fast, 4000)
+  const output = await llmJson<AgentOutput>(
+    user, system, MODELS.fast, 3500,
+    (i, o) => { board.tokenUsage.inputTokens += i; board.tokenUsage.outputTokens += o }
+  )
 
   const attempts = board.agentAttempts.content ?? []
   attempts.push(output)

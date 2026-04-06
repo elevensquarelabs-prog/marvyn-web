@@ -9,7 +9,10 @@ export async function runSEOAgent(board: ContextBoard, taskId: string): Promise<
   task.status = 'running'
 
   const { system, user } = buildSpecialistPrompt('seo', board, taskId, loadAgentSkills('seo'))
-  const output = await llmJson<AgentOutput>(user, system, MODELS.fast, 4000)
+  const output = await llmJson<AgentOutput>(
+    user, system, MODELS.fast, 3500,
+    (i, o) => { board.tokenUsage.inputTokens += i; board.tokenUsage.outputTokens += o }
+  )
 
   const attempts = board.agentAttempts.seo ?? []
   attempts.push(output)

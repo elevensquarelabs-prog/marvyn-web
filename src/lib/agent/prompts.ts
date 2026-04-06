@@ -23,7 +23,13 @@ const AGENT_TITLES: Record<AgentName, string> = {
 }
 
 function brandBlock(board: ContextBoard): string {
-  const brand = board.contextBundle.brand as Record<string, unknown> | null | undefined
+  const raw = board.contextBundle.brand
+  // ToolResult wrapper — parse the content field
+  let brand: Record<string, unknown> | null | undefined =
+    raw as Record<string, unknown> | null | undefined
+  if (brand && typeof brand.content === 'string') {
+    try { brand = JSON.parse(brand.content) } catch { /* fall through */ }
+  }
   if (!brand) return 'Brand: not yet configured.'
   return [
     `Brand: ${brand.name ?? 'unknown'}`,
@@ -50,6 +56,37 @@ function goalBlock(board: ContextBoard): string {
 }
 
 /**
+ * Expand ToolResult wrappers { summary, content } in the context bundle and
+ * cap total size to ~15 000 chars so the specialist prompt stays manageable.
+ * ToolResult.content is already a JSON string — parsing it before re-stringifying
+ * avoids double-escaping and reduces prompt size significantly.
+ */
+function formatContextBundle(bundle: Record<string, unknown>): string {
+  const expanded: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(bundle)) {
+    if (
+      value !== null &&
+      typeof value === 'object' &&
+      'content' in (value as object) &&
+      typeof (value as Record<string, unknown>).content === 'string'
+    ) {
+      try {
+        expanded[key] = JSON.parse((value as { content: string }).content)
+      } catch {
+        expanded[key] = value
+      }
+    } else {
+      expanded[key] = value
+    }
+  }
+  const full = JSON.stringify(expanded, null, 2)
+  const MAX = 15_000
+  if (full.length <= MAX) return full
+  // Truncate gracefully with a clear marker
+  return full.slice(0, MAX) + '\n\n... [context truncated — data above is a representative sample]'
+}
+
+/**
  * Contract A — Specialist prompt (Ads, SEO, Content, Strategist).
  * Returns { system, user } to pass to llmJson().
  */
@@ -64,8 +101,19 @@ export function buildSpecialistPrompt(
   const correctionReqs = board.correctionHistory[agent] ?? []
   const lastCorrection = correctionReqs.at(-1)
 
+  // Resolve brand name for identity line (ToolResult wrapper may be present)
+  const rawBrand = board.contextBundle.brand as Record<string, unknown> | null | undefined
+  let brandName = 'this company'
+  if (rawBrand) {
+    if (typeof rawBrand.name === 'string') {
+      brandName = rawBrand.name
+    } else if (typeof rawBrand.content === 'string') {
+      try { brandName = (JSON.parse(rawBrand.content) as Record<string, unknown>).name as string ?? brandName } catch { /* noop */ }
+    }
+  }
+
   const system = `## Identity
-You are the ${AGENT_TITLES[agent]} at ${(board.contextBundle.brand as Record<string, unknown>)?.name ?? 'this company'}.
+You are the ${AGENT_TITLES[agent]} at ${brandName}.
 
 ${skillContent ? `## Your Skills\n${skillContent}\n` : ''}## Brand Context
 ${brandBlock(board)}
@@ -117,7 +165,7 @@ ${task?.successCriteria ? `Success criteria: ${task.successCriteria}` : ''}
 
 ## Context Data
 \`\`\`json
-${JSON.stringify(board.contextBundle, null, 2)}
+${formatContextBundle(board.contextBundle)}
 \`\`\`
 ${historySection}
 ${correctionSection}`

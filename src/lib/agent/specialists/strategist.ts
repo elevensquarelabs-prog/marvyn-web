@@ -32,7 +32,10 @@ export async function runStrategistAgent(board: ContextBoard, taskId: string): P
     taskId,
     loadAgentSkills('strategist')
   )
-  const output = await llmJson<AgentOutput>(user, system, MODELS.opus, 6000)
+  const output = await llmJson<AgentOutput>(
+    user, system, MODELS.powerful, 4000,
+    (i, o) => { board.tokenUsage.inputTokens += i; board.tokenUsage.outputTokens += o }
+  )
 
   const attempts = board.agentAttempts.strategist ?? []
   attempts.push(output)
