@@ -10,7 +10,7 @@ export async function runAdsAgent(board: ContextBoard, taskId: string): Promise<
 
   const { system, user } = buildSpecialistPrompt('ads', board, taskId, loadAgentSkills('ads'))
   const output = await llmJson<AgentOutput>(
-    user, system, MODELS.fast, 3500,
+    user, system, MODELS.powerful, 3500,
     (i, o) => { board.tokenUsage.inputTokens += i; board.tokenUsage.outputTokens += o }
   )
 

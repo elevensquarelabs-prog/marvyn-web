@@ -4,13 +4,12 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { MessageBubble } from './MessageBubble'
 import { ToolCallIndicator } from './ToolCallIndicator'
 import { Button } from '@/components/shared/Button'
-
-const AGENT_MENTIONS = [
-  { name: 'ads',        label: 'Ads Agent',    desc: 'Analyze paid campaigns & ROAS' },
-  { name: 'seo',        label: 'SEO Agent',     desc: 'SEO audit & keyword rankings' },
-  { name: 'content',    label: 'Content Agent', desc: 'Write & plan content' },
-  { name: 'strategist', label: 'Strategist',    desc: 'Strategy, priorities & roadmap' },
-]
+import {
+  AGENT_MENTIONS,
+  getActiveRunAgent,
+  getMentionMatches,
+  getSelectedMention,
+} from './mention-ui'
 
 export interface ChatMessage {
   role: 'user' | 'assistant'
@@ -50,16 +49,17 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
   const [streaming, setStreaming] = useState(false)
   const [activeSkill, setActiveSkill] = useState<string | null>(null)
   const [toolLabel, setToolLabel] = useState<string | null>(null)
-  const [completedTools, setCompletedTools] = useState<string[]>([])
+  const [completedSteps, setCompletedSteps] = useState<{ text: string; isError: boolean }[]>([])
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [mentionIndex, setMentionIndex] = useState(0)
+  const [activeRunAgent, setActiveRunAgent] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const mentionRef = useRef<HTMLDivElement>(null)
 
-  const mentionMatches = mentionQuery !== null
-    ? AGENT_MENTIONS.filter(a => a.name.startsWith(mentionQuery) || a.label.toLowerCase().startsWith(mentionQuery))
-    : []
+  const mentionMatches = getMentionMatches(mentionQuery)
+  const selectedMention = getSelectedMention(input)
+  const runningMention = AGENT_MENTIONS.find(agent => agent.name === activeRunAgent) ?? null
 
   // Reset when switching sessions
   useEffect(() => {
@@ -99,13 +99,15 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
     if (!text.trim() || loading) return
 
     const skill = skillOverride ?? activeSkill
+    const selectedBeforeSend = getSelectedMention(text)
     const userMsg: ChatMessage = { role: 'user', content: text, createdAt: new Date().toISOString() }
     setMessages(prev => [...prev, userMsg])
     setInput('')
     setLoading(true)
     setStreaming(true)
     setToolLabel(null)
-    setCompletedTools([])
+    setCompletedSteps([])
+    setActiveRunAgent(selectedBeforeSend?.name ?? null)
     onAgentStatusChange?.('running', 'Thinking…')
 
     // Reset textarea height
@@ -151,24 +153,26 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
             } else if (data.type === 'agent_status') {
               const label = data.message ? `${data.agent}: ${data.message}` : data.agent
               setToolLabel(label)
+              setActiveRunAgent(prev => getActiveRunAgent(label) ?? prev)
               onAgentStatusChange?.('running', label)
             } else if (data.type === 'agent_start') {
               const agentLabel = (data.agent as string).charAt(0).toUpperCase() + (data.agent as string).slice(1)
+              setActiveRunAgent(getActiveRunAgent(agentLabel))
               setToolLabel(`${agentLabel} agent running…`)
               onAgentStatusChange?.('running', `${agentLabel} agent running…`)
             } else if (data.type === 'agent_done') {
               const agentLabel = (data.agent as string).charAt(0).toUpperCase() + (data.agent as string).slice(1)
-              setCompletedTools(prev => [...prev, `${agentLabel} analysis complete`])
+              setCompletedSteps(prev => [...prev, { text: `${agentLabel} analysis complete`, isError: false }])
               setToolLabel(null)
             } else if (data.type === 'agent_error') {
               const agentLabel = (data.agent as string).charAt(0).toUpperCase() + (data.agent as string).slice(1)
-              setCompletedTools(prev => [...prev, `${agentLabel}: ${data.error ?? 'failed'}`])
+              setCompletedSteps(prev => [...prev, { text: `${agentLabel}: ${data.error ?? 'failed'}`, isError: true }])
               setToolLabel(null)
             } else if (data.type === 'tool_call') {
               setToolLabel(data.label || data.tool)
               onAgentStatusChange?.('running', data.label)
             } else if (data.type === 'tool_result') {
-              setCompletedTools(prev => [...prev, data.summary])
+              setCompletedSteps(prev => [...prev, { text: data.summary, isError: false }])
               setToolLabel(null)
             } else if (data.type === 'delta') {
               setToolLabel(null)
@@ -185,7 +189,8 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
               }
             } else if (data.type === 'done') {
               setToolLabel(null)
-              setCompletedTools([])
+              setCompletedSteps([])
+              setActiveRunAgent(null)
               onAgentStatusChange?.('idle')
             }
           } catch {
@@ -195,15 +200,18 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
       }
     } catch (err) {
       console.error(err)
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Something went wrong. Please try again.' }])
+      const fallback = err instanceof Error ? err.message : 'Something went wrong. Please try again.'
+      setMessages(prev => [...prev, { role: 'assistant', content: fallback }])
+      setActiveRunAgent(null)
       onAgentStatusChange?.('idle')
     } finally {
       setLoading(false)
       setStreaming(false)
       setToolLabel(null)
-      setCompletedTools([])
+      setCompletedSteps([])
+      if (!streaming) setActiveRunAgent(null)
     }
-  }, [loading, sessionId, activeSkill, messages.length, onAgentStatusChange, onSessionCreated])
+  }, [loading, sessionId, activeSkill, messages.length, onAgentStatusChange, onSessionCreated, streaming])
 
   const insertMention = useCallback((agentName: string) => {
     // Replace the trailing @query with @agentName followed by a space
@@ -338,12 +346,25 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
         ))}
 
         {/* Completed tool calls shown as subtle pills */}
-        {completedTools.length > 0 && (
+        {completedSteps.length > 0 && (
           <div className="flex flex-col gap-1 mb-2 ml-10">
-            {completedTools.map((summary, i) => (
-              <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 bg-[#0F1A0F] border border-[#1E3A1E] rounded-full w-fit">
-                <svg className="w-3 h-3 text-green-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
-                <span className="text-[11px] text-green-400">{summary}</span>
+            {completedSteps.map((step, i) => (
+              <div
+                key={i}
+                className={`flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 ${
+                  step.isError
+                    ? 'border-[#4A1F1D] bg-[#261312]'
+                    : 'border-[#1E3A1E] bg-[#0F1A0F]'
+                }`}
+              >
+                {step.isError ? (
+                  <svg className="h-3 w-3 shrink-0 text-[#F08E7D]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86l-7.5 13A1 1 0 003.66 18h16.68a1 1 0 00.87-1.5l-7.5-13a1 1 0 00-1.74 0z"/></svg>
+                ) : (
+                  <svg className="h-3 w-3 shrink-0 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+                )}
+                <span className={`text-[11px] ${step.isError ? 'text-[#F6B1A6]' : 'text-green-400'}`}>
+                  {step.text}
+                </span>
               </div>
             ))}
           </div>
@@ -353,7 +374,7 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
         {toolLabel && <ToolCallIndicator tool={toolLabel} />}
 
         {/* Initial thinking state (before first tool or delta) */}
-        {streaming && !toolLabel && completedTools.length === 0 && messages[messages.length - 1]?.role !== 'assistant' && (
+        {streaming && !toolLabel && completedSteps.length === 0 && messages[messages.length - 1]?.role !== 'assistant' && (
           <ToolCallIndicator tool="Thinking…" />
         )}
 
@@ -364,21 +385,54 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
       <div className="px-6 pb-6 pt-3 border-t border-[#1E1E1E]">
         {/* @mention picker */}
         {mentionQuery !== null && mentionMatches.length > 0 && (
-          <div ref={mentionRef} className="mb-2 bg-[#181818] border border-[#2A2A2A] rounded-xl overflow-hidden shadow-lg">
+          <div ref={mentionRef} className="mb-3 overflow-hidden rounded-2xl border border-[#E8D7CF] bg-[#FFF9F6] shadow-[0_18px_40px_rgba(25,12,8,0.08)]">
             {mentionMatches.map((agent, idx) => (
               <button
                 key={agent.name}
                 onMouseDown={e => { e.preventDefault(); insertMention(agent.name) }}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${idx === mentionIndex ? 'bg-[#DA7756]/15' : 'hover:bg-[#222]'}`}
+                className={`group relative w-full px-4 py-3 text-left transition-colors ${idx === mentionIndex ? 'bg-[#FFF1EA]' : 'hover:bg-[#FFF5F1]'}`}
               >
-                <span className="text-[#DA7756] font-mono text-xs">@{agent.name}</span>
-                <span className="text-xs text-[var(--text-primary)] font-medium">{agent.label}</span>
-                <span className="text-xs text-[#555] ml-auto">{agent.desc}</span>
+                <div className={`absolute inset-y-2 left-2 w-1 rounded-full ${idx === mentionIndex ? 'bg-[#DA7756]' : 'bg-transparent group-hover:bg-[#F1B59B]'}`} />
+                <div className="flex items-start gap-3 pl-3">
+                  <span className={`mt-0.5 rounded-full px-2 py-1 font-mono text-[11px] ${idx === mentionIndex ? 'bg-[#DA7756] text-white' : 'bg-[#F6E4DB] text-[#B05B37]'}`}>@{agent.name}</span>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-[#2A1B15]">{agent.label}</div>
+                    <div className="mt-0.5 text-xs text-[#7C6258]">{agent.desc}</div>
+                  </div>
+                </div>
               </button>
             ))}
           </div>
         )}
-        <div className="flex gap-3 items-end bg-[#111] border border-[#2A2A2A] rounded-xl p-3 focus-within:border-[#DA7756]/50 transition-colors">
+        {(selectedMention || runningMention) && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {selectedMention && (
+              <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                runningMention?.name === selectedMention.name
+                  ? 'border-[#DA7756] bg-[#FFF1EA] text-[#8A4729] shadow-[0_0_0_3px_rgba(218,119,86,0.12)]'
+                  : 'border-[#E8D7CF] bg-[#FFF8F3] text-[#6F564C]'
+              }`}>
+                <span className={`h-2 w-2 rounded-full ${runningMention?.name === selectedMention.name ? 'bg-[#DA7756] animate-pulse' : 'bg-[#D4A28A]'}`} />
+                <span className="font-medium">{selectedMention.label}</span>
+                <span className="text-[#9A7A6C]">{runningMention?.name === selectedMention.name ? 'Working now' : 'Selected'}</span>
+              </div>
+            )}
+            {runningMention && runningMention.name !== selectedMention?.name && (
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#DA7756] bg-[#FFF1EA] px-3 py-1.5 text-xs text-[#8A4729] shadow-[0_0_0_3px_rgba(218,119,86,0.12)]">
+                <span className="h-2 w-2 rounded-full bg-[#DA7756] animate-pulse" />
+                <span className="font-medium">{runningMention.label}</span>
+                <span className="text-[#9A7A6C]">Working now</span>
+              </div>
+            )}
+          </div>
+        )}
+        <div className={`flex gap-3 items-end rounded-xl border p-3 transition-colors ${
+          runningMention
+            ? 'border-[#DA7756]/60 bg-[#FFF7F3] shadow-[0_0_0_4px_rgba(218,119,86,0.08)]'
+            : selectedMention
+              ? 'border-[#E5C6B8] bg-[#FFF9F6]'
+              : 'bg-[#111] border-[#2A2A2A] focus-within:border-[#DA7756]/50'
+        }`}>
           <textarea
             ref={textareaRef}
             value={input}
@@ -387,7 +441,11 @@ export function ChatWindow({ onAgentStatusChange, initialSessionId, initialMessa
             placeholder={activeSkillData ? `Ask ${activeSkillData.label} expert anything…` : 'Ask Marvyn anything…'}
             rows={1}
             disabled={loading}
-            className="flex-1 bg-transparent text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] resize-none outline-none max-h-32 overflow-y-auto"
+            className={`flex-1 resize-none bg-transparent text-sm outline-none max-h-32 overflow-y-auto ${
+              selectedMention || runningMention
+                ? 'text-[#2A1B15] placeholder-[#9A7A6C]'
+                : 'text-[var(--text-primary)] placeholder-[var(--text-muted)]'
+            }`}
             style={{ fieldSizing: 'content' } as React.CSSProperties}
           />
           <Button

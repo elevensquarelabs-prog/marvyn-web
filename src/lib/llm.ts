@@ -43,8 +43,40 @@ export async function llm(
 }
 
 /**
- * Call the LLM expecting a JSON response. Parses JSON from the response,
- * stripping markdown code fences if present.
+ * Extract the first valid JSON object or array from a raw LLM response.
+ * Handles markdown fences, leading prose, and truncation by finding the
+ * outermost { } or [ ] boundaries.
+ */
+function extractJson(raw: string): unknown {
+  // 1. Strip markdown fences
+  const stripped = raw
+    .replace(/^```(?:json)?\s*/m, '')
+    .replace(/\s*```\s*$/m, '')
+    .trim()
+
+  // 2. Try direct parse first (fastest path)
+  try { return JSON.parse(stripped) } catch { /* fall through */ }
+
+  // 3. Extract first { ... } block (object)
+  const objStart = stripped.indexOf('{')
+  const objEnd = stripped.lastIndexOf('}')
+  if (objStart !== -1 && objEnd > objStart) {
+    try { return JSON.parse(stripped.slice(objStart, objEnd + 1)) } catch { /* fall through */ }
+  }
+
+  // 4. Extract first [ ... ] block (array)
+  const arrStart = stripped.indexOf('[')
+  const arrEnd = stripped.lastIndexOf(']')
+  if (arrStart !== -1 && arrEnd > arrStart) {
+    try { return JSON.parse(stripped.slice(arrStart, arrEnd + 1)) } catch { /* fall through */ }
+  }
+
+  throw new Error(`JSON parse failed — response was ${stripped.length} chars, could not find valid JSON boundary`)
+}
+
+/**
+ * Call the LLM expecting a JSON response. Extracts JSON robustly from the
+ * response and retries once on parse failure.
  * Optional onUsage callback receives actual token counts from the API response.
  */
 export async function llmJson<T>(
@@ -54,23 +86,32 @@ export async function llmJson<T>(
   tokens = 4000,
   onUsage?: (inputTokens: number, outputTokens: number) => void
 ): Promise<T> {
-  const response = await getClient().messages.create({
-    model,
-    system,
-    messages: [{ role: 'user', content: prompt }],
-    max_tokens: tokens,
-  })
-  if (onUsage) {
-    onUsage(response.usage.input_tokens, response.usage.output_tokens)
+  const callOnce = async () => {
+    const response = await getClient().messages.create({
+      model,
+      system,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: tokens,
+    })
+    if (onUsage) {
+      onUsage(response.usage.input_tokens, response.usage.output_tokens)
+    }
+    const block = response.content[0]
+    const raw = block.type === 'text' ? block.text : ''
+    return extractJson(raw)
   }
-  const block = response.content[0]
-  const raw = block.type === 'text' ? block.text : ''
-  // Strip markdown fences if present
-  const stripped = raw
-    .replace(/^```(?:json)?\s*/m, '')
-    .replace(/\s*```\s*$/m, '')
-    .trim()
-  return JSON.parse(stripped) as T
+
+  try {
+    return await callOnce() as T
+  } catch (firstErr) {
+    // One retry — model occasionally produces malformed JSON on first pass
+    try {
+      return await callOnce() as T
+    } catch (secondErr) {
+      const msg = secondErr instanceof Error ? secondErr.message : String(secondErr)
+      throw new Error(`llmJson failed after 2 attempts: ${msg}`)
+    }
+  }
 }
 
 export async function llmStream(
