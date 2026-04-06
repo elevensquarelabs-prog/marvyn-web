@@ -4,15 +4,18 @@ import { makeUsageTracker } from '../board'
 import type { ContextBoard, AgentOutput } from '../board'
 
 /**
- * Choose Haiku for single-platform or first-pass reporting.
- * Upgrade to Sonnet for cross-platform analysis or correction retries.
+ * Choose model based on request intent, not platform count.
+ * Simple reporting/diagnostics → Haiku (cheap).
+ * Cross-platform comparison, optimization, budget decisions → Sonnet.
+ * Correction retries always escalate to Sonnet.
  */
+const COMPLEX_ADS_PATTERN =
+  /\b(compar|optimis|optimiz|realloc|restructur|strateg|budget|priorit|cross.?channel|vs\.|versus|which platform|should i|recommend|plan|next month|q[1-4])\b/i
+
 function chooseAdsModel(board: ContextBoard): string {
-  const hasCorrections = (board.correctionHistory.ads?.length ?? 0) > 0
-  const platformCount = (['metaAds', 'googleAds'] as const)
-    .filter(k => board.contextBundle[k] !== undefined).length
-  const isCrossChannel = platformCount > 1
-  return hasCorrections || isCrossChannel ? MODELS.powerful : MODELS.fast
+  if ((board.correctionHistory.ads?.length ?? 0) > 0) return MODELS.powerful
+  const isComplex = COMPLEX_ADS_PATTERN.test(board.goal.userRequest)
+  return isComplex ? MODELS.powerful : MODELS.fast
 }
 
 export async function runAdsAgent(board: ContextBoard, taskId: string): Promise<void> {

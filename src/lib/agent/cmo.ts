@@ -69,6 +69,18 @@ export async function cmoOrchestrate(
   board.taskList = Array.isArray(result) ? result : (result.tasks ?? [])
   const directResponse = Array.isArray(result) ? null : (result.directResponse ?? null)
 
+  // Code-enforce: strategist always runs after ALL other specialists complete.
+  // This cannot be left to prompt instruction alone — if CMO omits dependsOn,
+  // strategist would run in parallel with partial upstream context.
+  const nonStrategistIds = board.taskList
+    .filter(t => t.agent !== 'strategist')
+    .map(t => t.taskId)
+  for (const task of board.taskList) {
+    if (task.agent === 'strategist') {
+      task.dependsOn = [...new Set([...(task.dependsOn ?? []), ...nonStrategistIds])]
+    }
+  }
+
   if (board.taskList.length > 0) {
     const agentNames = [...new Set(board.taskList.map((t) => t.agent))]
     send({ type: 'agent_status', agent: 'cmo', message: `Delegating to: ${agentNames.join(', ')}` })

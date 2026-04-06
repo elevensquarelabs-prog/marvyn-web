@@ -51,6 +51,13 @@ export interface HistoryEntry {
   outcome?: string
 }
 
+/** Per-model token and cost breakdown for admin attribution */
+export interface ModelUsage {
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+}
+
 export interface ContextBoard {
   goal: BoardGoal
   contextBundle: Record<string, unknown>
@@ -69,8 +76,14 @@ export interface ContextBoard {
   agentAttempts: Partial<Record<AgentName, AgentOutput[]>>
   correctionHistory: Partial<Record<AgentName, CorrectionRequest[]>>
   reviewStatus: 'pending' | 'passed' | 'escalated'
-  /** Accumulated actual token usage and cost across all LLM calls for this request */
-  tokenUsage: { inputTokens: number; outputTokens: number; costUsd: number }
+  /** Accumulated token usage and cost across all LLM calls for this request */
+  tokenUsage: {
+    inputTokens: number
+    outputTokens: number
+    costUsd: number
+    /** Per-model breakdown keyed by model ID for admin cost attribution */
+    byModel: Record<string, ModelUsage>
+  }
 }
 
 export function createBoard(goal: BoardGoal): ContextBoard {
@@ -82,14 +95,14 @@ export function createBoard(goal: BoardGoal): ContextBoard {
     agentAttempts: {},
     correctionHistory: {},
     reviewStatus: 'pending',
-    tokenUsage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+    tokenUsage: { inputTokens: 0, outputTokens: 0, costUsd: 0, byModel: {} },
   }
 }
 
 /**
- * Returns an onUsage callback that accumulates token counts AND cost for the
- * given model onto the board. Pass the result directly to llmJson() / llmStream().
- * Rates are kept inline to avoid a circular dependency on ai-usage.ts.
+ * Returns an onUsage callback that accumulates token counts, total cost, AND
+ * per-model cost onto the board. Pass the result directly to llmJson().
+ * Rates inline to avoid a circular dependency on ai-usage.ts.
  */
 const MODEL_RATES: Record<string, { input: number; output: number }> = {
   'claude-haiku-4-5-20251001': { input: 0.80, output: 4.00 },
@@ -100,10 +113,19 @@ const MODEL_RATES: Record<string, { input: number; output: number }> = {
 export function makeUsageTracker(board: ContextBoard, model: string) {
   const rate = MODEL_RATES[model] ?? MODEL_RATES['claude-haiku-4-5-20251001']
   return (inputTokens: number, outputTokens: number) => {
-    board.tokenUsage.inputTokens += inputTokens
-    board.tokenUsage.outputTokens += outputTokens
-    board.tokenUsage.costUsd +=
+    const callCost =
       (inputTokens / 1_000_000) * rate.input +
       (outputTokens / 1_000_000) * rate.output
+
+    board.tokenUsage.inputTokens += inputTokens
+    board.tokenUsage.outputTokens += outputTokens
+    board.tokenUsage.costUsd += callCost
+
+    const existing = board.tokenUsage.byModel[model] ?? { inputTokens: 0, outputTokens: 0, costUsd: 0 }
+    board.tokenUsage.byModel[model] = {
+      inputTokens: existing.inputTokens + inputTokens,
+      outputTokens: existing.outputTokens + outputTokens,
+      costUsd: existing.costUsd + callCost,
+    }
   }
 }

@@ -117,6 +117,8 @@ export async function POST(req: NextRequest) {
             estimatedInputTokens: board.tokenUsage.inputTokens,
             estimatedOutputTokens: board.tokenUsage.outputTokens,
             estimatedCostUsd: board.tokenUsage.costUsd,
+            // Serialised per-model breakdown for admin cost attribution
+            operation: JSON.stringify(board.tokenUsage.byModel),
             status: 'success',
           })
         }
@@ -141,14 +143,16 @@ export async function POST(req: NextRequest) {
         await runSpecialists(board, send)
 
         // ── Step 5: CMO review loop ───────────────────────────────────────
-        // Skip review for single-agent requests with no correction history —
-        // the extra model call rarely adds value and meaningfully raises cost.
-        const singleAgentNoPriorCorrections =
+        // Skip review only when the single specialist completed successfully
+        // and has no correction history. A blocked specialist must still go
+        // through cmoReview so it can surface the escalation message correctly.
+        const singleAgentSucceeded =
           board.taskList.length === 1 &&
+          board.taskList[0].status === 'done' &&
           Object.values(board.correctionHistory).every(h => !h?.length)
 
         let escalationMessage = ''
-        if (singleAgentNoPriorCorrections) {
+        if (singleAgentSucceeded) {
           board.reviewStatus = 'passed'
         } else {
           escalationMessage = await cmoReview(board, connections, userId, chatSessionId, send)
@@ -189,9 +193,23 @@ export async function POST(req: NextRequest) {
 
 /** Assemble final human-readable response from all passed agent outputs. */
 function buildFinalResponse(board: ContextBoard): string {
+  const doneTasks = board.taskList.filter((t) => t.status === 'done')
+  const blockedTasks = board.taskList.filter((t) => t.status === 'blocked')
+
+  // All specialists failed — surface a clear error instead of "Analysis complete."
+  if (doneTasks.length === 0 && blockedTasks.length > 0) {
+    const agents = [...new Set(blockedTasks.map((t) => t.agent))]
+    return (
+      `The ${agents.join(', ')} specialist${agents.length > 1 ? 's' : ''} could not ` +
+      `complete the analysis. This is usually caused by a missing or expired integration, ` +
+      `or an API error from the data source. Check your connected platforms under Settings ` +
+      `and try again.`
+    )
+  }
+
   const sections: string[] = []
 
-  for (const task of board.taskList.filter((t) => t.status === 'done')) {
+  for (const task of doneTasks) {
     const output = board.agentAttempts[task.agent]?.at(-1)
     if (!output) continue
 
