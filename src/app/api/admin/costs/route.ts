@@ -112,11 +112,35 @@ export async function GET(req: NextRequest) {
     featureAgg.creditsCharged += event.creditsCharged
     featureTotals.set(event.feature, featureAgg)
 
-    const modelAgg = modelTotals.get(event.model) || { calls: 0, estimatedCostUsd: 0, creditsCharged: 0, label: event.modelLabel }
-    modelAgg.calls += 1
-    modelAgg.estimatedCostUsd += event.estimatedCostUsd
-    modelAgg.creditsCharged += event.creditsCharged
-    modelTotals.set(event.model, modelAgg)
+    // For multi-agent events expand the per-model breakdown stored in operation,
+    // so "Cost by Model" shows real Haiku vs Sonnet attribution rather than
+    // lumping everything into one 'multi-agent' bucket.
+    if (event.model === 'multi-agent' && event.operation) {
+      try {
+        const byModel = JSON.parse(event.operation) as Record<
+          string,
+          { inputTokens: number; outputTokens: number; costUsd: number }
+        >
+        for (const [model, usage] of Object.entries(byModel)) {
+          const agg = modelTotals.get(model) || { calls: 0, estimatedCostUsd: 0, creditsCharged: 0, label: getModelLabel(model) }
+          agg.calls += 1
+          agg.estimatedCostUsd += usage.costUsd
+          modelTotals.set(model, agg)
+        }
+      } catch {
+        // Unparseable operation — fall back to counting as 'multi-agent'
+        const agg = modelTotals.get(event.model) || { calls: 0, estimatedCostUsd: 0, creditsCharged: 0, label: event.modelLabel }
+        agg.calls += 1
+        agg.estimatedCostUsd += event.estimatedCostUsd
+        modelTotals.set(event.model, agg)
+      }
+    } else {
+      const modelAgg = modelTotals.get(event.model) || { calls: 0, estimatedCostUsd: 0, creditsCharged: 0, label: event.modelLabel }
+      modelAgg.calls += 1
+      modelAgg.estimatedCostUsd += event.estimatedCostUsd
+      modelAgg.creditsCharged += event.creditsCharged
+      modelTotals.set(event.model, modelAgg)
+    }
 
     const providerAgg = providerTotals.get(event.provider) || { calls: 0, estimatedCostUsd: 0, creditsCharged: 0 }
     providerAgg.calls += 1
