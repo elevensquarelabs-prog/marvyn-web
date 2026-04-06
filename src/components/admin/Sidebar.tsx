@@ -21,30 +21,30 @@ export default function Sidebar({ adminName, adminRole }: { adminName: string; a
   }
 
   return (
-    <aside className="w-56 bg-zinc-900 border-r border-zinc-800 flex flex-col h-screen sticky top-0">
-      <div className="px-4 py-5 border-b border-zinc-800">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-md bg-violet-600 flex items-center justify-center">
-            <span className="text-white font-bold text-xs">M</span>
+    <aside className="sticky top-0 flex h-screen w-72 flex-col border-r border-[#E6D7CE] bg-[#F7F0EA]">
+      <div className="border-b border-[#E9DDD5] px-6 py-6">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#D97757]">
+            <span className="text-sm font-bold text-white">M</span>
           </div>
           <div>
-            <div className="text-white text-sm font-semibold leading-none">Marvyn</div>
-            <div className="text-zinc-500 text-xs leading-none mt-0.5">Admin Centre</div>
+            <div className="text-sm font-semibold leading-none text-[#241814]">Marvyn</div>
+            <div className="mt-1 text-xs leading-none text-[#8F7064]">Admin Centre</div>
           </div>
         </div>
       </div>
 
-      <nav className="flex-1 px-2 py-4 space-y-0.5">
+      <nav className="flex-1 space-y-1 px-4 py-5">
         {NAV.map(item => {
           const active = pathname.startsWith(item.href)
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+              className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm transition-colors ${
                 active
-                  ? 'bg-violet-600/15 text-violet-400 font-medium'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                  ? 'bg-[#F2DDD3] text-[#8A4729] font-semibold shadow-sm'
+                  : 'text-[#72584E] hover:bg-white/70 hover:text-[#2B1C17]'
               }`}
             >
               <span className="text-base leading-none">{item.icon}</span>
@@ -54,12 +54,19 @@ export default function Sidebar({ adminName, adminRole }: { adminName: string; a
         })}
       </nav>
 
-      <div className="px-4 py-4 border-t border-zinc-800">
-        <div className="text-xs text-zinc-400 mb-0.5 truncate">{adminName}</div>
-        <div className="text-xs text-zinc-600 mb-3">{adminRole.replace('_', ' ')}</div>
+      <div className="border-t border-[#E9DDD5] px-6 py-5">
+        <div className="mb-3 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#EED9D0] text-sm font-semibold text-[#8A4729]">
+            {adminName.slice(0, 1).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium text-[#241814]">{adminName}</div>
+            <div className="text-xs capitalize text-[#8F7064]">{adminRole.replace('_', ' ')}</div>
+          </div>
+        </div>
         <button
           onClick={handleLogout}
-          className="text-xs text-zinc-500 hover:text-red-400 transition-colors"
+          className="text-xs font-medium uppercase tracking-[0.18em] text-[#8F7064] transition-colors hover:text-[#8A4729]"
         >
           Sign out
         </button>

@@ -27,24 +27,24 @@ export default function AdminCentreLayout({ children }: { children: React.ReactN
 
   if (error) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <p className="text-zinc-400 text-sm">{error}</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#F6F0EA]">
+        <p className="text-sm text-[#8D7166]">{error}</p>
       </div>
     )
   }
 
   if (!admin) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="w-5 h-5 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
+      <div className="flex min-h-screen items-center justify-center bg-[#F6F0EA]">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#D97757] border-t-transparent" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex">
+    <div className="flex min-h-screen bg-[#F6F0EA] text-[#241814]">
       <Sidebar adminName={admin.name} adminRole={admin.role} />
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto bg-[radial-gradient(circle_at_top,_rgba(217,119,87,0.10),_transparent_28%),linear-gradient(180deg,_#fbf7f3_0%,_#f6f0ea_100%)]">
         {children}
       </main>
     </div>

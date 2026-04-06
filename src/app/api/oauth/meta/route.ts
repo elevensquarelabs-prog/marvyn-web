@@ -10,10 +10,21 @@ export async function GET(_req: NextRequest) {
 
   const appId = (process.env.META_APP_ID || '').trim()
   const redirectUri = `${BASE_URL()}/api/oauth/meta/callback`
+  const scope = [
+    'ads_read',
+    'ads_management',
+    'business_management',
+    'pages_show_list',
+    'pages_read_engagement',
+    'pages_manage_posts',
+    'instagram_basic',
+    'instagram_manage_insights',
+    'instagram_content_publish',
+  ].join(',')
   const params = new URLSearchParams({
     client_id: appId,
     redirect_uri: redirectUri,
-    scope: 'ads_read,ads_management,business_management',
+    scope,
     response_type: 'code',
     auth_type: 'rerequest',
     state: session.user.id,

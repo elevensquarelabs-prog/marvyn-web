@@ -260,7 +260,7 @@ export default function SettingsPage() {
     }
   }
 
-  const disconnectConnection = async (platform: 'meta' | 'google' | 'ga4') => {
+  const disconnectConnection = async (platform: 'meta' | 'google' | 'linkedin' | 'ga4') => {
     if (platform === 'meta') {
       await Promise.all([
         fetch('/api/settings/connections', {
@@ -317,6 +317,22 @@ export default function SettingsPage() {
       setGoogleAdsManualEntry(false)
       setGoogleAdsManualId('')
       setChangingGSCSite(false)
+      return
+    }
+
+    if (platform === 'linkedin') {
+      await fetch('/api/settings/connections', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: 'linkedin' }),
+      })
+      setConnections(prev => {
+        const next = { ...prev }
+        delete next.linkedin
+        return next
+      })
+      setLinkedinPages([])
+      setLinkedinAdAccounts([])
       return
     }
 
@@ -578,7 +594,7 @@ export default function SettingsPage() {
     if (data.authUrl) window.location.href = data.authUrl
   }
 
-  const reconnectOAuth = async (provider: 'meta' | 'google' | 'ga4') => {
+  const reconnectOAuth = async (provider: 'meta' | 'google' | 'linkedin' | 'ga4') => {
     await disconnectConnection(provider)
     await connectOAuth(provider)
   }
@@ -1244,7 +1260,7 @@ export default function SettingsPage() {
                     {connections.linkedin?.profileId && (
                       <Badge variant="success">Connected</Badge>
                     )}
-                    <Button size="sm" variant="secondary" onClick={() => connectOAuth('linkedin')}>
+                    <Button size="sm" variant="secondary" onClick={() => connections.linkedin?.profileId ? reconnectOAuth('linkedin') : connectOAuth('linkedin')}>
                       {connections.linkedin?.profileId ? 'Reconnect' : 'Connect'}
                     </Button>
                     {connections.linkedin?.profileId && (
@@ -1303,9 +1319,39 @@ export default function SettingsPage() {
                           </span>
                         )}
 
-                        <span className="px-2 py-0.5 rounded text-[10px] border border-[#2A2A2A] text-[#555] bg-[#1A1A1A]">
-                          Pages coming soon
-                        </span>
+                        {connections.linkedin?.pageId && linkedinPages.length === 0 ? (
+                          <button
+                            onClick={loadLinkedinPages}
+                            disabled={loadingLinkedinPages}
+                            className="text-xs text-[#555] hover:text-white disabled:opacity-50"
+                          >
+                            {loadingLinkedinPages ? 'Loading pages…' : 'Change page'}
+                          </button>
+                        ) : linkedinPages.length > 0 ? (
+                          <div className="relative">
+                            <select
+                              value={connections.linkedin?.pageId || ''}
+                              onChange={selectLinkedinPage}
+                              className="bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:border-[#DA7756]/50 appearance-none pr-7"
+                            >
+                              <option value="">Post as personal profile</option>
+                              {linkedinPages.map(page => (
+                                <option key={page.id} value={page.id} className="bg-[#0D0D0D]">
+                                  {page.name}
+                                </option>
+                              ))}
+                            </select>
+                            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[#555] text-[10px]">▾</span>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={loadLinkedinPages}
+                            disabled={loadingLinkedinPages}
+                            className="text-xs text-[#DA7756] hover:underline disabled:opacity-50"
+                          >
+                            {loadingLinkedinPages ? 'Loading pages…' : 'Load pages'}
+                          </button>
+                        )}
                       </div>
                     </div>
 

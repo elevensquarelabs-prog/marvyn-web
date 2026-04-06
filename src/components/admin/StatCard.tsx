@@ -10,10 +10,24 @@ export default function StatCard({
   accent?: boolean
 }) {
   return (
-    <div className={`rounded-xl border p-5 ${accent ? 'bg-violet-600/10 border-violet-600/30' : 'bg-zinc-900 border-zinc-800'}`}>
-      <div className="text-xs text-zinc-500 font-medium uppercase tracking-wide mb-1">{label}</div>
-      <div className={`text-2xl font-semibold ${accent ? 'text-violet-400' : 'text-white'}`}>{value}</div>
-      {sub && <div className="text-xs text-zinc-500 mt-1">{sub}</div>}
+    <div
+      className={`rounded-[1.5rem] border p-5 shadow-[0_12px_36px_rgba(64,34,24,0.06)] ${
+        accent
+          ? 'border-[#D9A38A] bg-[linear-gradient(135deg,#9B482A_0%,#D97757_100%)] text-white'
+          : 'border-[#E6D7CE] bg-white/85 text-[#221814]'
+      }`}
+    >
+      <div className={`mb-2 text-[11px] font-medium uppercase tracking-[0.22em] ${accent ? 'text-white/70' : 'text-[#9A7C70]'}`}>
+        {label}
+      </div>
+      <div className={`text-3xl font-semibold tracking-[-0.03em] ${accent ? 'text-white' : 'text-[#221814]'}`}>
+        {value}
+      </div>
+      {sub && (
+        <div className={`mt-2 text-sm ${accent ? 'text-white/78' : 'text-[#7D6156]'}`}>
+          {sub}
+        </div>
+      )}
     </div>
   )
 }

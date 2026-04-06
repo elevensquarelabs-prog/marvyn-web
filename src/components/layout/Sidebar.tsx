@@ -45,10 +45,26 @@ const navItems = [
   },
   {
     href: '/social',
-    label: 'Social',
+    label: 'Social Planner',
+    match: 'exact',
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>
+      </svg>
+    ),
+  },
+  {
+    href: '/social-insights',
+    label: 'Social Insights',
+    match: 'exact',
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 3v18h18"/>
+        <path d="M7 14l3-3 3 2 4-5"/>
+        <circle cx="7" cy="14" r="1"/>
+        <circle cx="10" cy="11" r="1"/>
+        <circle cx="13" cy="13" r="1"/>
+        <circle cx="17" cy="8" r="1"/>
       </svg>
     ),
   },
@@ -166,9 +182,11 @@ export function Sidebar() {
       <nav className="flex-1 px-2 py-2 space-y-0.5">
         <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Workspaces</p>
         {navItems.map(item => {
-          const active = item.href === '/dashboard'
-            ? pathname === '/dashboard'
-            : pathname.startsWith(item.href)
+          const active = item.match === 'exact'
+            ? pathname === item.href
+            : item.href === '/dashboard'
+              ? pathname === '/dashboard'
+              : pathname.startsWith(item.href)
           return (
             <Link
               key={item.href}

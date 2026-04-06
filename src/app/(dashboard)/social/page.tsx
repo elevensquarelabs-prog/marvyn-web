@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { SocialPostCard } from '@/components/social/SocialPostCard'
 import { SocialCalendar } from '@/components/social/SocialCalendar'
 import { Composer } from '@/components/social/Composer'
+import { SocialWorkspaceTabs } from '@/components/social/SocialWorkspaceTabs'
 import { Button } from '@/components/shared/Button'
 import { Modal } from '@/components/shared/Modal'
 
@@ -184,14 +185,16 @@ Vary post formats: story posts, listicles, questions, behind-the-scenes.`
       {/* Header */}
       <div className="px-6 py-4 border-b border-[var(--border)] flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-sm font-semibold text-[var(--text-primary)]">Social</h1>
-          <p className="text-xs text-[var(--text-muted)]">{posts.length} posts</p>
+          <h1 className="text-sm font-semibold text-[var(--text-primary)]">Social Planner</h1>
+          <p className="text-xs text-[var(--text-muted)]">{posts.length} posts in calendar and review queue</p>
         </div>
         <div className="flex gap-2">
           <Button size="sm" variant="secondary" onClick={() => setPlannerOpen(true)}>Plan Week</Button>
           <Button size="sm" onClick={() => setComposerOpen(true)}>+ New Post</Button>
         </div>
       </div>
+
+      <SocialWorkspaceTabs />
 
       {/* Platform filter pills */}
       <div className="px-6 py-3 border-b border-[var(--border)] flex gap-2 shrink-0">
