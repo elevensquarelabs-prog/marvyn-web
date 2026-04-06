@@ -69,6 +69,8 @@ export interface ContextBoard {
   agentAttempts: Partial<Record<AgentName, AgentOutput[]>>
   correctionHistory: Partial<Record<AgentName, CorrectionRequest[]>>
   reviewStatus: 'pending' | 'passed' | 'escalated'
+  /** Accumulated actual token usage and cost across all LLM calls for this request */
+  tokenUsage: { inputTokens: number; outputTokens: number; costUsd: number }
 }
 
 export function createBoard(goal: BoardGoal): ContextBoard {
@@ -80,5 +82,28 @@ export function createBoard(goal: BoardGoal): ContextBoard {
     agentAttempts: {},
     correctionHistory: {},
     reviewStatus: 'pending',
+    tokenUsage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+  }
+}
+
+/**
+ * Returns an onUsage callback that accumulates token counts AND cost for the
+ * given model onto the board. Pass the result directly to llmJson() / llmStream().
+ * Rates are kept inline to avoid a circular dependency on ai-usage.ts.
+ */
+const MODEL_RATES: Record<string, { input: number; output: number }> = {
+  'claude-haiku-4-5-20251001': { input: 0.80, output: 4.00 },
+  'claude-sonnet-4-6': { input: 3.00, output: 15.00 },
+  'claude-opus-4-6': { input: 15.00, output: 75.00 },
+}
+
+export function makeUsageTracker(board: ContextBoard, model: string) {
+  const rate = MODEL_RATES[model] ?? MODEL_RATES['claude-haiku-4-5-20251001']
+  return (inputTokens: number, outputTokens: number) => {
+    board.tokenUsage.inputTokens += inputTokens
+    board.tokenUsage.outputTokens += outputTokens
+    board.tokenUsage.costUsd +=
+      (inputTokens / 1_000_000) * rate.input +
+      (outputTokens / 1_000_000) * rate.output
   }
 }

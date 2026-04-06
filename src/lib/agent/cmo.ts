@@ -5,6 +5,7 @@ import { runSEOAgent } from './specialists/seo'
 import { runContentAgent } from './specialists/content'
 import { runStrategistAgent } from './specialists/strategist'
 import { persistRecommendations } from './memory'
+import { makeUsageTracker } from './board'
 import type { ContextBoard, AgentName, CorrectionRequest } from './board'
 import type { RawConnections } from './tools'
 
@@ -18,19 +19,19 @@ interface CMOReviewDecision {
 
 type SendFn = (data: object) => void
 
-/** Determine whether CMO should use Opus or the default fast model. */
+/** Determine whether CMO should use Sonnet (complex) or Haiku (default). Opus is never used for CMO. */
 function chooseCMOModel(board: ContextBoard, isReview: boolean): string {
   if (isReview) {
     const hasCorrections = Object.values(board.correctionHistory).some((h) => (h?.length ?? 0) > 0)
-    if (hasCorrections) return MODELS.opus
+    if (hasCorrections) return MODELS.powerful  // Sonnet for re-reviews with corrections
   }
   const hasStrategist = board.taskList.some((t) => t.agent === 'strategist')
   const isLongHorizon = board.goal.timeHorizon === '30d' || board.goal.timeHorizon === 'quarter'
   const anyHumanDecision = Object.values(board.agentAttempts).some((attempts) =>
     attempts?.at(-1)?.recommendations.some((r) => r.requiresHumanDecision)
   )
-  if (hasStrategist || isLongHorizon || anyHumanDecision) return MODELS.opus
-  return MODELS.fast
+  if (hasStrategist || isLongHorizon || anyHumanDecision) return MODELS.powerful  // Sonnet
+  return MODELS.fast  // Haiku for straightforward planning/review
 }
 
 /** Build connected integration labels from raw connections. */
@@ -61,7 +62,8 @@ export async function cmoOrchestrate(
   send({ type: 'agent_status', agent: 'cmo', message: 'Planning task graph…' })
 
   const result = await llmJson<{ tasks: ContextBoard['taskList']; directResponse?: string }>(
-    user, system, model, 2000
+    user, system, model, 2000,
+    makeUsageTracker(board, model)
   )
 
   board.taskList = Array.isArray(result) ? result : (result.tasks ?? [])
@@ -168,7 +170,10 @@ export async function cmoReview(
 
     send({ type: 'agent_status', agent: 'cmo', message: round === 0 ? 'Reviewing outputs…' : `Re-reviewing (round ${round})…` })
 
-    const decisions = await llmJson<CMOReviewDecision[]>(user, system, model, 3000)
+    const decisions = await llmJson<CMOReviewDecision[]>(
+      user, system, model, 3000,
+      makeUsageTracker(board, model)
+    )
 
     let allPassed = true
     const agentsToRerun: AgentName[] = []

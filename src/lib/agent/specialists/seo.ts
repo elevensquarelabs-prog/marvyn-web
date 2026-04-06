@@ -1,5 +1,6 @@
 import { MODELS, llmJson } from '@/lib/llm'
 import { buildSpecialistPrompt, loadAgentSkills } from '../prompts'
+import { makeUsageTracker } from '../board'
 import type { ContextBoard, AgentOutput } from '../board'
 
 export async function runSEOAgent(board: ContextBoard, taskId: string): Promise<void> {
@@ -11,7 +12,7 @@ export async function runSEOAgent(board: ContextBoard, taskId: string): Promise<
   const { system, user } = buildSpecialistPrompt('seo', board, taskId, loadAgentSkills('seo'))
   const output = await llmJson<AgentOutput>(
     user, system, MODELS.fast, 3500,
-    (i, o) => { board.tokenUsage.inputTokens += i; board.tokenUsage.outputTokens += o }
+    makeUsageTracker(board, MODELS.fast)
   )
 
   const attempts = board.agentAttempts.seo ?? []

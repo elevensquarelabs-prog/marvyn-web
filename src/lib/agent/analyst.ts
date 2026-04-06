@@ -66,16 +66,24 @@ async function fetchBundle(
       }
 
       case 'ads': {
-        const [meta, google, ga4, brand] = await Promise.allSettled([
-          executeTool('get_meta_ads_performance', {}, context),
-          executeTool('get_google_ads_performance', {}, context),
-          executeTool('get_ga4_analytics', {}, context),
+        // Only fetch connected platforms — skip GA4 from initial load to reduce
+        // prompt cost. The CMO can assign a GA4 task if conversion diagnosis is needed.
+        const fetches: Promise<Awaited<ReturnType<typeof executeTool>>>[] = [
           executeTool('get_brand_context', {}, context),
-        ])
-        if (meta.status === 'fulfilled') bundle.metaAds = meta.value
-        if (google.status === 'fulfilled') bundle.googleAds = google.value
-        if (ga4.status === 'fulfilled') bundle.ga4Conversions = ga4.value
-        if (brand.status === 'fulfilled') bundle.brand = brand.value
+        ]
+        const keys: string[] = ['brand']
+        if (context.connections.meta?.accountId) {
+          fetches.push(executeTool('get_meta_ads_performance', {}, context))
+          keys.push('metaAds')
+        }
+        if (context.connections.google?.customerId) {
+          fetches.push(executeTool('get_google_ads_performance', {}, context))
+          keys.push('googleAds')
+        }
+        const results = await Promise.allSettled(fetches)
+        results.forEach((r, i) => {
+          if (r.status === 'fulfilled') bundle[keys[i]] = r.value
+        })
         break
       }
 

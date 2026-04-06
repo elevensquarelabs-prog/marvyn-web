@@ -1,5 +1,6 @@
 import { MODELS, llmJson } from '@/lib/llm'
 import { buildSpecialistPrompt, loadAgentSkills } from '../prompts'
+import { makeUsageTracker } from '../board'
 import type { ContextBoard, AgentOutput, AgentName } from '../board'
 
 export async function runStrategistAgent(board: ContextBoard, taskId: string): Promise<void> {
@@ -34,7 +35,7 @@ export async function runStrategistAgent(board: ContextBoard, taskId: string): P
   )
   const output = await llmJson<AgentOutput>(
     user, system, MODELS.powerful, 4000,
-    (i, o) => { board.tokenUsage.inputTokens += i; board.tokenUsage.outputTokens += o }
+    makeUsageTracker(board, MODELS.powerful)
   )
 
   const attempts = board.agentAttempts.strategist ?? []

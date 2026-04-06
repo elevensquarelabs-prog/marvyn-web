@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
 
   const userId = session.user.id
 
-  if (!process.env.OPENROUTER_API_KEY) {
+  if (!process.env.ANTHROPIC_API_KEY) {
     return Response.json({ error: 'AI not configured' }, { status: 500 })
   }
 
@@ -114,9 +114,9 @@ export async function POST(req: NextRequest) {
             userId,
             feature: 'agent_chat',
             model: 'multi-agent',
-            estimatedInputTokens: 0,
-            estimatedOutputTokens: 0,
-            estimatedCostUsd: 0,
+            estimatedInputTokens: board.tokenUsage.inputTokens,
+            estimatedOutputTokens: board.tokenUsage.outputTokens,
+            estimatedCostUsd: board.tokenUsage.costUsd,
             status: 'success',
           })
         }
@@ -141,7 +141,18 @@ export async function POST(req: NextRequest) {
         await runSpecialists(board, send)
 
         // ── Step 5: CMO review loop ───────────────────────────────────────
-        const escalationMessage = await cmoReview(board, connections, userId, chatSessionId, send)
+        // Skip review for single-agent requests with no correction history —
+        // the extra model call rarely adds value and meaningfully raises cost.
+        const singleAgentNoPriorCorrections =
+          board.taskList.length === 1 &&
+          Object.values(board.correctionHistory).every(h => !h?.length)
+
+        let escalationMessage = ''
+        if (singleAgentNoPriorCorrections) {
+          board.reviewStatus = 'passed'
+        } else {
+          escalationMessage = await cmoReview(board, connections, userId, chatSessionId, send)
+        }
 
         // ── Step 6: Stream final response ────────────────────────────────
         const finalText = escalationMessage || buildFinalResponse(board)

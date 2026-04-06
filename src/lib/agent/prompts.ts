@@ -56,14 +56,27 @@ function goalBlock(board: ContextBoard): string {
 }
 
 /**
- * Expand ToolResult wrappers { summary, content } in the context bundle and
- * cap total size to ~15 000 chars so the specialist prompt stays manageable.
- * ToolResult.content is already a JSON string — parsing it before re-stringifying
+ * Keys each agent actually needs. Everything else in the bundle is stripped
+ * before building the prompt — reduces token cost significantly.
+ */
+const AGENT_CONTEXT_KEYS: Record<AgentName, string[]> = {
+  ads: ['brand', 'metaAds', 'googleAds', 'ga4Conversions'],
+  seo: ['brand', 'seoAudit', 'gsc'],
+  content: ['brand', 'ga4Organic', 'calendar', 'competitors', 'seoFindings', 'socialPerformance'],
+  strategist: ['brand', 'ga4Organic', 'seoAudit', 'calendar', 'upstreamOutputs', 'upstreamHistories'],
+}
+
+/**
+ * Expand ToolResult wrappers { summary, content } in the context bundle,
+ * filter to agent-relevant keys only, and cap at ~12 000 chars.
+ * ToolResult.content is already a JSON string — parsing before re-stringifying
  * avoids double-escaping and reduces prompt size significantly.
  */
-function formatContextBundle(bundle: Record<string, unknown>): string {
+function formatContextBundle(bundle: Record<string, unknown>, agent: AgentName): string {
+  const allowedKeys = AGENT_CONTEXT_KEYS[agent]
   const expanded: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(bundle)) {
+    if (!allowedKeys.includes(key)) continue  // agent-specific filter
     if (
       value !== null &&
       typeof value === 'object' &&
@@ -80,9 +93,8 @@ function formatContextBundle(bundle: Record<string, unknown>): string {
     }
   }
   const full = JSON.stringify(expanded, null, 2)
-  const MAX = 15_000
+  const MAX = 12_000
   if (full.length <= MAX) return full
-  // Truncate gracefully with a clear marker
   return full.slice(0, MAX) + '\n\n... [context truncated — data above is a representative sample]'
 }
 
@@ -165,7 +177,7 @@ ${task?.successCriteria ? `Success criteria: ${task.successCriteria}` : ''}
 
 ## Context Data
 \`\`\`json
-${formatContextBundle(board.contextBundle)}
+${formatContextBundle(board.contextBundle, agent)}
 \`\`\`
 ${historySection}
 ${correctionSection}`
