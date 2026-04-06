@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import { Button } from '@/components/shared/Button'
 import CompetitorAnalysis from '@/components/shared/CompetitorAnalysis'
 
@@ -32,6 +33,7 @@ const CHANNEL_OPTIONS = ['Meta Ads', 'Google Ads', 'SEO', 'Instagram', 'LinkedIn
 
 export default function OnboardingPage() {
   const router = useRouter()
+  const { update: updateSession } = useSession()
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
 
@@ -71,7 +73,12 @@ export default function OnboardingPage() {
     }
   }
 
-  const finish = () => router.push('/dashboard')
+  const finish = async () => {
+    // Refresh the JWT so onboarded=true is in the token before hitting the
+    // dashboard layout — without this the layout would redirect back here.
+    await updateSession({ onboarded: true })
+    router.push('/dashboard')
+  }
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center px-4">
