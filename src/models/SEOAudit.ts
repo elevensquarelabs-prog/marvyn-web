@@ -87,6 +87,7 @@ export interface IKeywordOpportunity {
 export interface IEstimatedMetrics {
   organicTraffic?: number
   organicKeywords?: number
+  domainRank?: number
   source: 'dataforseo_labs'
 }
 
