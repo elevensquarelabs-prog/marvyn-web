@@ -48,5 +48,38 @@ export async function POST(_req: NextRequest) {
   const totalClicks = rows.reduce((s: number, r: { clicks: number }) => s + r.clicks, 0)
   const totalImpressions = rows.reduce((s: number, r: { impressions: number }) => s + r.impressions, 0)
 
-  return Response.json({ success: true, synced, totalClicks: Math.round(totalClicks), totalImpressions: Math.round(totalImpressions), siteUrl: sc.siteUrl })
+  // ── Page-dimension: capture landing page CTR data ─────────────────
+  let syncedPages = 0
+  try {
+    const pageRes = await axios.post(
+      `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(sc.siteUrl)}/searchAnalytics/query`,
+      { startDate, endDate, dimensions: ['page'], rowLimit: 500 },
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    )
+    const pageRows = pageRes.data.rows || []
+    console.log(`[GSC Sync] page rows returned: ${pageRows.length}`)
+
+    for (const row of pageRows) {
+      const url = row.keys[0] as string
+      await Keyword.findOneAndUpdate(
+        { userId, keyword: url, source: 'search_console_page' },
+        {
+          userId,
+          keyword: url,
+          source: 'search_console_page',
+          clicks: Math.round(row.clicks),
+          impressions: Math.round(row.impressions),
+          currentPosition: Math.round(row.position),
+          ctr: row.ctr,
+        },
+        { upsert: true, new: true }
+      )
+      syncedPages++
+    }
+  } catch (pageErr) {
+    // Page-dimension sync is best-effort; don't fail the whole sync
+    console.error('[GSC Sync] page dimension failed:', (pageErr as Error).message)
+  }
+
+  return Response.json({ success: true, synced, syncedPages, totalClicks: Math.round(totalClicks), totalImpressions: Math.round(totalImpressions), siteUrl: sc.siteUrl })
 }

@@ -9,6 +9,7 @@ export interface IKeyword extends Document {
   currentPosition?: number
   clicks?: number
   impressions?: number
+  ctr?: number
   status: 'unassigned' | 'targeting' | 'ranking' | 'won'
   createdAt: Date
 }
@@ -22,6 +23,7 @@ const KeywordSchema = new Schema<IKeyword>({
   currentPosition: Number,
   clicks: Number,
   impressions: Number,
+  ctr: Number,
   status: {
     type: String,
     enum: ['unassigned', 'targeting', 'ranking', 'won'],
