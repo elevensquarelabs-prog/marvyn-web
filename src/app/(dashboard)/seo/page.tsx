@@ -310,12 +310,21 @@ export default function SEOPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: `Give me specific step-by-step implementation instructions to fix this SEO issue on ${audit?.domain}:
+          message: `Give me specific step-by-step implementation instructions to fix this SEO issue on ${audit?.domain}.
 
-Issue: ${issue.title}
-Recommendation: ${issue.recommendation}
+Site context:
+- SEO score: ${audit?.score ?? 'N/A'}/100 | Performance: ${audit?.performance?.score ?? 'N/A'}/100
+- ${audit?.criticalCount ?? 0} critical issues, ${audit?.warningCount ?? 0} warnings total
+- Page title: "${audit?.pageData?.title ?? 'unknown'}"
+- H1: "${audit?.pageData?.h1 ?? 'none'}"
+- Meta description: ${audit?.pageData?.description ? `"${audit.pageData.description.slice(0, 100)}..."` : 'MISSING'}
+${audit?.crawledPages?.length ? `- ${audit.crawledPages.length} pages crawled` : ''}
+${audit?.keywordOpportunities?.length ? `- Top keyword opportunity: "${audit.keywordOpportunities[0]?.keyword}" (${audit.keywordOpportunities[0]?.searchVolume ?? '?'}/mo)` : ''}
 
-Be specific to this domain. Include exact code snippets or CMS steps if relevant. Keep it concise (5-8 steps max).`,
+Issue to fix: ${issue.title}
+Current recommendation: ${issue.recommendation}
+
+Provide domain-specific steps. Include exact code snippets or CMS instructions where relevant. 5-8 steps max.`,
         }),
       })
       const reader = res.body!.getReader()
