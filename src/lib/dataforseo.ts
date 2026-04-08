@@ -403,7 +403,7 @@ export async function getKeywordOpportunities(
         location_code: locationCode,
         language_code: 'en',
         include_serp_info: false,
-        limit: 12,
+        limit: 50,
         order_by: ['keyword_info.search_volume,desc'],
         filters: [['keyword_info.search_volume', '>', 0]],
       }],
@@ -427,7 +427,7 @@ export async function getKeywordOpportunities(
       }
     }>
 
-    return items.slice(0, 8).map(item => ({
+    return items.map(item => ({
       keyword: item.keyword,
       searchVolume: item.keyword_info?.search_volume,
       difficulty: item.keyword_properties?.keyword_difficulty,
