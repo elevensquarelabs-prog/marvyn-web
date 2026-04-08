@@ -287,6 +287,40 @@ export async function POST(req: NextRequest) {
           creditsCharged: dfsUsage.creditsCharged,
         })
 
+        // ── Competitor enrichment: mainStrength / weakness ───────────
+        const competitorEnrichments = new Map<string, { mainStrength: string; weakness: string }>()
+        if (competitorDetails.length > 0) {
+          try {
+            const userStats = `traffic=${finalOrganicTraffic ?? 'unknown'}/mo, keywords=${finalOrganicKeywords ?? 'unknown'}`
+            const compLines = competitorDetails.map(c =>
+              `- ${c.domain}: traffic=${c.organicTraffic ?? 'unknown'}/mo, keywords=${c.organicKeywords ?? 'unknown'}${(c as { domainRank?: number }).domainRank ? `, rank=${(c as { domainRank?: number }).domainRank}` : ''}`
+            ).join('\n')
+
+            const enrichPrompt = `User domain: ${cleanDomain} (${userStats})
+
+Competitors:
+${compLines}
+
+For each competitor domain, based on the traffic/keyword numbers vs the user, write:
+- mainStrength: their biggest SEO advantage (e.g. "5× more organic traffic", "dominates informational keywords with 800+ indexed terms")
+- weakness: a specific gap or opportunity the user could exploit (e.g. "Similar keyword count but 3× less traffic — likely low-CTR titles", "No keyword overlap — niche is defensible")
+
+Return ONLY valid JSON:
+{"competitors": [{"domain": "example.com", "mainStrength": "...", "weakness": "..."}]}`
+
+            const enrichRaw = await llm(enrichPrompt, skills.seoAudit, 'fast')
+            const enrichMatch = enrichRaw.match(/\{[\s\S]*\}/)
+            if (enrichMatch) {
+              const parsed = JSON.parse(enrichMatch[0]) as { competitors: Array<{ domain: string; mainStrength: string; weakness: string }> }
+              for (const e of (parsed.competitors ?? [])) {
+                competitorEnrichments.set(e.domain, { mainStrength: e.mainStrength, weakness: e.weakness })
+              }
+            }
+          } catch (e) {
+            console.error('[seo/run] competitor enrichment failed:', e)
+          }
+        }
+
         // ── Step 4: AI Actions ────────────────────────────────────────
         send({ type: 'step', step: 4, status: 'running', message: 'Generating recommendations…' })
         let aiActions: IAuditAction[] = []
@@ -389,7 +423,11 @@ Generate 6-8 actions. Mix of technical, content, keyword, and competitor types.`
           crawlSummary,
           crawledPages,
           issues,
-          competitors: competitorDetails,
+          competitors: competitorDetails.map(c => ({
+            ...c,
+            mainStrength: competitorEnrichments.get(c.domain)?.mainStrength,
+            weakness: competitorEnrichments.get(c.domain)?.weakness,
+          })),
           performance,
           aiActions,
           pageKeywords,
