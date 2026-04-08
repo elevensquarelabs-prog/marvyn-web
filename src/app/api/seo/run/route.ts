@@ -13,6 +13,7 @@ import Keyword from '@/models/Keyword'
 import AuditRun from '@/models/AuditRun'
 import mongoose from 'mongoose'
 import type { IIssue, IPageKeyword, IAuditAction, ICrawlSummary, ICrawledPage } from '@/models/SEOAudit'
+import { buildAiActionsPrompt } from '@/lib/seo-evidence'
 
 function sse(data: unknown): Uint8Array {
   return new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`)
@@ -326,37 +327,23 @@ Return ONLY valid JSON:
         let aiActions: IAuditAction[] = []
 
         try {
-          const prompt = `You are an SEO expert. Generate prioritised action items for this website audit.
-
-Domain: ${cleanDomain} (${location})
-SEO Score: ${score != null ? `${score}/100` : 'Unavailable (crawl score not returned)'}
-Critical issues: ${criticalCount}, Warnings: ${warningCount}
-Page title: "${pageData.title}"
-H1: "${pageData.h1}"
-Performance score: ${performance.score}/100 (desktop Lighthouse)
-LCP: ${(performance as Record<string, unknown>).lcp ?? 'unknown'}, CLS: ${(performance as Record<string, unknown>).cls ?? 'unknown'}, TBT: ${(performance as Record<string, unknown>).tbt ?? 'unknown'}
-
-Top issues found:
-${issues.slice(0, 8).map(i => `- [${i.severity}] ${i.title}`).join('\n')}
-
-Top competitors: ${competitorDetails.slice(0, 3).map(c => c.domain).join(', ')}
-High-opportunity keywords: ${keywordOpportunities.slice(0, 5).map(k => `${k.keyword} (${k.searchVolume ?? 0}/mo)`).join(', ') || 'none'}
-
-Return ONLY valid JSON, no markdown:
-{
-  "actions": [
-    {
-      "priority": "critical",
-      "effort": "Low",
-      "impact": "Direct ranking improvement",
-      "title": "Action title",
-      "instructions": ["Step 1", "Step 2", "Step 3"],
-      "type": "technical"
-    }
-  ]
-}
-
-Generate 6-8 actions. Mix of technical, content, keyword, and competitor types.`
+          const prompt = buildAiActionsPrompt({
+            domain: cleanDomain,
+            location,
+            score,
+            performance,
+            criticalCount,
+            warningCount,
+            pageTitle: pageData.title,
+            pageH1: pageData.h1,
+            pageDescription: pageData.description,
+            issues,
+            crawledPages,
+            competitors: competitorDetails,
+            userTraffic: finalOrganicTraffic,
+            userKeywords: finalOrganicKeywords,
+            keywordOpportunities,
+          })
 
           const raw = await llm(prompt, skills.seoAudit, 'powerful')
           const usage = estimateCostInr({
