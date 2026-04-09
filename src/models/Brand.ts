@@ -83,7 +83,7 @@ const BrandSchema = new Schema<IBrand>({
     summary: String,
     overallScore: Number,
     competitors: [{ domain: String, title: String, description: String, organicTraffic: Number, organicKeywords: Number, domainRank: Number, mainStrength: String, weakness: String }],
-    opportunities: [{ type: String, description: String, action: String }],
+    opportunities: [{ type: { type: String }, description: String, action: String }],
   },
 })
 
