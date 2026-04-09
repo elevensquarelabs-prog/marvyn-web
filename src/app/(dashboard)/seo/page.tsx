@@ -119,6 +119,8 @@ export default function SEOPage() {
   const [syncing, setSyncing] = useState(false)
   const [gscKeywords, setGscKeywords] = useState<{ keyword: string; source: string; position?: number; searchVolume?: number; impressions?: number; clicks?: number; difficulty?: number }[]>([])
   const [gscStats, setGscStats] = useState<{ clicks: number; impressions: number; keywords: number; avgPosition: number } | null>(null)
+  const [pageCtrMap, setPageCtrMap] = useState<Record<string, { clicks: number; impressions: number; ctr: number; position: number }>>({})
+
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Load existing audit + connection status on mount
@@ -157,15 +159,32 @@ export default function SEOPage() {
       .then(r => r.json())
       .then(data => {
         if (data.keywords?.length) {
-          const kws = data.keywords.map((k: { keyword: string; currentPosition?: number; impressions?: number; clicks?: number; difficulty?: number }) => ({
-            keyword: k.keyword,
-            source: 'gsc',
-            position: k.currentPosition,
-            impressions: k.impressions,  // GSC impressions — not search volume
-            searchVolume: undefined,      // not available from GSC
-            clicks: k.clicks,
-            difficulty: k.difficulty,
-          }))
+          const all: { keyword: string; source?: string; currentPosition?: number; impressions?: number; clicks?: number; difficulty?: number; ctr?: number }[] = data.keywords
+          // Page-dimension entries (URL-keyed) → build CTR map for crawled pages enrichment
+          const pageCtrs: Record<string, { clicks: number; impressions: number; ctr: number; position: number }> = {}
+          for (const k of all) {
+            if (k.source === 'search_console_page') {
+              pageCtrs[k.keyword] = {
+                clicks: k.clicks ?? 0,
+                impressions: k.impressions ?? 0,
+                ctr: k.ctr ?? 0,
+                position: k.currentPosition ?? 0,
+              }
+            }
+          }
+          setPageCtrMap(pageCtrs)
+          // Query-dimension entries → gscKeywords for the keywords tab
+          const kws = all
+            .filter(k => k.source !== 'search_console_page')
+            .map(k => ({
+              keyword: k.keyword,
+              source: 'gsc',
+              position: k.currentPosition,
+              impressions: k.impressions,  // GSC impressions — not search volume
+              searchVolume: undefined,      // not available from GSC
+              clicks: k.clicks,
+              difficulty: k.difficulty,
+            }))
           setGscKeywords(kws)
           const totalClicks = kws.reduce((s: number, k: { clicks?: number }) => s + (k.clicks ?? 0), 0)
           const totalImpressions = kws.reduce((s: number, k: { impressions?: number }) => s + (k.impressions ?? 0), 0)
@@ -188,15 +207,25 @@ export default function SEOPage() {
       // Refresh keywords from Keyword model
       const kwData = await fetch('/api/seo/keywords').then(r => r.json())
       if (kwData.keywords?.length) {
-        const kws = kwData.keywords.map((k: { keyword: string; currentPosition?: number; impressions?: number; clicks?: number; difficulty?: number }) => ({
-          keyword: k.keyword,
-          source: 'gsc',
-          position: k.currentPosition,
-          impressions: k.impressions,
-          searchVolume: undefined,
-          clicks: k.clicks,
-          difficulty: k.difficulty,
-        }))
+        const all: { keyword: string; source?: string; currentPosition?: number; impressions?: number; clicks?: number; difficulty?: number; ctr?: number }[] = kwData.keywords
+        const pageCtrs: Record<string, { clicks: number; impressions: number; ctr: number; position: number }> = {}
+        for (const k of all) {
+          if (k.source === 'search_console_page') {
+            pageCtrs[k.keyword] = { clicks: k.clicks ?? 0, impressions: k.impressions ?? 0, ctr: k.ctr ?? 0, position: k.currentPosition ?? 0 }
+          }
+        }
+        setPageCtrMap(pageCtrs)
+        const kws = all
+          .filter(k => k.source !== 'search_console_page')
+          .map(k => ({
+            keyword: k.keyword,
+            source: 'gsc',
+            position: k.currentPosition,
+            impressions: k.impressions,
+            searchVolume: undefined,
+            clicks: k.clicks,
+            difficulty: k.difficulty,
+          }))
         setGscKeywords(kws)
         const totalClicks = kws.reduce((s: number, k: { clicks?: number }) => s + (k.clicks ?? 0), 0)
         const totalImpressions = kws.reduce((s: number, k: { impressions?: number }) => s + (k.impressions ?? 0), 0)
@@ -310,12 +339,21 @@ export default function SEOPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: `Give me specific step-by-step implementation instructions to fix this SEO issue on ${audit?.domain}:
+          message: `Give me specific step-by-step implementation instructions to fix this SEO issue on ${audit?.domain}.
 
-Issue: ${issue.title}
-Recommendation: ${issue.recommendation}
+Site context:
+- SEO score: ${audit?.score ?? 'N/A'}/100 | Performance: ${audit?.performance?.score ?? 'N/A'}/100
+- ${audit?.criticalCount ?? 0} critical issues, ${audit?.warningCount ?? 0} warnings total
+- Page title: "${audit?.pageData?.title ?? 'unknown'}"
+- H1: "${audit?.pageData?.h1 ?? 'none'}"
+- Meta description: ${audit?.pageData?.description ? `"${audit.pageData.description.slice(0, 100)}..."` : 'MISSING'}
+${audit?.crawledPages?.length ? `- ${audit.crawledPages.length} pages crawled` : ''}
+${audit?.keywordOpportunities?.length ? `- Top keyword opportunity: "${audit.keywordOpportunities[0]?.keyword}" (${audit.keywordOpportunities[0]?.searchVolume ?? '?'}/mo)` : ''}
 
-Be specific to this domain. Include exact code snippets or CMS steps if relevant. Keep it concise (5-8 steps max).`,
+Issue to fix: ${issue.title}
+Current recommendation: ${issue.recommendation}
+
+Provide domain-specific steps. Include exact code snippets or CMS instructions where relevant. 5-8 steps max.`,
         }),
       })
       const reader = res.body!.getReader()
@@ -531,7 +569,7 @@ Be specific to this domain. Include exact code snippets or CMS steps if relevant
 
         {/* ── Overview ── */}
         {activeTab === 'overview' && (
-          <AuditOverview audit={audit} onSwitchTab={tab => setActiveTab(tab as typeof activeTab)} gscStats={gscStats ?? undefined} />
+          <AuditOverview audit={audit} onSwitchTab={tab => setActiveTab(tab as typeof activeTab)} gscStats={gscStats ?? undefined} pageCtrMap={pageCtrMap} />
         )}
 
         {/* ── Issues ── */}

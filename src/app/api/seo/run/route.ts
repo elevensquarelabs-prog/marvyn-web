@@ -13,6 +13,7 @@ import Keyword from '@/models/Keyword'
 import AuditRun from '@/models/AuditRun'
 import mongoose from 'mongoose'
 import type { IIssue, IPageKeyword, IAuditAction, ICrawlSummary, ICrawledPage } from '@/models/SEOAudit'
+import { buildAiActionsPrompt } from '@/lib/seo-evidence'
 
 function sse(data: unknown): Uint8Array {
   return new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`)
@@ -287,42 +288,62 @@ export async function POST(req: NextRequest) {
           creditsCharged: dfsUsage.creditsCharged,
         })
 
+        // ── Competitor enrichment: mainStrength / weakness ───────────
+        const competitorEnrichments = new Map<string, { mainStrength: string; weakness: string }>()
+        if (competitorDetails.length > 0) {
+          try {
+            const userStats = `traffic=${finalOrganicTraffic ?? 'unknown'}/mo, keywords=${finalOrganicKeywords ?? 'unknown'}`
+            const compLines = competitorDetails.map(c =>
+              `- ${c.domain}: traffic=${c.organicTraffic ?? 'unknown'}/mo, keywords=${c.organicKeywords ?? 'unknown'}${(c as { domainRank?: number }).domainRank ? `, rank=${(c as { domainRank?: number }).domainRank}` : ''}`
+            ).join('\n')
+
+            const enrichPrompt = `User domain: ${cleanDomain} (${userStats})
+
+Competitors:
+${compLines}
+
+For each competitor domain, based on the traffic/keyword numbers vs the user, write:
+- mainStrength: their biggest SEO advantage (e.g. "5× more organic traffic", "dominates informational keywords with 800+ indexed terms")
+- weakness: a specific gap or opportunity the user could exploit (e.g. "Similar keyword count but 3× less traffic — likely low-CTR titles", "No keyword overlap — niche is defensible")
+
+Return ONLY valid JSON:
+{"competitors": [{"domain": "example.com", "mainStrength": "...", "weakness": "..."}]}`
+
+            const enrichRaw = await llm(enrichPrompt, skills.seoAudit, 'fast')
+            const enrichMatch = enrichRaw.match(/\{[\s\S]*\}/)
+            if (enrichMatch) {
+              const parsed = JSON.parse(enrichMatch[0]) as { competitors: Array<{ domain: string; mainStrength: string; weakness: string }> }
+              for (const e of (parsed.competitors ?? [])) {
+                competitorEnrichments.set(e.domain, { mainStrength: e.mainStrength, weakness: e.weakness })
+              }
+            }
+          } catch (e) {
+            console.error('[seo/run] competitor enrichment failed:', e)
+          }
+        }
+
         // ── Step 4: AI Actions ────────────────────────────────────────
         send({ type: 'step', step: 4, status: 'running', message: 'Generating recommendations…' })
         let aiActions: IAuditAction[] = []
 
         try {
-          const prompt = `You are an SEO expert. Generate prioritised action items for this website audit.
-
-Domain: ${cleanDomain} (${location})
-SEO Score: ${score != null ? `${score}/100` : 'Unavailable (crawl score not returned)'}
-Critical issues: ${criticalCount}, Warnings: ${warningCount}
-Page title: "${pageData.title}"
-H1: "${pageData.h1}"
-Performance score: ${performance.score}/100 (desktop Lighthouse)
-LCP: ${(performance as Record<string, unknown>).lcp ?? 'unknown'}, CLS: ${(performance as Record<string, unknown>).cls ?? 'unknown'}, TBT: ${(performance as Record<string, unknown>).tbt ?? 'unknown'}
-
-Top issues found:
-${issues.slice(0, 8).map(i => `- [${i.severity}] ${i.title}`).join('\n')}
-
-Top competitors: ${competitorDetails.slice(0, 3).map(c => c.domain).join(', ')}
-High-opportunity keywords: ${keywordOpportunities.slice(0, 5).map(k => `${k.keyword} (${k.searchVolume ?? 0}/mo)`).join(', ') || 'none'}
-
-Return ONLY valid JSON, no markdown:
-{
-  "actions": [
-    {
-      "priority": "critical",
-      "effort": "Low",
-      "impact": "Direct ranking improvement",
-      "title": "Action title",
-      "instructions": ["Step 1", "Step 2", "Step 3"],
-      "type": "technical"
-    }
-  ]
-}
-
-Generate 6-8 actions. Mix of technical, content, keyword, and competitor types.`
+          const prompt = buildAiActionsPrompt({
+            domain: cleanDomain,
+            location,
+            score,
+            performance,
+            criticalCount,
+            warningCount,
+            pageTitle: pageData.title,
+            pageH1: pageData.h1,
+            pageDescription: pageData.description,
+            issues,
+            crawledPages,
+            competitors: competitorDetails,
+            userTraffic: finalOrganicTraffic,
+            userKeywords: finalOrganicKeywords,
+            keywordOpportunities,
+          })
 
           const raw = await llm(prompt, skills.seoAudit, 'powerful')
           const usage = estimateCostInr({
@@ -389,7 +410,11 @@ Generate 6-8 actions. Mix of technical, content, keyword, and competitor types.`
           crawlSummary,
           crawledPages,
           issues,
-          competitors: competitorDetails,
+          competitors: competitorDetails.map(c => ({
+            ...c,
+            mainStrength: competitorEnrichments.get(c.domain)?.mainStrength,
+            weakness: competitorEnrichments.get(c.domain)?.weakness,
+          })),
           performance,
           aiActions,
           pageKeywords,

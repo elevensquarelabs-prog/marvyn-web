@@ -375,10 +375,11 @@ export async function getDomainRankOverview(
 
   const task0 = res.data.tasks?.[0]
   const item = task0?.result?.[0]?.items?.[0]
-  console.log(`[dfs/domain_rank_overview] target=${cleanDomain} status=${task0?.status_code} etv=${item?.metrics?.organic?.etv} count=${item?.metrics?.organic?.count}`)
+  console.log(`[dfs/domain_rank_overview] target=${cleanDomain} status=${task0?.status_code} etv=${item?.metrics?.organic?.etv} count=${item?.metrics?.organic?.count} rank=${item?.rank}`)
   return {
     organicTraffic: item?.metrics?.organic?.etv,
     organicKeywords: item?.metrics?.organic?.count,
+    domainRank: item?.rank as number | undefined,
     source: 'dataforseo_labs',
   }
 }
@@ -403,7 +404,7 @@ export async function getKeywordOpportunities(
         location_code: locationCode,
         language_code: 'en',
         include_serp_info: false,
-        limit: 12,
+        limit: 50,
         order_by: ['keyword_info.search_volume,desc'],
         filters: [['keyword_info.search_volume', '>', 0]],
       }],
@@ -427,7 +428,7 @@ export async function getKeywordOpportunities(
       }
     }>
 
-    return items.slice(0, 8).map(item => ({
+    return items.map(item => ({
       keyword: item.keyword,
       searchVolume: item.keyword_info?.search_volume,
       difficulty: item.keyword_properties?.keyword_difficulty,
@@ -461,7 +462,7 @@ export async function getCompetitorData(
     domain: cleanDomain,
     organicTraffic: data.organicTraffic,
     organicKeywords: data.organicKeywords,
-    domainRank: undefined,
+    domainRank: data.domainRank,
   }
 }
 
