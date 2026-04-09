@@ -14,6 +14,7 @@ export type AiFeature =
   | 'competitor_tagging'
   | 'strategy_plan'
   | 'strategy_review'
+  | 'strategy_generate'
 
 export type UsageProvider = 'anthropic' | 'dataforseo' | 'platform'
 
@@ -50,6 +51,7 @@ const FEATURE_CREDIT_COSTS: Record<AiFeature, number> = {
   competitor_tagging: 2,
   strategy_plan: 6,
   strategy_review: 3,
+  strategy_generate: 4,
 }
 
 export const DATAFORSEO_OPERATION_COST_USD: Record<string, number> = {

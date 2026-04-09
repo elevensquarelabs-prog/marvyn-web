@@ -8,6 +8,7 @@ import SocialPost from '@/models/SocialPost'
 import Brand from '@/models/Brand'
 import User from '@/models/User'
 import { skills } from '@/lib/skills'
+import { buildSystemPrompt } from '@/lib/marketing-context'
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -44,8 +45,7 @@ export async function POST(req: NextRequest) {
     return Response.json(buildLimitResponse(budget), { status: 429 })
   }
 
-  const avoidWords = brand?.avoidWords ? `\nWords/phrases to NEVER use: ${brand.avoidWords}.` : ''
-  const system = `${skills.socialContent}\n\nBrand: ${brand?.name || 'Brand'}. Product: ${brand?.product || 'product'}. Audience: ${brand?.audience || 'general audience'}. Tone: ${tone || brand?.tone || 'professional'}. USP: ${brand?.usp || ''}. Website: ${brand?.websiteUrl || ''}.${avoidWords}`
+  const system = buildSystemPrompt(skills.socialContent, brand)
 
   const platformLimits: Record<string, number> = { linkedin: 3000, facebook: 63206, instagram: 2200 }
   const limit = platformLimits[platform] || 3000

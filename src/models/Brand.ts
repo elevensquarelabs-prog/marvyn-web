@@ -32,6 +32,31 @@ export interface ICompetitorAnalysis {
   }>
 }
 
+export interface IMarketingContext {
+  /** Who is the ideal customer — role, company type, company size, situation */
+  icp?: string
+  /** Core pains/frustrations that drive them to seek a solution */
+  corePains?: string[]
+  /** Desired outcomes — what they want to achieve */
+  desiredOutcomes?: string[]
+  /** Direct and indirect alternatives customers currently use */
+  alternatives?: string[]
+  /** How Marvyn/brand is differentiated from those alternatives */
+  differentiation?: string
+  /** Objections customers raise before buying */
+  objections?: string[]
+  /** Key proof points: metrics, customer logos, testimonials */
+  proofPoints?: string[]
+  /** Funnel stage priority this cycle: awareness | consideration | conversion | retention */
+  funnelPriority?: 'awareness' | 'consideration' | 'conversion' | 'retention'
+  /** Strategic constraints or things NOT to do this cycle */
+  strategicConstraints?: string[]
+  /** Customer language — exact phrases customers use to describe the problem */
+  customerLanguage?: string[]
+  /** Last time this context was generated/refreshed */
+  generatedAt?: Date
+}
+
 export interface IBrand extends Document {
   userId: mongoose.Types.ObjectId
   name: string
@@ -50,6 +75,8 @@ export interface IBrand extends Document {
   currency: string
   competitors: ICompetitor[]
   competitorAnalysis?: ICompetitorAnalysis
+  /** Structured marketing context — the canonical shared context for all AI specialists */
+  marketingContext?: IMarketingContext
 }
 
 const BrandSchema = new Schema<IBrand>({
@@ -84,6 +111,19 @@ const BrandSchema = new Schema<IBrand>({
     overallScore: Number,
     competitors: [{ domain: String, title: String, description: String, organicTraffic: Number, organicKeywords: Number, domainRank: Number, mainStrength: String, weakness: String }],
     opportunities: [{ type: { type: String }, description: String, action: String }],
+  },
+  marketingContext: {
+    icp: String,
+    corePains: [String],
+    desiredOutcomes: [String],
+    alternatives: [String],
+    differentiation: String,
+    objections: [String],
+    proofPoints: [String],
+    funnelPriority: { type: String, enum: ['awareness', 'consideration', 'conversion', 'retention'] },
+    strategicConstraints: [String],
+    customerLanguage: [String],
+    generatedAt: Date,
   },
 })
 

@@ -8,6 +8,7 @@ import BlogPost from '@/models/BlogPost'
 import Brand from '@/models/Brand'
 import User from '@/models/User'
 import { skills } from '@/lib/skills'
+import { buildSystemPrompt } from '@/lib/marketing-context'
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -44,8 +45,7 @@ export async function POST(req: NextRequest) {
     return Response.json(buildLimitResponse(budget), { status: 429 })
   }
 
-  const avoidWords = brand?.avoidWords ? `\nWords/phrases to NEVER use: ${brand.avoidWords}.` : ''
-  const system = `${skills.contentStrategy}\n\nYou are writing for ${brand?.name || 'a brand'} (${brand?.websiteUrl || ''}) that sells ${brand?.product || 'products'} to ${brand?.audience || 'their audience'}. Brand tone: ${brand?.tone || 'professional'}. USP: ${brand?.usp || 'quality'}.${avoidWords}`
+  const system = buildSystemPrompt(skills.contentStrategy, brand)
 
   const generatedPosts = []
   let totalInputTokens = 0

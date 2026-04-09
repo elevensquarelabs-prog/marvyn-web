@@ -16,6 +16,12 @@ export const skills = {
   adCreative: loadSkill('ad-creative'),
   competitorAlternatives: loadSkill('competitor-alternatives'),
   marketingOpsPlan: loadSkill('marketing-ops-plan'),
+  // Phase C additions — Corey Haines marketing skills
+  pageCro: loadSkill('page-cro'),
+  marketingPsychology: loadSkill('marketing-psychology'),
+  aiSeo: loadSkill('ai-seo'),
+  programmaticSeo: loadSkill('programmatic-seo'),
+  schemaMarkup: loadSkill('schema-markup'),
 }
 
 export type SkillKey = keyof typeof skills
@@ -30,6 +36,11 @@ export const CHIP_TO_SKILL: Record<string, string> = {
   'email-sequence': skills.emailSequence,
   'ad-creative': skills.adCreative,
   'competitor-alternatives': skills.competitorAlternatives,
+  'page-cro': skills.pageCro,
+  'marketing-psychology': skills.marketingPsychology,
+  'ai-seo': skills.aiSeo,
+  'programmatic-seo': skills.programmaticSeo,
+  'schema-markup': skills.schemaMarkup,
 }
 
 export function getSkillByChipId(chipId: string): string {

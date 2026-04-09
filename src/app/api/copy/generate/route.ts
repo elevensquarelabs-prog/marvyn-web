@@ -4,6 +4,9 @@ import { authOptions } from '@/lib/auth'
 import { llm, type Complexity } from '@/lib/llm'
 import { buildLimitResponse, enforceAiBudget, estimateCostInr, getModelNameFromComplexity, recordAiUsage } from '@/lib/ai-usage'
 import { skills } from '@/lib/skills/index'
+import { connectDB } from '@/lib/mongodb'
+import Brand from '@/models/Brand'
+import { buildSystemPrompt } from '@/lib/marketing-context'
 
 type CopyType = 'seo-brief' | 'landing' | 'ad' | 'product' | 'headline' | 'cta' | 'value-prop'
 
@@ -187,11 +190,15 @@ export async function POST(req: NextRequest) {
     return Response.json(buildLimitResponse(budget), { status: 429 })
   }
 
-  const raw = await llm(prompt, skills.copywriting, complexity)
+  await connectDB()
+  const brand = await Brand.findOne({ userId: session.user.id })
+  const systemPrompt = buildSystemPrompt(skills.copywriting, brand)
+
+  const raw = await llm(prompt, systemPrompt, complexity)
   const model = getModelNameFromComplexity(complexity)
   const usage = estimateCostInr({
     model,
-    inputText: `${skills.copywriting}\n${prompt}`,
+    inputText: `${systemPrompt}\n${prompt}`,
     outputText: raw,
   })
 

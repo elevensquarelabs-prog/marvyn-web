@@ -13,6 +13,7 @@ import StrategyPlanModel, {
 import User from '@/models/User'
 import { llm } from '@/lib/llm'
 import { skills } from '@/lib/skills'
+import { buildMarketingContext } from '@/lib/marketing-context'
 import { estimateCostInr, getModelNameFromComplexity } from '@/lib/ai-usage'
 import { getValidGoogleToken } from '@/lib/google-auth'
 import { getAdsInsightsForUser } from '@/lib/ads-performance'
@@ -711,8 +712,12 @@ export async function runStrategyAgent(userId: string, answers: IStrategyQuestio
     }
   }
 
+  const brandDoc = await Brand.findOne({ userId }).lean()
+  const marketingCtx = buildMarketingContext(brandDoc as Parameters<typeof buildMarketingContext>[0])
+
   const contextBlob = JSON.stringify({
     brand: context.brand,
+    marketingContext: marketingCtx.structured,
     extraContext: context.additionalAnswers,
     content: context.content,
     seo: context.seo,
