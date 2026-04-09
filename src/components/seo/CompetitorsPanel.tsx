@@ -267,6 +267,16 @@ export default function CompetitorsPanel({ competitors, domain, onAdd, onDelete,
                               {c.added && <span className="text-[10px] bg-[#DA7756]/15 text-[#DA7756] px-1.5 py-0.5 rounded border border-[#DA7756]/20">Added</span>}
                             </div>
                             {c.title && <p className="text-[11px] text-[#555] truncate max-w-[260px] mt-0.5">{c.title}</p>}
+                            {c.mainStrength && (
+                              <p className="text-[10px] text-green-400/80 truncate max-w-[300px] mt-1">
+                                ↑ {c.mainStrength}
+                              </p>
+                            )}
+                            {c.weakness && (
+                              <p className="text-[10px] text-[#DA7756]/80 truncate max-w-[300px]">
+                                ↓ {c.weakness}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </td>

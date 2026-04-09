@@ -81,6 +81,7 @@ interface Props {
   audit: AuditData
   onSwitchTab: (tab: string) => void
   gscStats?: { clicks: number; impressions: number; keywords: number; avgPosition: number }
+  pageCtrMap?: Record<string, { clicks: number; impressions: number; ctr: number; position: number }>
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -232,7 +233,7 @@ function trimUrl(url: string): string {
   return url.replace(/^https?:\/\//, '').replace(/\/$/, '')
 }
 
-export default function AuditOverview({ audit, onSwitchTab, gscStats }: Props) {
+export default function AuditOverview({ audit, onSwitchTab, gscStats, pageCtrMap }: Props) {
   const pd = audit.pageData
   const perf = audit.performance
   const score = audit.score
@@ -492,41 +493,59 @@ export default function AuditOverview({ audit, onSwitchTab, gscStats }: Props) {
 
       {topPages.length > 0 && (
         <Card>
-          <CardHeader title="Top Crawled Pages" sub="Best available page-level signals from the audit" />
+          <CardHeader
+            title="Top Crawled Pages"
+            sub={pageCtrMap && Object.keys(pageCtrMap).length > 0 ? 'Page-level signals + GSC clicks & CTR' : 'Best available page-level signals from the audit'}
+          />
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-[var(--border)]">
-                  {['Page', 'Status', 'Words', 'Links', 'Issues', 'Score'].map(header => (
+                  {['Page', 'Status', 'Words', 'Issues', 'Score', 'Clicks', 'CTR'].map(header => (
                     <th key={header} className="text-left px-5 py-3 text-[#555] font-semibold uppercase tracking-wide text-[10px]">{header}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {topPages.map(page => (
-                  <tr key={page.url} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-2)] transition-colors">
-                    <td className="px-5 py-3">
-                      <div className="max-w-[320px]">
-                        <p className="font-semibold text-white truncate">{page.title || trimUrl(page.url)}</p>
-                        <p className="text-[#555] text-[10px] truncate">{trimUrl(page.url)}</p>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3">
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${page.statusCode && page.statusCode >= 400 ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'}`}>
-                        {page.statusCode ?? '—'}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-[#A0A0A0]">{fmtNum(page.wordCount)}</td>
-                    <td className="px-5 py-3 text-[#A0A0A0]">{fmtNum((page.internalLinks ?? 0) + (page.externalLinks ?? 0))}</td>
-                    <td className="px-5 py-3 text-[#A0A0A0]">{fmtNum(page.issuesCount)}</td>
-                    <td className="px-5 py-3 font-semibold" style={{ color: scoreColor(page.onpageScore ?? 0) }}>
-                      {page.onpageScore ? Math.round(page.onpageScore) : '—'}
-                    </td>
-                  </tr>
-                ))}
+                {topPages.map(page => {
+                  const gsc = pageCtrMap?.[page.url]
+                  return (
+                    <tr key={page.url} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-2)] transition-colors">
+                      <td className="px-5 py-3">
+                        <div className="max-w-[280px]">
+                          <p className="font-semibold text-white truncate">{page.title || trimUrl(page.url)}</p>
+                          <p className="text-[#555] text-[10px] truncate">{trimUrl(page.url)}</p>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${page.statusCode && page.statusCode >= 400 ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'}`}>
+                          {page.statusCode ?? '—'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-[#A0A0A0]">{fmtNum(page.wordCount)}</td>
+                      <td className="px-5 py-3 text-[#A0A0A0]">{fmtNum(page.issuesCount)}</td>
+                      <td className="px-5 py-3 font-semibold" style={{ color: scoreColor(page.onpageScore ?? 0) }}>
+                        {page.onpageScore ? Math.round(page.onpageScore) : '—'}
+                      </td>
+                      <td className="px-5 py-3 font-semibold text-white">
+                        {gsc ? fmtNum(gsc.clicks) : <span className="text-[#333]">—</span>}
+                      </td>
+                      <td className="px-5 py-3">
+                        {gsc ? (
+                          <span className={`font-semibold ${gsc.ctr >= 0.05 ? 'text-green-400' : gsc.ctr >= 0.02 ? 'text-yellow-400' : 'text-[#A0A0A0]'}`}>
+                            {(gsc.ctr * 100).toFixed(1)}%
+                          </span>
+                        ) : <span className="text-[#333]">—</span>}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
+          {pageCtrMap && Object.keys(pageCtrMap).length === 0 && (
+            <p className="px-5 pb-4 text-[10px] text-[#444]">Sync Google Search Console to see per-page clicks and CTR</p>
+          )}
         </Card>
       )}
 
