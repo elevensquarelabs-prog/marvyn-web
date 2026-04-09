@@ -3,7 +3,6 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { connectDB } from './mongodb'
 import User from '@/models/User'
-import Brand from '@/models/Brand'
 
 const SUBSCRIPTION_CHECK_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
 
@@ -32,10 +31,7 @@ export const authOptions: NextAuthOptions = {
           subscriptionStatus = 'expired'
         }
 
-        // Fetch brand existence at login — the only extra DB call here, but login
-        // already pays bcrypt so this is negligible and eliminates layout DB gating.
-        const brand = await Brand.findOne({ userId: user._id }).select('name').lean()
-        const onboarded = !!((brand as { name?: string } | null)?.name)
+        const onboarded = !!(user.onboardingComplete)
 
         return {
           id: user._id.toString(),
@@ -71,10 +67,7 @@ export const authOptions: NextAuthOptions = {
         if (Date.now() - lastChecked > SUBSCRIPTION_CHECK_INTERVAL_MS) {
           try {
             await connectDB()
-            const [dbUser, brandExists] = await Promise.all([
-              User.findById(token.userId).select('subscription mustResetPassword').lean(),
-              Brand.exists({ userId: token.userId, name: { $exists: true, $ne: '' } }),
-            ])
+            const dbUser = await User.findById(token.userId).select('subscription mustResetPassword onboardingComplete').lean()
             if (dbUser) {
               const u = dbUser as {
                 subscription?: { status?: string; trialEndsAt?: Date; currentPeriodEnd?: Date }
@@ -92,7 +85,7 @@ export const authOptions: NextAuthOptions = {
               }
               token.subscriptionStatus = status
               token.mustResetPassword = u.mustResetPassword ?? false
-              token.onboarded = !!brandExists
+              token.onboarded = !!(dbUser as { onboardingComplete?: boolean }).onboardingComplete
             }
           } catch {}
           token.subscriptionCheckedAt = Date.now()

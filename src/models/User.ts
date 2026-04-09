@@ -47,6 +47,7 @@ export interface IUser extends Document {
     preferredHour: number  // 0–23 in user's local time
   }
   mustResetPassword?: boolean
+  onboardingComplete?: boolean
   emailVerified?: Date
   createdAt: Date
 }
@@ -98,6 +99,7 @@ const UserSchema = new Schema<IUser>({
     preferredHour: { type: Number, default: 9 },
   },
   mustResetPassword: { type: Boolean, default: false },
+  onboardingComplete: { type: Boolean, default: false },
   emailVerified: { type: Date },
   createdAt: { type: Date, default: Date.now },
 })

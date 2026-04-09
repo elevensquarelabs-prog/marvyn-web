@@ -74,8 +74,9 @@ export default function OnboardingPage() {
   }
 
   const finish = async () => {
-    // Refresh the JWT so onboarded=true is in the token before hitting the
-    // dashboard layout — without this the layout would redirect back here.
+    // Mark onboarding complete in DB, then refresh JWT so onboarded=true is
+    // in the token before the dashboard layout checks it.
+    await fetch('/api/user/complete-onboarding', { method: 'POST' })
     await updateSession({ onboarded: true })
     router.push('/dashboard')
   }
