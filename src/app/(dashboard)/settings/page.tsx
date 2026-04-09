@@ -26,6 +26,20 @@ interface Brand {
   competitors?: Array<{ url: string; name?: string; positioning?: string; status?: string }>
 }
 
+interface MarketingContext {
+  icp?: string
+  corePains?: string[]
+  desiredOutcomes?: string[]
+  alternatives?: string[]
+  differentiation?: string
+  objections?: string[]
+  proofPoints?: string[]
+  customerLanguage?: string[]
+  funnelPriority?: 'awareness' | 'consideration' | 'conversion' | 'retention'
+  strategicConstraints?: string[]
+  generatedAt?: string
+}
+
 interface MetaPage {
   id: string
   name: string
@@ -59,7 +73,7 @@ const PRIMARY_CHANNEL_OPTIONS = ['Meta Ads', 'Google Ads', 'SEO', 'Instagram', '
 export default function SettingsPage() {
   const { data: session } = useSession()
   const searchParams = useSearchParams()
-  const [section, setSection] = useState<'brand' | 'competitors' | 'connections' | 'billing' | 'account' | 'alerts'>('brand')
+  const [section, setSection] = useState<'brand' | 'marketing-context' | 'competitors' | 'connections' | 'billing' | 'account' | 'alerts'>('brand')
   const [successBanner, setSuccessBanner] = useState('')
   const [brand, setBrand] = useState<Brand>({})
   const [saving, setSaving] = useState(false)
@@ -112,6 +126,11 @@ export default function SettingsPage() {
   const [alertTimezone, setAlertTimezone] = useState('UTC')
   const [savingAlerts, setSavingAlerts] = useState(false)
   const [alertsSaved, setAlertsSaved] = useState(false)
+  // Marketing context
+  const [mktCtx, setMktCtx] = useState<MarketingContext>({})
+  const [mktCtxLoading, setMktCtxLoading] = useState(false)
+  const [mktCtxGenerating, setMktCtxGenerating] = useState(false)
+  const [mktCtxSaving, setMktCtxSaving] = useState(false)
 
   const fetchConnections = async () => {
     const [connRes, clarityRes] = await Promise.all([
@@ -127,9 +146,20 @@ export default function SettingsPage() {
     })
   }
 
+  const fetchMarketingContext = async () => {
+    setMktCtxLoading(true)
+    try {
+      const d = await fetch('/api/settings/marketing-context').then(r => r.json())
+      if (d.marketingContext) setMktCtx(d.marketingContext)
+    } finally {
+      setMktCtxLoading(false)
+    }
+  }
+
   useEffect(() => {
     fetch('/api/settings/brand').then(r => r.json()).then(d => setBrand(d.brand || {}))
     fetchConnections()
+    fetchMarketingContext()
     fetch('/api/user/alert-preferences').then(r => r.json()).then(d => {
       if (d.alertPreferences) setAlertPrefs(p => ({ ...p, ...d.alertPreferences }))
       // Use saved timezone, or fall back to browser-detected timezone
@@ -147,8 +177,8 @@ export default function SettingsPage() {
     const connected = searchParams.get('connected')
     const error = searchParams.get('error')
     const sectionParam = searchParams.get('section')
-    if (sectionParam && ['brand', 'competitors', 'connections', 'billing', 'account', 'alerts'].includes(sectionParam)) {
-      setSection(sectionParam as 'brand' | 'competitors' | 'connections' | 'billing' | 'account' | 'alerts')
+    if (sectionParam && ['brand', 'marketing-context', 'competitors', 'connections', 'billing', 'account', 'alerts'].includes(sectionParam)) {
+      setSection(sectionParam as 'brand' | 'marketing-context' | 'competitors' | 'connections' | 'billing' | 'account' | 'alerts')
     }
     if (connected) {
       const label = PROVIDER_LABELS[connected] || connected
@@ -653,6 +683,7 @@ export default function SettingsPage() {
 
   const sections = [
     { id: 'brand', label: 'Brand Profile' },
+    { id: 'marketing-context', label: 'AI Context' },
     { id: 'competitors', label: 'Competitors' },
     { id: 'connections', label: 'Connections' },
     { id: 'billing', label: 'Billing' },
@@ -663,9 +694,7 @@ export default function SettingsPage() {
   const contentWidthClass =
     section === 'billing'
       ? 'max-w-5xl'
-      : section === 'brand'
-        ? 'max-w-4xl'
-      : section === 'connections'
+      : section === 'brand' || section === 'marketing-context' || section === 'connections'
         ? 'max-w-4xl'
         : 'max-w-3xl'
 
@@ -816,6 +845,194 @@ export default function SettingsPage() {
               <Button onClick={saveBrand} loading={saving}>
                 {saved ? '✓ Saved' : 'Save Brand Profile'}
               </Button>
+            </div>
+          )}
+
+          {/* AI Marketing Context */}
+          {section === 'marketing-context' && (
+            <div className="space-y-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-semibold text-white">AI Marketing Context</h2>
+                  <p className="text-xs text-[#555] mt-0.5">
+                    The canonical context all AI specialists use as ground truth. Generate it once, then refine.
+                    {mktCtx.generatedAt && (
+                      <span className="text-[#444] ml-1">Last updated {new Date(mktCtx.generatedAt).toLocaleDateString()}</span>
+                    )}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  loading={mktCtxGenerating}
+                  onClick={async () => {
+                    setMktCtxGenerating(true)
+                    try {
+                      const d = await fetch('/api/settings/marketing-context', { method: 'POST' }).then(r => r.json())
+                      if (d.marketingContext) {
+                        setMktCtx(d.marketingContext)
+                        setSuccessBanner('AI context generated successfully')
+                      }
+                    } finally {
+                      setMktCtxGenerating(false)
+                    }
+                  }}
+                >
+                  {mktCtx.generatedAt ? 'Regenerate' : 'Generate with AI'}
+                </Button>
+              </div>
+
+              {mktCtxLoading ? (
+                <p className="text-sm text-[#555]">Loading...</p>
+              ) : (
+                <div className="space-y-4">
+                  {/* ICP */}
+                  <div>
+                    <label className="text-xs text-[#555] block mb-1">Ideal Customer Profile (ICP)</label>
+                    <textarea
+                      rows={3}
+                      value={mktCtx.icp || ''}
+                      onChange={e => setMktCtx(c => ({ ...c, icp: e.target.value }))}
+                      placeholder="Who is your ideal customer? Role, company type/size, situation, triggers..."
+                      className="w-full bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg px-3 py-2 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/60 resize-none"
+                    />
+                  </div>
+
+                  {/* Differentiation */}
+                  <div>
+                    <label className="text-xs text-[#555] block mb-1">Differentiation</label>
+                    <textarea
+                      rows={2}
+                      value={mktCtx.differentiation || ''}
+                      onChange={e => setMktCtx(c => ({ ...c, differentiation: e.target.value }))}
+                      placeholder="How are you concretely different from alternatives?"
+                      className="w-full bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg px-3 py-2 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/60 resize-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Core Pains */}
+                    <div>
+                      <label className="text-xs text-[#555] block mb-1">Core Customer Pains</label>
+                      <textarea
+                        rows={4}
+                        value={(mktCtx.corePains || []).join('\n')}
+                        onChange={e => setMktCtx(c => ({ ...c, corePains: e.target.value.split('\n').filter(Boolean) }))}
+                        placeholder={"One pain per line\nSlow onboarding process\nExpensive existing tools"}
+                        className="w-full bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg px-3 py-2 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/60 resize-none"
+                      />
+                    </div>
+
+                    {/* Desired Outcomes */}
+                    <div>
+                      <label className="text-xs text-[#555] block mb-1">Desired Outcomes</label>
+                      <textarea
+                        rows={4}
+                        value={(mktCtx.desiredOutcomes || []).join('\n')}
+                        onChange={e => setMktCtx(c => ({ ...c, desiredOutcomes: e.target.value.split('\n').filter(Boolean) }))}
+                        placeholder={"One outcome per line\nReduce time to first value\nClear ROI attribution"}
+                        className="w-full bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg px-3 py-2 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/60 resize-none"
+                      />
+                    </div>
+
+                    {/* Alternatives */}
+                    <div>
+                      <label className="text-xs text-[#555] block mb-1">Alternatives Customers Consider</label>
+                      <textarea
+                        rows={4}
+                        value={(mktCtx.alternatives || []).join('\n')}
+                        onChange={e => setMktCtx(c => ({ ...c, alternatives: e.target.value.split('\n').filter(Boolean) }))}
+                        placeholder={"One per line\nSpreadsheets\nCompetitor X"}
+                        className="w-full bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg px-3 py-2 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/60 resize-none"
+                      />
+                    </div>
+
+                    {/* Objections */}
+                    <div>
+                      <label className="text-xs text-[#555] block mb-1">Common Objections</label>
+                      <textarea
+                        rows={4}
+                        value={(mktCtx.objections || []).join('\n')}
+                        onChange={e => setMktCtx(c => ({ ...c, objections: e.target.value.split('\n').filter(Boolean) }))}
+                        placeholder={"One per line\nToo expensive\nWe already have a process"}
+                        className="w-full bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg px-3 py-2 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/60 resize-none"
+                      />
+                    </div>
+
+                    {/* Proof Points */}
+                    <div>
+                      <label className="text-xs text-[#555] block mb-1">Proof Points</label>
+                      <textarea
+                        rows={3}
+                        value={(mktCtx.proofPoints || []).join('\n')}
+                        onChange={e => setMktCtx(c => ({ ...c, proofPoints: e.target.value.split('\n').filter(Boolean) }))}
+                        placeholder={"One per line\n2x faster than alternatives\n500+ customers"}
+                        className="w-full bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg px-3 py-2 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/60 resize-none"
+                      />
+                    </div>
+
+                    {/* Customer Language */}
+                    <div>
+                      <label className="text-xs text-[#555] block mb-1">Customer Language (verbatim phrases)</label>
+                      <textarea
+                        rows={3}
+                        value={(mktCtx.customerLanguage || []).join('\n')}
+                        onChange={e => setMktCtx(c => ({ ...c, customerLanguage: e.target.value.split('\n').filter(Boolean) }))}
+                        placeholder={"Exact phrases customers use\n\"I can't track what's working\"\n\"Too many tools to manage\""}
+                        className="w-full bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg px-3 py-2 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/60 resize-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Funnel Priority */}
+                    <div>
+                      <label className="text-xs text-[#555] block mb-1">Funnel Priority This Cycle</label>
+                      <select
+                        value={mktCtx.funnelPriority || 'conversion'}
+                        onChange={e => setMktCtx(c => ({ ...c, funnelPriority: e.target.value as MarketingContext['funnelPriority'] }))}
+                        className="w-full bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg px-3 py-2 text-sm text-white outline-none"
+                      >
+                        <option value="awareness">Awareness</option>
+                        <option value="consideration">Consideration</option>
+                        <option value="conversion">Conversion</option>
+                        <option value="retention">Retention</option>
+                      </select>
+                    </div>
+
+                    {/* Strategic Constraints */}
+                    <div>
+                      <label className="text-xs text-[#555] block mb-1">Strategic Constraints</label>
+                      <textarea
+                        rows={2}
+                        value={(mktCtx.strategicConstraints || []).join('\n')}
+                        onChange={e => setMktCtx(c => ({ ...c, strategicConstraints: e.target.value.split('\n').filter(Boolean) }))}
+                        placeholder={"Things NOT to do this cycle\nDon't run paid until landing page is fixed"}
+                        className="w-full bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg px-3 py-2 text-sm text-white placeholder-[#333] outline-none focus:border-[#DA7756]/60 resize-none"
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    size="md"
+                    loading={mktCtxSaving}
+                    onClick={async () => {
+                      setMktCtxSaving(true)
+                      try {
+                        await fetch('/api/settings/marketing-context', {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify(mktCtx),
+                        })
+                        setSuccessBanner('AI context saved')
+                      } finally {
+                        setMktCtxSaving(false)
+                      }
+                    }}
+                  >
+                    Save Changes
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
