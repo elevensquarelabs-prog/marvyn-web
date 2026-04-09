@@ -451,7 +451,7 @@ Return ONLY valid JSON:
             if (toAdd.length > 0) {
               await Brand.findOneAndUpdate(
                 { userId: session.user.id },
-                { $push: { competitors: { $each: toAdd } } }
+                { $push: { competitors: { $each: toAdd, $slice: -10 } } }
               )
             }
           }
