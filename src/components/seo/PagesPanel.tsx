@@ -31,6 +31,38 @@ interface Props {
   pageCtrMap: Record<string, PageCtr>
 }
 
+// ─── URL normalisation ────────────────────────────────────────────────────────
+// Both DataForSEO crawl URLs and GSC page-dimension URLs must go through the
+// same transform before being compared. Differences we see in practice:
+//   - trailing slash presence/absence  (example.com/ vs example.com)
+//   - www prefix                        (www.example.com vs example.com)
+//   - protocol                          (https:// vs http://)
+//   - query strings / hash fragments    (?ref=… or #section)
+//   - capitalisation                    (though rare, normalise anyway)
+
+function normalizeUrl(raw: string): string {
+  const s = raw
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')  // strip protocol
+    .replace(/^www\./, '')        // strip www
+    .split('?')[0]                // strip query string
+    .split('#')[0]                // strip hash
+    .replace(/\/$/, '')           // strip trailing slash
+  return s || '/'
+}
+
+// Pre-build a normalised lookup map once from the raw pageCtrMap object so
+// every render doesn't repeat the O(n) work.
+function buildNormalisedCtrMap(
+  raw: Record<string, PageCtr>,
+): Record<string, PageCtr> {
+  const out: Record<string, PageCtr> = {}
+  for (const [url, data] of Object.entries(raw)) {
+    out[normalizeUrl(url)] = data
+  }
+  return out
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function trimUrl(url: string): string {
@@ -52,9 +84,10 @@ function fmtNum(n?: number | null): string {
   return Math.round(n).toLocaleString()
 }
 
+// Thresholds: green ≥ 80, yellow ≥ 60, red < 60
 function scoreColor(s: number): string {
-  if (s >= 70) return '#22c55e'
-  if (s >= 40) return '#f59e0b'
+  if (s >= 80) return '#22c55e'
+  if (s >= 60) return '#f59e0b'
   return '#ef4444'
 }
 
@@ -88,6 +121,7 @@ function CtrOpportunitiesSection({ pageCtrMap }: { pageCtrMap: Record<string, Pa
   const [showAll, setShowAll] = useState(false)
   const PREVIEW = 10
 
+  // Opportunity = impressions × (1 − CTR): captures both volume and gap together
   const rows = useMemo(() => {
     return Object.entries(pageCtrMap)
       .map(([url, d]) => ({ url, ...d, opportunity: d.impressions * (1 - d.ctr) }))
@@ -105,7 +139,8 @@ function CtrOpportunitiesSection({ pageCtrMap }: { pageCtrMap: Record<string, Pa
         <p className="text-sm font-semibold text-white">CTR Opportunities</p>
         <p className="text-xs text-[#555] mt-0.5">
           Pages ordered by missed clicks — high impressions with below-average CTR are your biggest wins.
-          Avg CTR across {rows.length} pages: <span className="text-[#A0A0A0]">{(avgCtr * 100).toFixed(1)}%</span>
+          Avg CTR across {rows.length} pages:{' '}
+          <span className="text-[#A0A0A0]">{(avgCtr * 100).toFixed(1)}%</span>
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -158,9 +193,10 @@ function CtrOpportunitiesSection({ pageCtrMap }: { pageCtrMap: Record<string, Pa
 
 // ─── Crawled Pages Table ──────────────────────────────────────────────────────
 
-function CrawledPagesTable({ pages, pageCtrMap }: { pages: CrawledPage[]; pageCtrMap: Record<string, PageCtr> }) {
-  const [sortKey, setSortKey] = useState<PageSortKey>('score')
-  const [sortDir, setSortDir] = useState<SortDir>('asc')
+function CrawledPagesTable({ pages, normCtrMap }: { pages: CrawledPage[]; normCtrMap: Record<string, PageCtr> }) {
+  // Default: worst pages first — issues desc, score asc as tiebreaker
+  const [sortKey, setSortKey] = useState<PageSortKey>('issues')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [statusFilter, setStatusFilter] = useState<'all' | 'ok' | 'errors'>('all')
   const [search, setSearch] = useState('')
   const [showAll, setShowAll] = useState(false)
@@ -171,14 +207,20 @@ function CrawledPagesTable({ pages, pageCtrMap }: { pages: CrawledPage[]; pageCt
       setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     } else {
       setSortKey(key)
-      setSortDir(key === 'url' ? 'asc' : 'asc')
+      setSortDir('desc')
     }
   }
 
+  // ok = 200–299, errors = 400+, 3xx falls through to 'all' only
+  const okCount = pages.filter(p => !p.statusCode || (p.statusCode >= 200 && p.statusCode < 300)).length
+  const errorCount = pages.filter(p => p.statusCode != null && p.statusCode >= 400).length
+
   const filtered = useMemo(() => {
     let rows = pages
-    if (statusFilter === 'ok') rows = rows.filter(p => !p.statusCode || p.statusCode < 400)
-    if (statusFilter === 'errors') rows = rows.filter(p => p.statusCode && p.statusCode >= 400)
+    if (statusFilter === 'ok')
+      rows = rows.filter(p => !p.statusCode || (p.statusCode >= 200 && p.statusCode < 300))
+    if (statusFilter === 'errors')
+      rows = rows.filter(p => p.statusCode != null && p.statusCode >= 400)
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       rows = rows.filter(p => p.url.toLowerCase().includes(q) || (p.title ?? '').toLowerCase().includes(q))
@@ -190,29 +232,33 @@ function CrawledPagesTable({ pages, pageCtrMap }: { pages: CrawledPage[]; pageCt
     const dir = sortDir === 'asc' ? 1 : -1
     return [...filtered].sort((a, b) => {
       switch (sortKey) {
-        case 'score':   return dir * ((a.onpageScore ?? -1) - (b.onpageScore ?? -1))
-        case 'issues':  return dir * ((a.issuesCount ?? 0) - (b.issuesCount ?? 0))
-        case 'words':   return dir * ((a.wordCount ?? 0) - (b.wordCount ?? 0))
-        case 'status':  return dir * ((a.statusCode ?? 200) - (b.statusCode ?? 200))
-        case 'url':     return dir * a.url.localeCompare(b.url)
+        case 'score':  return dir * ((a.onpageScore ?? -1) - (b.onpageScore ?? -1))
+        case 'issues': {
+          const primary = dir * ((a.issuesCount ?? 0) - (b.issuesCount ?? 0))
+          if (primary !== 0) return primary
+          // Tiebreaker: worst score first (asc), regardless of sort direction
+          return (a.onpageScore ?? 100) - (b.onpageScore ?? 100)
+        }
+        case 'words':  return dir * ((a.wordCount ?? 0) - (b.wordCount ?? 0))
+        case 'status': return dir * ((a.statusCode ?? 200) - (b.statusCode ?? 200))
+        case 'url':    return dir * a.url.localeCompare(b.url)
         case 'ctr': {
-          const ac = pageCtrMap[a.url]?.ctr ?? -1
-          const bc = pageCtrMap[b.url]?.ctr ?? -1
+          const ac = normCtrMap[normalizeUrl(a.url)]?.ctr ?? -1
+          const bc = normCtrMap[normalizeUrl(b.url)]?.ctr ?? -1
           return dir * (ac - bc)
         }
         case 'clicks': {
-          const ac = pageCtrMap[a.url]?.clicks ?? -1
-          const bc = pageCtrMap[b.url]?.clicks ?? -1
+          const ac = normCtrMap[normalizeUrl(a.url)]?.clicks ?? -1
+          const bc = normCtrMap[normalizeUrl(b.url)]?.clicks ?? -1
           return dir * (ac - bc)
         }
         default: return 0
       }
     })
-  }, [filtered, sortKey, sortDir, pageCtrMap])
+  }, [filtered, sortKey, sortDir, normCtrMap])
 
   const visible = showAll ? sorted : sorted.slice(0, PREVIEW)
-  const hasCtrData = Object.keys(pageCtrMap).length > 0
-  const errorCount = pages.filter(p => p.statusCode && p.statusCode >= 400).length
+  const hasCtrData = Object.keys(normCtrMap).length > 0
 
   const Th = ({ label, sortable, k }: { label: string; sortable?: boolean; k?: PageSortKey }) => (
     <th
@@ -220,7 +266,7 @@ function CrawledPagesTable({ pages, pageCtrMap }: { pages: CrawledPage[]; pageCt
       className={`text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-[#555] whitespace-nowrap ${sortable ? 'cursor-pointer hover:text-[#A0A0A0] select-none' : ''}`}
     >
       {label}
-      {sortable && k && <SortArrow active={sortKey === k} dir={sortKey === k ? sortDir : 'asc'} />}
+      {sortable && k && <SortArrow active={sortKey === k} dir={sortKey === k ? sortDir : 'desc'} />}
     </th>
   )
 
@@ -241,8 +287,8 @@ function CrawledPagesTable({ pages, pageCtrMap }: { pages: CrawledPage[]; pageCt
           />
           <div className="flex rounded-lg overflow-hidden border border-[#2A2A2A]">
             {([
-              { key: 'all', label: `All (${pages.length})` },
-              { key: 'ok', label: `OK (${pages.length - errorCount})` },
+              { key: 'all',    label: `All (${pages.length})` },
+              { key: 'ok',     label: `OK (${okCount})` },
               { key: 'errors', label: `Errors (${errorCount})` },
             ] as const).map(f => (
               <button
@@ -280,8 +326,9 @@ function CrawledPagesTable({ pages, pageCtrMap }: { pages: CrawledPage[]; pageCt
           </thead>
           <tbody>
             {visible.map((page) => {
-              const gsc = pageCtrMap[page.url]
-              const hasError = page.statusCode && page.statusCode >= 400
+              const gsc = normCtrMap[normalizeUrl(page.url)]
+              const hasError = page.statusCode != null && page.statusCode >= 400
+              const is2xx = !page.statusCode || (page.statusCode >= 200 && page.statusCode < 300)
               return (
                 <tr
                   key={page.url}
@@ -298,26 +345,34 @@ function CrawledPagesTable({ pages, pageCtrMap }: { pages: CrawledPage[]; pageCt
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                      hasError ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'
-                    }`}>
-                      {page.statusCode ?? '—'}
-                    </span>
+                    {page.statusCode ? (
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                        hasError
+                          ? 'bg-red-500/10 text-red-400'
+                          : is2xx
+                          ? 'bg-green-500/10 text-green-400'
+                          : 'bg-[#2A2A2A] text-[#A0A0A0]'
+                      }`}>
+                        {page.statusCode}
+                      </span>
+                    ) : (
+                      <span className="text-[#555] text-[10px]">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 font-semibold" style={{ color: page.onpageScore ? scoreColor(page.onpageScore) : '#555' }}>
                     {page.onpageScore ? Math.round(page.onpageScore) : '—'}
                   </td>
                   <td className="px-4 py-3">
                     {(page.issuesCount ?? 0) > 0
-                      ? <span className="text-red-400 font-semibold">{page.issuesCount}</span>
-                      : <span className="text-[#555]">0</span>}
+                      ? <span className="font-semibold text-red-400">{page.issuesCount}</span>
+                      : <span className="text-[#333]">—</span>}
                   </td>
                   <td className="px-4 py-3 text-[#A0A0A0]">{fmtNum(page.wordCount)}</td>
                   <td className="px-4 py-3 text-[#A0A0A0]">{fmtNum(page.internalLinks)}</td>
                   <td className="px-4 py-3">
                     {(page.brokenResources ?? 0) > 0
-                      ? <span className="text-red-400 font-semibold">{page.brokenResources}</span>
-                      : <span className="text-[#555]">0</span>}
+                      ? <span className="font-semibold text-red-400">{page.brokenResources}</span>
+                      : <span className="text-[#333]">—</span>}
                   </td>
                   <td className="px-4 py-3">
                     {page.title
@@ -371,6 +426,9 @@ export default function PagesPanel({ crawledPages, pageCtrMap }: Props) {
   const hasCtrData = Object.keys(pageCtrMap).length > 0
   const hasPages = crawledPages.length > 0
 
+  // Build once; passed down to avoid re-computing per render in child components
+  const normCtrMap = useMemo(() => buildNormalisedCtrMap(pageCtrMap), [pageCtrMap])
+
   if (!hasPages && !hasCtrData) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -383,7 +441,7 @@ export default function PagesPanel({ crawledPages, pageCtrMap }: Props) {
   return (
     <div className="space-y-4 w-full">
       {hasCtrData && <CtrOpportunitiesSection pageCtrMap={pageCtrMap} />}
-      {hasPages && <CrawledPagesTable pages={crawledPages} pageCtrMap={pageCtrMap} />}
+      {hasPages && <CrawledPagesTable pages={crawledPages} normCtrMap={normCtrMap} />}
       {hasCtrData && !hasPages && (
         <p className="text-xs text-[#555] px-1">
           GSC page data loaded. Run an audit to enrich these pages with on-page scores.
