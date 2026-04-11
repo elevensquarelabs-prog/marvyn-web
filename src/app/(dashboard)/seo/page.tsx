@@ -8,6 +8,7 @@ import AuditOverview from '@/components/seo/AuditOverview'
 import IssuesPanel from '@/components/seo/IssuesPanel'
 import KeywordsTable from '@/components/seo/KeywordsTable'
 import CompetitorsPanel from '@/components/seo/CompetitorsPanel'
+import PagesPanel from '@/components/seo/PagesPanel'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -109,7 +110,7 @@ export default function SEOPage() {
     STEP_LABELS.map((_, i) => ({ step: i + 1, status: 'pending' as StepStatus, message: STEP_LABELS[i] }))
   )
   const [elapsed, setElapsed] = useState(0)
-  const [activeTab, setActiveTab] = useState<'overview' | 'issues' | 'keywords' | 'competitors' | 'ai-actions'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'issues' | 'keywords' | 'competitors' | 'ai-actions' | 'pages'>('overview')
   const [fixingIndex, setFixingIndex] = useState<number | null>(null)
   const [fixTexts, setFixTexts] = useState<Record<number, string>>({})
   const [auditLimitError, setAuditLimitError] = useState<string | null>(null)
@@ -526,7 +527,7 @@ Provide domain-specific steps. Include exact code snippets or CMS instructions w
   if (!audit) return null
 
 
-  const TABS = ['overview', 'issues', 'keywords', 'competitors', 'ai-actions'] as const
+  const TABS = ['overview', 'issues', 'keywords', 'competitors', 'ai-actions', 'pages'] as const
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -558,6 +559,11 @@ Provide domain-specific steps. Include exact code snippets or CMS instructions w
             {t === 'ai-actions' && audit.aiActions?.length > 0 && (
               <span className="ml-1.5 text-[10px] bg-[#DA7756]/20 text-[#DA7756] px-1.5 py-0.5 rounded-full">
                 {audit.aiActions.filter(a => !a.done).length}
+              </span>
+            )}
+            {t === 'pages' && (audit.crawledPages?.length ?? 0) > 0 && (
+              <span className="ml-1.5 text-[10px] bg-[#2A2A2A] text-[#A0A0A0] px-1.5 py-0.5 rounded-full">
+                {audit.crawledPages!.length}
               </span>
             )}
           </button>
@@ -714,6 +720,14 @@ Provide domain-specific steps. Include exact code snippets or CMS instructions w
               )
             })}
           </div>
+        )}
+
+        {/* ── Pages ── */}
+        {activeTab === 'pages' && (
+          <PagesPanel
+            crawledPages={audit.crawledPages ?? []}
+            pageCtrMap={pageCtrMap}
+          />
         )}
 
       </div>
