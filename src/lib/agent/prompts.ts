@@ -1,6 +1,8 @@
 import type { ContextBoard, AgentName } from './board'
 import { readFileSync } from 'fs'
 import path from 'path'
+import { buildMarketingContext } from '@/lib/marketing-context'
+import type { IBrand } from '@/models/Brand'
 
 export interface PromptPair {
   system: string
@@ -22,14 +24,18 @@ const AGENT_TITLES: Record<AgentName, string> = {
   strategist: 'Marketing Strategist',
 }
 
-function brandBlock(board: ContextBoard): string {
+function parseBrandFromBundle(board: ContextBoard): Record<string, unknown> | null {
   const raw = board.contextBundle.brand
-  // ToolResult wrapper — parse the content field
   let brand: Record<string, unknown> | null | undefined =
     raw as Record<string, unknown> | null | undefined
   if (brand && typeof brand.content === 'string') {
     try { brand = JSON.parse(brand.content) } catch { /* fall through */ }
   }
+  return brand ?? null
+}
+
+function brandBlock(board: ContextBoard): string {
+  const brand = parseBrandFromBundle(board)
   if (!brand) return 'Brand: not yet configured.'
   return [
     `Brand: ${brand.name ?? 'unknown'}`,
@@ -40,6 +46,14 @@ function brandBlock(board: ContextBoard): string {
     `Business model: ${brand.businessModel ?? ''}`,
     `Competitors: ${Array.isArray(brand.competitors) ? brand.competitors.join(', ') : ''}`,
   ].join('\n')
+}
+
+function marketingContextBlock(board: ContextBoard): string {
+  const brand = parseBrandFromBundle(board)
+  if (!brand) return ''
+  const ctx = buildMarketingContext(brand as Partial<IBrand>)
+  if (!ctx.promptBlock) return ''
+  return ctx.promptBlock
 }
 
 function goalBlock(board: ContextBoard): string {
@@ -128,7 +142,7 @@ export function buildSpecialistPrompt(
 You are the ${AGENT_TITLES[agent]} at ${brandName}.
 
 ${skillContent ? `## Your Skills\n${skillContent}\n` : ''}## Brand Context
-${brandBlock(board)}
+${marketingContextBlock(board) || brandBlock(board)}
 
 ## Output Rules
 - Only recommend what the data in contextBundle supports. No speculation.
