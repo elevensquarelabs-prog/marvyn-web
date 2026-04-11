@@ -78,9 +78,8 @@ export default function TermsOfService() {
           <section>
             <h2 className="text-xl font-semibold text-white mb-3">5. AI-Generated Content</h2>
             <p>
-              Marvyn uses AI models routed through OpenRouter and downstream model providers to generate marketing
-              outputs, analysis, and recommendations. AI outputs may be inaccurate, incomplete, or unsuitable for your
-              particular use case.
+              Marvyn uses AI model providers, including Anthropic, to generate marketing outputs, analysis, and
+              recommendations. AI outputs may be inaccurate, incomplete, or unsuitable for your particular use case.
             </p>
             <ul className="list-disc list-inside space-y-2 mt-3">
               <li>You are solely responsible for reviewing, editing, and approving outputs before use or publication.</li>

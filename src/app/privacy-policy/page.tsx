@@ -105,12 +105,11 @@ export default function PrivacyPolicy() {
           <section>
             <h2 className="text-xl font-semibold text-white mb-3">4. AI Processing and Model Providers</h2>
             <p>
-              Marvyn routes AI requests through <strong className="text-white">OpenRouter</strong>, which may dispatch
-              requests to downstream model providers such as Anthropic and Minimax. Prompts and relevant workspace context
-              may be transmitted to OpenRouter and the selected model provider to generate outputs.
+              Marvyn uses <strong className="text-white">Anthropic</strong> to generate certain AI-powered outputs,
+              analysis, and recommendations. Prompts and the minimum workspace context required to provide the requested
+              user-facing feature may be transmitted to Anthropic for processing.
             </p>
             <p>
-              We do not describe this as a direct single-provider integration because model routing may change over time.
               You remain responsible for reviewing all AI-generated outputs before publication, distribution, or business use.
             </p>
           </section>
@@ -140,6 +139,15 @@ export default function PrivacyPolicy() {
                     query performance, landing-page performance, and conversion insights directly inside the application.
                     We do not use Google user data outside these product features except as necessary for support,
                     security, legal compliance, and service operations consistent with applicable law and Google&apos;s policies.
+                  </p>
+                </div>
+                <div className="mt-4 p-4 rounded-xl border border-white/10 bg-white/[0.03]">
+                  <p className="text-sm font-medium text-white mb-2">Sharing and Transfer of Google User Data</p>
+                  <p className="text-sm">
+                    Marvyn processes Google user data inside our application and may transfer Google user data to
+                    Anthropic only as needed to provide the user-facing feature you request inside Marvyn, such as
+                    analysis, summaries, recommendations, and reports shown in the product. We do not sell Google user
+                    data, and we do not use Google user data to train generalized AI or machine learning models.
                   </p>
                 </div>
                 <p className="mt-3">
@@ -230,6 +238,11 @@ export default function PrivacyPolicy() {
               We retain data for as long as necessary to provide the service, comply with legal obligations, resolve
               disputes, and enforce agreements. When accounts are deleted or platform connections are removed, related
               data is deleted or deactivated according to operational and legal requirements.
+            </p>
+            <p>
+              We protect sensitive data using encryption in transit, restricted access controls, authenticated internal
+              systems, and operational safeguards designed to limit who can access connected-platform data and
+              credentials. Access to production data is limited to authorized personnel with a legitimate operational need.
             </p>
             <p>
               We do not permit routine human review of individual connected-platform data, including Google user data,
