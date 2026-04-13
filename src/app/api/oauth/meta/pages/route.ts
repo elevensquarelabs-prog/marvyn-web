@@ -58,13 +58,17 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.id) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   await connectDB()
-  const { pageId, pageName, pageAccessToken, instagramAccountId, instagramUsername } = await req.json()
+  const { pageId, pageName, pageAccessToken, instagramAccountId, instagramUsername, instagramPictureUrl } = await req.json()
 
   const update: Record<string, unknown> = {
     'connections.facebook': { pageId, pageName, pageAccessToken, accessToken: pageAccessToken },
   }
   if (instagramAccountId) {
-    update['connections.instagram'] = { accountId: instagramAccountId, username: instagramUsername ?? '' }
+    update['connections.instagram'] = {
+      accountId: instagramAccountId,
+      username: instagramUsername ?? '',
+      pictureUrl: instagramPictureUrl ?? '',
+    }
   }
 
   await User.findByIdAndUpdate(session.user.id, update)
