@@ -32,6 +32,9 @@ interface MetaPage {
   accessToken: string
   hasInstagram: boolean
   instagramAccountId?: string
+  instagramUsername?: string
+  instagramName?: string
+  instagramPictureUrl?: string
 }
 
 interface AdAccount {
@@ -458,12 +461,15 @@ export default function SettingsPage() {
         pageName: page.name,
         pageAccessToken: page.accessToken,
         instagramAccountId: page.instagramAccountId,
+        instagramUsername: page.instagramUsername,
       }),
     })
     setConnections(prev => ({
       ...prev,
       facebook: { pageId: page.id, pageName: page.name },
-      ...(page.instagramAccountId ? { instagram: { accountId: page.instagramAccountId } } : {}),
+      ...(page.instagramAccountId ? {
+        instagram: { accountId: page.instagramAccountId, username: page.instagramUsername ?? '' },
+      } : {}),
     }))
   }
 
