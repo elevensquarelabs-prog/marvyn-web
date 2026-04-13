@@ -179,7 +179,24 @@ export default function SettingsPage() {
     try {
       const res = await fetch('/api/oauth/meta/pages')
       const data = await res.json()
-      setMetaPages(data.pages || [])
+      const pages = data.pages || []
+      setMetaPages(pages)
+      // Auto-enrich instagram state if the currently selected page has richer data
+      setConnections(prev => {
+        const selectedPageId = prev.facebook?.pageId
+        if (!selectedPageId) return prev
+        const match = pages.find((p: MetaPage) => p.id === selectedPageId)
+        if (!match?.instagramAccountId) return prev
+        return {
+          ...prev,
+          instagram: {
+            ...prev.instagram,
+            accountId: match.instagramAccountId,
+            username: match.instagramUsername ?? prev.instagram?.username ?? '',
+            pictureUrl: match.instagramPictureUrl ?? prev.instagram?.pictureUrl ?? '',
+          },
+        }
+      })
     } finally {
       setLoadingPages(false)
     }
