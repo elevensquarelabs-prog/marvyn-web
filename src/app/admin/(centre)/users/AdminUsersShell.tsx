@@ -1,3 +1,7 @@
+'use client'
+
+import { useState } from 'react'
+
 type User = {
   _id: string
   name: string
@@ -10,6 +14,69 @@ type User = {
     totalAiCalls?: number
     lastActive?: string
   }
+}
+
+export function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [form, setForm] = useState({ name: '', email: '', password: '', plan: 'starter' })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+    const res = await fetch('/api/admin/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(form),
+    })
+    const data = await res.json()
+    setLoading(false)
+    if (!res.ok) { setError(data.error || 'Failed to create user'); return }
+    onCreated()
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-3xl border border-[#E6D8CF] bg-white p-8 shadow-2xl">
+        <h2 className="mb-6 text-xl font-semibold text-[#2B1C17]">Add User</h2>
+        <form onSubmit={submit} className="space-y-4">
+          {error && <p className="rounded-xl bg-[#FDEBE8] px-4 py-2 text-sm text-[#B3472F]">{error}</p>}
+          {(['name', 'email', 'password'] as const).map(field => (
+            <div key={field}>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-[#9C7A6E]">{field}</label>
+              <input
+                type={field === 'password' ? 'password' : field === 'email' ? 'email' : 'text'}
+                value={form[field]}
+                onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
+                required
+                className="w-full rounded-xl border border-[#E1D1C8] bg-[#FFF8F3] px-4 py-2.5 text-sm text-[#2B1C17] outline-none focus:border-[#D97757]"
+              />
+            </div>
+          ))}
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-[#9C7A6E]">Plan</label>
+            <select
+              value={form.plan}
+              onChange={e => setForm(f => ({ ...f, plan: e.target.value }))}
+              className="w-full rounded-xl border border-[#E1D1C8] bg-[#FFF8F3] px-4 py-2.5 text-sm text-[#2B1C17] outline-none focus:border-[#D97757]"
+            >
+              <option value="starter">Starter</option>
+              <option value="pro">Pro</option>
+              <option value="beta">Beta</option>
+            </select>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-[#E1D1C8] py-2.5 text-sm font-semibold text-[#7D6156] transition hover:bg-[#F4E5DC]">Cancel</button>
+            <button type="submit" disabled={loading} className="flex-1 rounded-xl bg-[linear-gradient(135deg,#9B482A_0%,#D97757_100%)] py-2.5 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(155,72,42,0.25)] transition disabled:opacity-50">
+              {loading ? 'Creating…' : 'Create User'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
 }
 
 const FILTERS = ['all', 'active', 'trial', 'revoked'] as const
@@ -49,6 +116,8 @@ export function AdminUsersShell({
   onFilterChange,
   onPlanChange,
   onUserAction,
+  onAddUser,
+  onResetPassword,
 }: {
   users: User[]
   filtered: User[]
@@ -60,6 +129,8 @@ export function AdminUsersShell({
   onFilterChange: (value: (typeof FILTERS)[number]) => void
   onPlanChange: (userId: string, plan: string) => void
   onUserAction: (userId: string, action: string) => void
+  onAddUser: () => void
+  onResetPassword: (userId: string) => void
 }) {
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 sm:px-8 lg:px-12">
@@ -84,16 +155,24 @@ export function AdminUsersShell({
         </div>
 
         <div className="flex flex-col gap-3 lg:min-w-[420px]">
-          <div className="relative">
-            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-[#AD8B7C]">
-              ⌕
-            </span>
-            <input
-              value={search}
-              onChange={event => onSearchChange(event.target.value)}
-              placeholder="Search name or email"
-              className="w-full rounded-full border border-[#E1D1C8] bg-white/85 py-3 pl-11 pr-4 text-sm text-[#2B1C17] placeholder:text-[#A98A7D] outline-none transition focus:border-[#D97757] focus:ring-4 focus:ring-[#D97757]/10"
-            />
+          <div className="flex gap-3">
+            <div className="relative flex-1">
+              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-[#AD8B7C]">
+                ⌕
+              </span>
+              <input
+                value={search}
+                onChange={event => onSearchChange(event.target.value)}
+                placeholder="Search name or email"
+                className="w-full rounded-full border border-[#E1D1C8] bg-white/85 py-3 pl-11 pr-4 text-sm text-[#2B1C17] placeholder:text-[#A98A7D] outline-none transition focus:border-[#D97757] focus:ring-4 focus:ring-[#D97757]/10"
+              />
+            </div>
+            <button
+              onClick={onAddUser}
+              className="shrink-0 rounded-full bg-[linear-gradient(135deg,#9B482A_0%,#D97757_100%)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-white shadow-[0_8px_20px_rgba(155,72,42,0.25)] transition hover:opacity-90"
+            >
+              + Add User
+            </button>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {FILTERS.map(item => (
@@ -206,6 +285,13 @@ export function AdminUsersShell({
                           className="text-[#7D6156] transition hover:text-[#2B1C17] disabled:opacity-40"
                         >
                           Reset
+                        </button>
+                        <button
+                          onClick={() => onResetPassword(user._id)}
+                          disabled={isLoading('reset_password') || loading}
+                          className="text-[#7D6156] transition hover:text-[#2B1C17] disabled:opacity-40"
+                        >
+                          Reset PW
                         </button>
                       </div>
                     </td>

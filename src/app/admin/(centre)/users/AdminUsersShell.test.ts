@@ -29,6 +29,8 @@ describe('AdminUsersShell', () => {
         onFilterChange: () => {},
         onPlanChange: () => {},
         onUserAction: () => {},
+        onAddUser: () => {},
+        onResetPassword: () => {},
       })
     )
 
