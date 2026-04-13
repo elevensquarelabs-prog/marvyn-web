@@ -968,7 +968,9 @@ export default function SettingsPage() {
                         <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
                         <span className="text-xs text-white">{connections.facebook.pageName || connections.facebook.pageId}</span>
                         {connections.instagram?.accountId && (
-                          <span className="text-[10px] text-pink-400 ml-1">+ Instagram</span>
+                          <span className="text-[10px] text-pink-400 ml-1">
+                            {connections.instagram.username ? `@${connections.instagram.username}` : '+ Instagram'}
+                          </span>
                         )}
                         <button onClick={loadMetaPages} disabled={loadingPages} className="ml-auto text-[10px] text-[#555] hover:text-white">
                           {loadingPages ? '…' : 'Change'}
@@ -984,7 +986,7 @@ export default function SettingsPage() {
                           <option value="">Select Facebook page…</option>
                           {metaPages.map(p => (
                             <option key={p.id} value={p.id} className="bg-[#0D0D0D]">
-                              {p.name}{p.hasInstagram ? ' + Instagram' : ''}
+                              {p.name}{p.instagramUsername ? ` (@${p.instagramUsername})` : p.hasInstagram ? ' + Instagram' : ''}
                             </option>
                           ))}
                         </select>
@@ -996,7 +998,11 @@ export default function SettingsPage() {
                       <p className="text-xs text-green-400 flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
                         Posting as {connections.facebook.pageName}
-                        {connections.instagram?.accountId && ' · Instagram connected'}
+                        {connections.instagram?.accountId && (
+                          connections.instagram.username
+                            ? ` · @${connections.instagram.username} (ID ${connections.instagram.accountId})`
+                            : ' · Instagram connected'
+                        )}
                       </p>
                     )}
                   </div>
