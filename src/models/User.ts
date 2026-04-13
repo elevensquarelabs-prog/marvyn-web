@@ -70,7 +70,7 @@ const UserSchema = new Schema<IUser>({
     ga4: { accessToken: String, refreshToken: String, propertyId: String, propertyName: String, accountName: String, connectedAt: Date },
     linkedin: { accessToken: String, profileId: String, profileName: String, pageId: String, pageName: String, adAccountId: String, adAccountName: String },
     facebook: { accessToken: String, pageId: String, pageName: String, pageAccessToken: String },
-    instagram: { accountId: String },
+    instagram: { accountId: String, username: String },
     clarity: { projectId: String, apiToken: String, connectedAt: Date },
   },
   usage: {
