@@ -168,6 +168,108 @@ export async function sendTempPasswordEmail(to: string, name: string, temporaryP
   })
 }
 
+export async function sendWeeklyBriefEmail(
+  to: string,
+  name: string,
+  brief: {
+    subject: string
+    weekLabel: string
+    brandName: string
+    whatChanged: string[]
+    patterns: string[]
+    theOneThing: { action: string; reasoning: string; confidence: string }
+    stillOpen: string[]
+  }
+) {
+  const section = (title: string, content: string) => `
+    <div style="margin-bottom:28px;">
+      <div style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:1.5px;border-bottom:1px solid #1E1E1E;padding-bottom:8px;margin-bottom:14px;">${title}</div>
+      ${content}
+    </div>`
+
+  const bulletList = (items: string[], prefix = '') => items.map(item =>
+    `<div style="display:flex;gap:10px;margin-bottom:12px;">
+      <span style="color:#DA7756;font-weight:700;flex-shrink:0;min-width:16px;">${prefix || '→'}</span>
+      <span style="font-size:14px;color:#ccc;line-height:1.6;">${item}</span>
+    </div>`
+  ).join('')
+
+  const patternItems = brief.patterns.map(p => {
+    const isNegative = p.toLowerCase().includes('decline') || p.toLowerCase().includes('drop') || p.toLowerCase().includes('fell')
+    return `<div style="display:flex;gap:10px;margin-bottom:12px;">
+      <span style="flex-shrink:0;min-width:20px;">${isNegative ? '⚠️' : '✓'}</span>
+      <span style="font-size:14px;color:#ccc;line-height:1.6;">${p}</span>
+    </div>`
+  }).join('')
+
+  const confidenceColor = brief.theOneThing.confidence === 'High' ? '#22c55e' : brief.theOneThing.confidence === 'Medium' ? '#f59e0b' : '#888'
+
+  const changedSection = brief.whatChanged.length
+    ? section('WHAT CHANGED THIS WEEK', bulletList(brief.whatChanged))
+    : ''
+
+  const patternsSection = brief.patterns.length
+    ? section('PATTERNS I\'M WATCHING (3+ weeks)', patternItems)
+    : ''
+
+  const stillOpenSection = brief.stillOpen.length
+    ? section('STILL OPEN FROM LAST WEEK', bulletList(brief.stillOpen, '↩'))
+    : ''
+
+  return getResend().emails.send({
+    from: FROM,
+    to,
+    subject: `${brief.brandName}: ${brief.subject}`,
+    html: `
+<!DOCTYPE html>
+<html>
+<body style="background:#0A0A0A;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:40px 0;">
+  <div style="max-width:560px;margin:0 auto;padding:0 24px;">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:32px;">
+      <div style="width:40px;height:40px;background:#DA7756;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;color:#fff;flex-shrink:0;">M</div>
+      <div>
+        <div style="font-size:12px;color:#555;text-transform:uppercase;letter-spacing:1px;">Marvyn Weekly Brief</div>
+        <div style="font-size:13px;color:#888;">${brief.brandName} · ${brief.weekLabel}</div>
+      </div>
+    </div>
+
+    <!-- What changed -->
+    ${changedSection}
+
+    <!-- Patterns -->
+    ${patternsSection}
+
+    <!-- The One Thing -->
+    ${section('THE ONE THING THIS WEEK', `
+      <div style="background:#111;border:1px solid #1E1E1E;border-left:3px solid #DA7756;border-radius:8px;padding:16px 18px;">
+        <div style="font-size:15px;font-weight:600;color:#fff;margin-bottom:8px;">${brief.theOneThing.action}</div>
+        <div style="font-size:13px;color:#888;line-height:1.6;margin-bottom:10px;">${brief.theOneThing.reasoning}</div>
+        <div style="font-size:11px;color:${confidenceColor};font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Confidence: ${brief.theOneThing.confidence}</div>
+      </div>
+    `)}
+
+    <!-- Still open -->
+    ${stillOpenSection}
+
+    <!-- CTA -->
+    <div style="margin-top:32px;padding-top:24px;border-top:1px solid #1E1E1E;text-align:center;">
+      <a href="${APP_URL}/dashboard" style="display:inline-block;background:#DA7756;color:#fff;text-decoration:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:600;">
+        View full analysis in Marvyn →
+      </a>
+    </div>
+
+    <p style="color:#2A2A2A;font-size:11px;margin:28px 0 0;text-align:center;">
+      Marvyn · <a href="${APP_URL}" style="color:#333;text-decoration:none;">marvyn.tech</a> ·
+      <a href="${APP_URL}/settings" style="color:#333;text-decoration:none;">manage preferences</a>
+    </p>
+  </div>
+</body>
+</html>`,
+  })
+}
+
 export async function sendPasswordResetEmail(to: string, token: string) {
   const resetUrl = `${APP_URL}/reset-password?token=${token}`
   return getResend().emails.send({
