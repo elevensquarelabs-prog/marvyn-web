@@ -10,6 +10,9 @@ const SCOPES = [
   'read_products',
   'read_customers',
   'read_checkouts',
+  'read_discounts',
+  'read_price_rules',
+  'read_analytics',
 ].join(',')
 
 export async function GET(req: NextRequest) {

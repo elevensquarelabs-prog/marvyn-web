@@ -40,7 +40,7 @@ async function fetchOrders(ctx: ShopifyContext, days: number): Promise<{
     const params: Record<string, unknown> = {
       status: 'any',
       limit: MAX_ORDERS_PER_PAGE,
-      fields: 'id,created_at,total_price,financial_status,customer,source_name,refunds',
+      fields: 'id,created_at,total_price,total_discounts,financial_status,customer,source_name,discount_codes,refunds',
     }
     if (pageInfo) {
       params.page_info = pageInfo
@@ -223,6 +223,128 @@ async function fetchCustomerSummary(ctx: ShopifyContext) {
   return { total: customers.length, newCount, returningCount, repeatRate, avgTopLtv, topGeographies }
 }
 
+// ─── Discounts ────────────────────────────────────────────────────────────────
+
+async function fetchPriceRules(ctx: ShopifyContext) {
+  const api = shopifyApi(ctx)
+  const res = await api.get('/price_rules.json', {
+    params: { limit: 100, fields: 'id,title,value_type,value,usage_count,starts_at,ends_at,status' },
+  }).catch(() => ({ data: { price_rules: [] } }))
+  return (res.data.price_rules ?? []) as Record<string, unknown>[]
+}
+
+function buildDiscountAnalysis(orders: Record<string, unknown>[], priceRules: Record<string, unknown>[]) {
+  // Split orders into discounted vs full-price
+  const discountedOrders = orders.filter(o => {
+    const codes = o.discount_codes as { code: string; amount: string; type: string }[] | undefined
+    return codes && codes.length > 0
+  })
+  const fullPriceOrders = orders.filter(o => {
+    const codes = o.discount_codes as unknown[] | undefined
+    return !codes || codes.length === 0
+  })
+
+  const totalRevenue = orders.reduce((s, o) => s + parseFloat(String(o.total_price ?? 0)), 0)
+  const discountedRevenue = discountedOrders.reduce((s, o) => s + parseFloat(String(o.total_price ?? 0)), 0)
+  const fullPriceRevenue = fullPriceOrders.reduce((s, o) => s + parseFloat(String(o.total_price ?? 0)), 0)
+
+  // Total margin bled (sum of all discounts given)
+  const totalDiscountGiven = orders.reduce((s, o) => s + parseFloat(String(o.total_discounts ?? 0)), 0)
+
+  // AOV comparison
+  const discountedAov = discountedOrders.length > 0
+    ? Math.round(discountedRevenue / discountedOrders.length) : 0
+  const fullPriceAov = fullPriceOrders.length > 0
+    ? Math.round(fullPriceRevenue / fullPriceOrders.length) : 0
+
+  // Per-code breakdown
+  const byCode: Record<string, {
+    orderCount: number
+    revenue: number
+    discountGiven: number
+    repeatingCustomers: number
+    totalCustomers: number
+  }> = {}
+
+  for (const order of discountedOrders) {
+    const codes = order.discount_codes as { code: string; amount: string }[] | undefined
+    if (!codes?.length) continue
+    const code = codes[0].code   // use first code if multiple
+    const revenue = parseFloat(String(order.total_price ?? 0))
+    const discountGiven = parseFloat(String(order.total_discounts ?? 0))
+    const isReturning = Number((order.customer as Record<string, unknown> | undefined)?.orders_count ?? 1) > 1
+
+    if (!byCode[code]) byCode[code] = { orderCount: 0, revenue: 0, discountGiven: 0, repeatingCustomers: 0, totalCustomers: 0 }
+    byCode[code].orderCount++
+    byCode[code].revenue += revenue
+    byCode[code].discountGiven += discountGiven
+    byCode[code].totalCustomers++
+    if (isReturning) byCode[code].repeatingCustomers++
+  }
+
+  const codeBreakdown = Object.entries(byCode)
+    .map(([code, stats]) => ({
+      code,
+      orderCount: stats.orderCount,
+      revenue: Math.round(stats.revenue),
+      discountGiven: Math.round(stats.discountGiven),
+      avgOrderValue: stats.orderCount > 0 ? Math.round(stats.revenue / stats.orderCount) : 0,
+      avgDiscountDepth: stats.revenue + stats.discountGiven > 0
+        ? Math.round((stats.discountGiven / (stats.revenue + stats.discountGiven)) * 100)
+        : 0,
+      repeatRate: stats.totalCustomers > 0
+        ? Math.round((stats.repeatingCustomers / stats.totalCustomers) * 100)
+        : 0,
+      revenueShare: totalRevenue > 0
+        ? Math.round((stats.revenue / totalRevenue) * 100)
+        : 0,
+    }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 10)
+
+  // Price rules summary (active campaigns)
+  const activePriceRules = priceRules
+    .filter(r => r.status === 'enabled' || !r.status)
+    .map(r => ({
+      title: r.title,
+      valueType: r.value_type,   // 'percentage' | 'fixed_amount'
+      value: r.value,            // e.g. '-20.0' means 20% off
+      usageCount: r.usage_count,
+    }))
+    .slice(0, 10)
+
+  // Average discount depth across all discounted orders
+  const avgDiscountDepth = discountedOrders.length > 0
+    ? (() => {
+        const depths = discountedOrders.map(o => {
+          const discGiven = parseFloat(String(o.total_discounts ?? 0))
+          const finalPrice = parseFloat(String(o.total_price ?? 0))
+          const original = finalPrice + discGiven
+          return original > 0 ? (discGiven / original) * 100 : 0
+        })
+        return Math.round(depths.reduce((s, d) => s + d, 0) / depths.length)
+      })()
+    : 0
+
+  return {
+    summary: {
+      discountedOrderCount: discountedOrders.length,
+      fullPriceOrderCount: fullPriceOrders.length,
+      discountedOrderShare: orders.length > 0
+        ? Math.round((discountedOrders.length / orders.length) * 100) : 0,
+      totalDiscountGiven: Math.round(totalDiscountGiven),
+      discountedRevenue: Math.round(discountedRevenue),
+      fullPriceRevenue: Math.round(fullPriceRevenue),
+      discountedAov,
+      fullPriceAov,
+      aovGap: fullPriceAov - discountedAov,   // how much AOV drops with discounts
+      avgDiscountDepth,                        // average % off across discounted orders
+    },
+    byCode: codeBreakdown,
+    activePriceRules,
+  }
+}
+
 // ─── Shop info ────────────────────────────────────────────────────────────────
 
 async function fetchShopInfo(ctx: ShopifyContext) {
@@ -245,12 +367,13 @@ export async function fetchShopifyBundle(ctx: ShopifyContext): Promise<Record<st
   // Fetch orders once (shared across revenue and product calcs) to avoid duplicate API calls
   const { orders: orders30, truncated } = await fetchOrders(ctx, 30)
 
-  const [shopInfo, orders60, orders90, customers, abandonment] = await Promise.allSettled([
+  const [shopInfo, orders60, orders90, customers, abandonment, priceRules] = await Promise.allSettled([
     fetchShopInfo(ctx),
     fetchOrders(ctx, 60).then(r => r.orders),
     fetchOrders(ctx, 90).then(r => r.orders),
     fetchCustomerSummary(ctx),
     fetchAbandonedCheckouts(ctx, 30),
+    fetchPriceRules(ctx),
   ])
 
   const safe = <T>(r: PromiseSettledResult<T>): T | null => r.status === 'fulfilled' ? r.value : null
@@ -262,8 +385,8 @@ export async function fetchShopifyBundle(ctx: ShopifyContext): Promise<Record<st
   const rev60 = buildRevenueSummary(o60, 60)
   const rev90 = buildRevenueSummary(o90, 90)
 
-  // Product sales derived from the same capped order set — include line_items in 30d fetch
   const productSales = buildProductSales(orders30)
+  const discountAnalysis = buildDiscountAnalysis(orders30, safe(priceRules) ?? [])
 
   const bundle: Record<string, unknown> = {
     store: safe(shopInfo),
@@ -282,6 +405,7 @@ export async function fetchShopifyBundle(ctx: ShopifyContext): Promise<Record<st
     products: productSales,
     customers: safe(customers),
     abandonment: safe(abandonment),
+    discounts: discountAnalysis,
   }
 
   // Honesty signal — surface truncation so agents can caveat confidence
