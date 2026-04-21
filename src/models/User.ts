@@ -21,6 +21,7 @@ export interface IUser extends Document {
     facebook?: { accessToken?: string; pageId?: string; pageName?: string; pageAccessToken?: string }
     instagram?: { accountId?: string }
     clarity?: { projectId?: string; apiToken?: string; connectedAt?: Date }
+    shopify?: { accessToken?: string; shop?: string; shopName?: string; currency?: string; connectedAt?: Date }
   }
   usage: {
     tokensUsedThisMonth: number
@@ -72,6 +73,7 @@ const UserSchema = new Schema<IUser>({
     facebook: { accessToken: String, pageId: String, pageName: String, pageAccessToken: String },
     instagram: { accountId: String, username: String, pictureUrl: String },
     clarity: { projectId: String, apiToken: String, connectedAt: Date },
+    shopify: { accessToken: String, shop: String, shopName: String, currency: String, connectedAt: Date },
   },
   usage: {
     tokensUsedThisMonth: { type: Number, default: 0 },

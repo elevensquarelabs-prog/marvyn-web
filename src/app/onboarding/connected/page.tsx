@@ -8,6 +8,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   ga4: 'Google Analytics 4',
   meta: 'Meta Ads',
   linkedin: 'LinkedIn Ads',
+  shopify: 'Shopify',
 }
 
 export default function OnboardingConnectedPage() {

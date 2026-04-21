@@ -60,10 +60,10 @@ function goalBlock(board: ContextBoard): string {
  * before building the prompt — reduces token cost significantly.
  */
 const AGENT_CONTEXT_KEYS: Record<AgentName, string[]> = {
-  ads: ['brand', 'metaAds', 'googleAds', 'ga4Conversions'],
-  seo: ['brand', 'seoAudit', 'gsc'],
-  content: ['brand', 'ga4Organic', 'calendar', 'competitors', 'seoFindings', 'socialPerformance'],
-  strategist: ['brand', 'ga4Organic', 'seoAudit', 'calendar', 'upstreamOutputs', 'upstreamHistories'],
+  ads: ['brand', 'metaAds', 'googleAds', 'ga4Conversions', 'ecommerce'],
+  seo: ['brand', 'seoAudit', 'gsc', 'ecommerce'],
+  content: ['brand', 'ga4Organic', 'calendar', 'competitors', 'seoFindings', 'socialPerformance', 'ecommerce'],
+  strategist: ['brand', 'ga4Organic', 'seoAudit', 'calendar', 'upstreamOutputs', 'upstreamHistories', 'ecommerce'],
 }
 
 /**

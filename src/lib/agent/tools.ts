@@ -21,6 +21,7 @@ export interface RawConnections {
   facebook?: { pageAccessToken?: string; accessToken?: string; pageId?: string; pageName?: string }
   instagram?: { accountId?: string }
   clarity?: { projectId?: string; apiToken?: string; clarityCache?: { data?: Record<string, unknown>; cachedAt?: Date } }
+  shopify?: { accessToken?: string; shop?: string; shopName?: string; currency?: string }
 }
 
 export interface AgentContext {
@@ -1374,6 +1375,30 @@ async function dismiss_alert(
   }
 }
 
+// ── Shopify ────────────────────────────────────────────────────────────────────
+
+async function get_shopify_data(context: AgentContext): Promise<ToolResult> {
+  const sc = context.connections.shopify
+  if (!sc?.accessToken || !sc?.shop) {
+    return { summary: 'Shopify not connected', content: JSON.stringify({ error: 'Shopify not connected' }) }
+  }
+  try {
+    const { fetchShopifyBundle } = await import('@/lib/shopify')
+    const bundle = await fetchShopifyBundle({ shop: sc.shop, accessToken: sc.accessToken })
+    const rev = bundle.revenue as Record<string, unknown> | null
+    const abn = bundle.abandonment as Record<string, unknown> | null
+    const summary = [
+      rev ? `Revenue (30d): ${sc.currency ?? ''}${rev.last30Days?.toLocaleString() ?? 'N/A'}` : null,
+      rev ? `Orders: ${rev.orderCount30d} | AOV: ${sc.currency ?? ''}${rev.avgOrderValue}` : null,
+      abn ? `Abandonment rate: ${abn.abandonmentRate}% (${sc.currency ?? ''}${abn.revenueLost} lost)` : null,
+    ].filter(Boolean).join(' | ')
+    return { summary: summary || 'Shopify store data loaded', content: JSON.stringify(bundle) }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { summary: 'Shopify fetch failed', content: JSON.stringify({ error: msg }) }
+  }
+}
+
 // ── Dispatcher ─────────────────────────────────────────────────────────────────
 
 export async function executeTool(
@@ -1422,6 +1447,8 @@ export async function executeTool(
       return get_alerts(context)
     case 'dismiss_alert':
       return dismiss_alert(args as { alert_id: string }, context)
+    case 'get_shopify_data':
+      return get_shopify_data(context)
     default:
       return { summary: `Unknown tool: ${name}`, content: `Tool "${name}" not found.` }
   }

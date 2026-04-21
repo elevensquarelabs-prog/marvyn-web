@@ -82,6 +82,16 @@ export async function GET(_req: NextRequest) {
       connectedAt: c.clarity.connectedAt ? c.clarity.connectedAt.toISOString() : '',
     }
   }
+  if ((c as Record<string, unknown> & { shopify?: { accessToken?: string; shop?: string; shopName?: string; currency?: string; connectedAt?: Date } }).shopify?.accessToken) {
+    const sh = (c as { shopify: { shop?: string; shopName?: string; currency?: string; connectedAt?: Date } }).shopify
+    safe.shopify = {
+      connected: 'true',
+      shop: sh.shop || '',
+      shopName: sh.shopName || '',
+      currency: sh.currency || '',
+      connectedAt: sh.connectedAt ? sh.connectedAt.toISOString() : '',
+    }
+  }
 
   return Response.json({ connections: safe })
 }

@@ -28,6 +28,7 @@ interface Connections {
   ga4?: boolean
   meta?: boolean
   linkedin?: boolean
+  shopify?: boolean
 }
 
 type Screen = 'brand' | 'market' | 'marketing' | 'connect' | 'firstrun'
@@ -37,15 +38,17 @@ const PLATFORM_CONFIG = [
   { id: 'ga4',      label: 'Google Analytics 4',          desc: 'Traffic, sessions, and conversions',     icon: 'G' },
   { id: 'meta',     label: 'Meta Ads',                    desc: 'Facebook and Instagram ad performance',  icon: 'f' },
   { id: 'linkedin', label: 'LinkedIn Ads',                desc: 'B2B paid performance',                  icon: 'in' },
+  { id: 'shopify',  label: 'Shopify',                     desc: 'Orders, revenue, products, and abandoned carts', icon: 'S' },
 ] as const
 
 type PlatformId = typeof PLATFORM_CONFIG[number]['id']
 
 const FIRST_RUN_PROMPT: Record<PlatformId, { heading: string; cta: string; route: string; apiPath: string }> = {
-  google:   { heading: 'Want me to run a quick SEO health check?',          cta: 'Run the analysis', route: '/seo',       apiPath: '/api/seo/run' },
-  ga4:      { heading: 'Want me to analyse your traffic and top pages?',     cta: 'Run the analysis', route: '/analytics', apiPath: '' },
-  meta:     { heading: 'Want me to review your ad performance this month?',  cta: 'Run the analysis', route: '/ads',       apiPath: '' },
-  linkedin: { heading: 'Want me to check your LinkedIn ad spend?',           cta: 'Run the analysis', route: '/ads',       apiPath: '' },
+  google:   { heading: 'Want me to run a quick SEO health check?',           cta: 'Run the analysis', route: '/seo',       apiPath: '/api/seo/run' },
+  ga4:      { heading: 'Want me to analyse your traffic and top pages?',      cta: 'Run the analysis', route: '/analytics', apiPath: '' },
+  meta:     { heading: 'Want me to review your ad performance this month?',   cta: 'Run the analysis', route: '/ads',       apiPath: '' },
+  linkedin: { heading: 'Want me to check your LinkedIn ad spend?',            cta: 'Run the analysis', route: '/ads',       apiPath: '' },
+  shopify:  { heading: 'Want me to run a store performance analysis?',        cta: 'Run the analysis', route: '/dashboard', apiPath: '' },
 }
 
 const LOADING_STEPS: Record<PlatformId, string[]> = {
@@ -53,6 +56,7 @@ const LOADING_STEPS: Record<PlatformId, string[]> = {
   ga4:      ['Fetching traffic data…', 'Analysing landing pages…', 'Building your diagnosis…'],
   meta:     ['Fetching ad data…', 'Analysing campaign performance…', 'Building your diagnosis…'],
   linkedin: ['Fetching LinkedIn data…', 'Analysing spend…', 'Building your diagnosis…'],
+  shopify:  ['Pulling your orders and revenue…', 'Identifying your top products…', 'Checking abandonment and repeat rates…', 'Building your diagnosis…'],
 }
 
 const GOAL_OPTIONS = ['More traffic', 'More leads', 'Better conversion', 'Reduce CAC', 'Brand awareness']
@@ -107,6 +111,7 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false)
   const [transition, setTransition] = useState('')
   const [connections, setConnections] = useState<Connections>({})
+  const [shopifyShop, setShopifyShop] = useState('')
   const [runningAnalysis, setRunningAnalysis] = useState(false)
   const [analysisStep, setAnalysisStep] = useState(0)
   const [activePlatform, setActivePlatform] = useState<PlatformId>('google')
@@ -135,6 +140,7 @@ export default function OnboardingPage() {
   const priorityPlatform = useCallback((): PlatformId | null => {
     if (connections.google)   return 'google'
     if (connections.meta)     return 'meta'
+    if (connections.shopify)  return 'shopify'
     if (connections.ga4)      return 'ga4'
     if (connections.linkedin) return 'linkedin'
     return null
@@ -166,6 +172,14 @@ export default function OnboardingPage() {
   }
 
   const connectPlatform = async (platformId: string) => {
+    if (platformId === 'shopify') {
+      const shop = shopifyShop.trim()
+      if (!shop) return
+      const res = await fetch(`/api/integrations/shopify?from=onboarding&shop=${encodeURIComponent(shop)}`)
+      const data = await res.json()
+      if (data.authUrl) window.location.href = data.authUrl
+      return
+    }
     const res = await fetch(`/api/oauth/${platformId}?from=onboarding`)
     const data = await res.json()
     if (data.authUrl) window.location.href = data.authUrl
@@ -298,20 +312,43 @@ export default function OnboardingPage() {
 
           <div className="space-y-2 mb-6">
             {PLATFORM_CONFIG.map(p => (
-              <div key={p.id} className="flex items-center gap-3 p-4 bg-[#111] border border-[#1E1E1E] rounded-xl">
-                <div className="w-9 h-9 bg-[#1A1A1A] rounded-lg flex items-center justify-center text-xs font-bold text-[#A0A0A0] shrink-0">
-                  {p.icon}
+              <div key={p.id} className="bg-[#111] border border-[#1E1E1E] rounded-xl overflow-hidden">
+                <div className="flex items-center gap-3 p-4">
+                  <div className="w-9 h-9 bg-[#1A1A1A] rounded-lg flex items-center justify-center text-xs font-bold text-[#A0A0A0] shrink-0">
+                    {p.icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white">{p.label}</p>
+                    <p className="text-xs text-[#555]">{p.desc}</p>
+                  </div>
+                  {connections[p.id as PlatformId] ? (
+                    <span className="text-xs text-emerald-400 font-medium shrink-0">Connected ✓</span>
+                  ) : p.id === 'shopify' ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => connectPlatform('shopify')}
+                      disabled={!shopifyShop.trim()}
+                      className="shrink-0"
+                    >
+                      Connect
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="secondary" onClick={() => connectPlatform(p.id)} className="shrink-0">
+                      Connect
+                    </Button>
+                  )}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white">{p.label}</p>
-                  <p className="text-xs text-[#555]">{p.desc}</p>
-                </div>
-                {connections[p.id as PlatformId] ? (
-                  <span className="text-xs text-emerald-400 font-medium shrink-0">Connected ✓</span>
-                ) : (
-                  <Button size="sm" variant="secondary" onClick={() => connectPlatform(p.id)} className="shrink-0">
-                    Connect
-                  </Button>
+                {/* Shopify shop domain input */}
+                {p.id === 'shopify' && !connections.shopify && (
+                  <div className="px-4 pb-4">
+                    <input
+                      value={shopifyShop}
+                      onChange={e => setShopifyShop(e.target.value)}
+                      placeholder="your-store.myshopify.com"
+                      className="w-full bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg px-3 py-2 text-xs text-white placeholder-[#333] outline-none focus:border-[#DA7756]/60 transition-colors"
+                    />
+                  </div>
                 )}
               </div>
             ))}

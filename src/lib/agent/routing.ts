@@ -31,6 +31,12 @@ const DOMAIN_SIGNALS: Record<string, string[]> = {
     'plan', 'strategy', 'roadmap', 'quarter', '30 day', '7 day', 'priorities',
     'goal', 'focus', 'next steps', 'what should i', 'where should i', 'recommend',
   ],
+  ecommerce: [
+    'shopify', 'store', 'orders', 'revenue', 'sales', 'products', 'product', 'aov',
+    'average order', 'cart', 'checkout', 'abandonment', 'abandoned cart', 'ltv',
+    'customer lifetime', 'repeat customer', 'returning customer', 'ecommerce', 'e-commerce',
+    'refund', 'bestseller', 'inventory', 'conversion rate',
+  ],
 }
 
 /**
@@ -71,6 +77,7 @@ export function deriveFetchDomain(
   userRequest: string
 ): string {
   if (inferredDomains.includes('strategy')) return 'strategy'
+  if (inferredDomains.includes('ecommerce')) return 'ecommerce'
   if (inferredDomains.includes('ads')) return 'ads'
   if (inferredDomains.includes('seo')) return 'seo'
 
