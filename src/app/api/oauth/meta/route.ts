@@ -4,9 +4,12 @@ import { authOptions } from '@/lib/auth'
 
 const BASE_URL = () => (process.env.NEXTAUTH_URL || '').trim()
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const from = new URL(req.url).searchParams.get('from')
+  const state = from === 'onboarding' ? `${session.user.id}|onboarding` : session.user.id
 
   const appId = (process.env.META_APP_ID || '').trim()
   const redirectUri = `${BASE_URL()}/api/oauth/meta/callback`
@@ -27,7 +30,7 @@ export async function GET(_req: NextRequest) {
     scope,
     response_type: 'code',
     auth_type: 'rerequest',
-    state: session.user.id,
+    state,
   })
   const authUrl = `https://www.facebook.com/v21.0/dialog/oauth?${params.toString()}`
 

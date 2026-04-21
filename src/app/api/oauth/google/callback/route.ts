@@ -10,13 +10,18 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const code = searchParams.get('code')
   const error = searchParams.get('error')
-  const state = searchParams.get('state')
-  console.log('[Google CB] code:', !!code, 'error:', error, 'state:', state)
+  const rawState = searchParams.get('state')
+  console.log('[Google CB] code:', !!code, 'error:', error, 'state:', rawState)
 
-  if (!code || !state) {
+  if (!code || !rawState) {
     console.log('[Google CB] missing code or state — aborting')
     return Response.redirect(`${BASE_URL()}/settings?error=google_oauth_failed`)
   }
+
+  const [state, stateFrom] = rawState.split('|')
+  const successRedirect = stateFrom === 'onboarding'
+    ? `${BASE_URL()}/onboarding/connected?platform=google&status=success`
+    : `${BASE_URL()}/settings?connected=google`
 
   try {
     const redirectUri = `${BASE_URL()}/api/oauth/google/callback`
@@ -79,7 +84,7 @@ export async function GET(req: NextRequest) {
     console.log('[Google CB] updateOne result:', JSON.stringify({ matchedCount: result.matchedCount, modifiedCount: result.modifiedCount }))
     console.log('[Google CB] redirecting to /settings?connected=google')
 
-    return Response.redirect(`${BASE_URL()}/settings?connected=google`)
+    return Response.redirect(successRedirect)
   } catch (err) {
     console.error('[Google CB] ERROR:', err)
     return Response.redirect(`${BASE_URL()}/settings?error=google_oauth_failed`)
