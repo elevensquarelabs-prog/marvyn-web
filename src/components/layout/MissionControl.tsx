@@ -117,7 +117,7 @@ export function MissionControl({ agentStatus = 'idle', activeTool = null }: { ag
       </div>
 
       {/* Quick actions */}
-      <div className="px-4 py-3 mt-auto">
+      <div className="px-4 py-3">
         <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-2">Quick Links</p>
         <div className="space-y-1">
           {[
