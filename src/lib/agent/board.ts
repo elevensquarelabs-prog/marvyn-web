@@ -19,10 +19,24 @@ export interface RecommendationItem {
   followUpAt?: string             // ISO date
 }
 
+export interface Diagnosis {
+  rootCause: string              // "The likely reason X is happening is..."
+  confidence: number             // 0–1
+  supportingEvidence: string[]   // pointers into findings[] that back this up
+}
+
+export interface PriorRecommendationReview {
+  checked: boolean
+  pendingUnacted: string[]   // recommendation texts from last 30 days with no status change
+  notableOutcomes: string[]  // recs that were acted on + what changed
+}
+
 export interface AgentOutput {
   summary: string
   findings: string[]
   evidence: string[]
+  diagnosis: Diagnosis
+  priorRecommendationReview: PriorRecommendationReview
   recommendations: RecommendationItem[]
 }
 
