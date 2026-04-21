@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import SocialPost from '@/models/SocialPost'
 import { getUserConnections, connectionErrorResponse } from '@/lib/get-user-connections'
-import { publishToLinkedIn, publishToFacebook, publishToInstagram } from '@/lib/social-publish'
+import { extractPublishErrorMessage, publishToLinkedIn, publishToFacebook, publishToInstagram, resolvePublishMediaUrl, validatePublishPayload } from '@/lib/social-publish'
 
 export async function POST(req: NextRequest) {
   let user, userId: string
@@ -35,7 +35,12 @@ export async function POST(req: NextRequest) {
       if (!fbConn?.pageAccessToken || !igConn?.accountId) {
         return connectionErrorResponse('FACEBOOK_NOT_CONNECTED')
       }
-      await publishToInstagram(post, fbConn.pageAccessToken, igConn.accountId)
+      const mediaUrl = await resolvePublishMediaUrl(post.mediaKey, post.mediaUrl)
+      const validationError = validatePublishPayload('instagram', mediaUrl)
+      if (validationError) {
+        return Response.json({ error: validationError }, { status: 400 })
+      }
+      await publishToInstagram({ ...post.toObject(), mediaUrl }, fbConn.pageAccessToken, igConn.accountId)
     } else {
       return Response.json({ error: 'Platform not supported' }, { status: 400 })
     }
@@ -48,7 +53,8 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error('[social/publish]', err)
     post.status = 'failed'
+    post.lastError = extractPublishErrorMessage(err)
     await post.save()
-    return Response.json({ error: 'Publish failed' }, { status: 500 })
+    return Response.json({ error: extractPublishErrorMessage(err) }, { status: 500 })
   }
 }

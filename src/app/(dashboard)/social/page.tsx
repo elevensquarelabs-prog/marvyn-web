@@ -186,238 +186,50 @@ Vary post formats: story posts, listicles, questions, behind-the-scenes.`
       <div className="px-6 py-4 border-b border-[var(--border)] flex items-center justify-between shrink-0">
         <div>
           <h1 className="text-sm font-semibold text-[var(--text-primary)]">Social Planner</h1>
-          <p className="text-xs text-[var(--text-muted)]">{posts.length} posts in calendar and review queue</p>
-        </div>
-        <div className="flex gap-2">
-          <Button size="sm" variant="secondary" onClick={() => setPlannerOpen(true)}>Plan Week</Button>
-          <Button size="sm" onClick={() => setComposerOpen(true)}>+ New Post</Button>
+          <p className="text-xs text-[var(--text-muted)]">Schedule and publish across your connected platforms</p>
         </div>
       </div>
 
-      <SocialWorkspaceTabs />
-
-      {/* Platform filter pills */}
-      <div className="px-6 py-3 border-b border-[var(--border)] flex gap-2 shrink-0">
-        {['all', 'linkedin', 'facebook', 'instagram'].map(f => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-3 py-1 rounded-full text-xs capitalize transition-colors ${
-              filter === f
-                ? 'bg-[#DA7756] text-white'
-                : 'bg-[var(--surface-2)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border)]'
-            }`}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex-1 p-6 space-y-6">
-        {/* Calendar with navigation */}
-        <SocialCalendar
-          posts={filtered}
-          onPostClick={(p) => setSelectedPost(p as SocialPost)}
-          month={calMonth}
-          year={calYear}
-          onPrevMonth={prevMonth}
-          onNextMonth={nextMonth}
-        />
-
-        {/* Queue columns with dividers */}
-        <div className="grid grid-cols-3 divide-x divide-[var(--border)]">
-          {columns.map((col, idx) => (
-            <div key={col.label} className={idx === 0 ? 'pr-5' : idx === 1 ? 'px-5' : 'pl-5'}>
-              <div className="flex items-center gap-2 mb-3">
-                <h3 className={`text-xs font-semibold ${col.accent}`}>{col.label}</h3>
-                <span className="text-[10px] text-[var(--text-muted)] bg-[var(--surface-2)] border border-[var(--border)] px-1.5 py-0.5 rounded-full">{col.count}</span>
-              </div>
-              <div className="space-y-2">
-                {col.posts.map(post => (
-                  <SocialPostCard
-                    key={post._id}
-                    post={post}
-                    onClick={() => setSelectedPost(post)}
-                  />
-                ))}
-                {col.posts.length === 0 && (
-                  <p className="text-xs text-[var(--text-secondary)] text-center py-8">No posts</p>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Post detail drawer */}
-      {selectedPost && (
-        <>
-          <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" onClick={() => setSelectedPost(null)} />
-          <div className="fixed right-0 top-0 h-full w-[420px] z-50 bg-[var(--surface)] border-l border-[var(--border)] shadow-2xl flex flex-col">
-            {/* Drawer header */}
-            <div className="flex items-center justify-between px-6 py-5 border-b border-[var(--border)]">
-              <div className="flex items-center gap-3">
-                <span className={`text-sm font-semibold px-3 py-1 rounded-lg capitalize ${platformColor[selectedPost.platform] || 'bg-[var(--surface-2)] text-[var(--text-secondary)]'}`}>
-                  {selectedPost.platform}
-                </span>
-                <span className={`text-xs px-2.5 py-1 rounded-full font-medium capitalize border ${
-                  selectedPost.status === 'pending_approval' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                  selectedPost.status === 'scheduled' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                  selectedPost.status === 'published' ? 'bg-green-50 text-green-700 border-green-200' :
-                  'bg-[var(--surface-2)] text-[var(--text-muted)] border-[var(--border)]'
-                }`}>
-                  {selectedPost.status.replace('_', ' ')}
-                </span>
-              </div>
-              <button
-                onClick={() => setSelectedPost(null)}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-2)] transition-colors"
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              </button>
-            </div>
-
-            {/* Drawer content */}
-            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-              {/* Post content */}
-              <div>
-                <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Content</p>
-                <p className="text-sm text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap">{selectedPost.content}</p>
-              </div>
-
-              {/* Hashtags */}
-              {selectedPost.hashtags && selectedPost.hashtags.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Hashtags</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {selectedPost.hashtags.map(h => (
-                      <span key={h} className="text-xs px-2 py-0.5 bg-[#DA7756]/10 text-[#DA7756] rounded-full">#{h}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Schedule info */}
-              {selectedPost.scheduledAt && (
-                <div className="bg-[var(--surface-2)] border border-[var(--border)] rounded-xl px-4 py-3 flex items-center gap-3">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-muted)] shrink-0">
-                    <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-                  </svg>
-                  <div>
-                    <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Scheduled for</p>
-                    <p className="text-sm font-medium text-[var(--text-primary)]">{new Date(selectedPost.scheduledAt).toLocaleString()}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Error */}
-              {actionError && (
-                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-                  <p className="text-sm text-red-700">{actionError}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Drawer actions */}
-            <div className="px-6 py-5 border-t border-[var(--border)] space-y-3">
-              {selectedPost.status === 'pending_approval' && (
-                <>
-                  <Button onClick={() => approvePost(selectedPost)} loading={actionLoading} className="w-full">
-                    {selectedPost.scheduledAt && new Date(selectedPost.scheduledAt) > new Date()
-                      ? '✓ Approve & Schedule'
-                      : '✓ Approve & Publish Now'}
-                  </Button>
-                  <Button variant="danger" onClick={() => rejectPost(selectedPost._id)} loading={actionLoading} className="w-full">
-                    Reject & Delete
-                  </Button>
-                </>
-              )}
-              {selectedPost.status === 'scheduled' && (
-                <Button variant="secondary" onClick={() => revokePost(selectedPost._id)} loading={actionLoading} className="w-full">
-                  ↩ Revoke Schedule
-                </Button>
-              )}
-            </div>
+      {/* Coming Soon */}
+      <div className="flex-1 flex items-center justify-center p-12">
+        <div className="max-w-md w-full text-center space-y-6">
+          {/* Icon */}
+          <div className="w-16 h-16 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center mx-auto">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-muted)]">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
           </div>
-        </>
-      )}
 
-      <Composer
-        open={composerOpen}
-        onClose={() => setComposerOpen(false)}
-        onSaved={loadPosts}
-      />
-
-      {/* Content Planner Modal */}
-      <Modal open={plannerOpen} onClose={() => setPlannerOpen(false)} title="Content Calendar Planner" size="lg">
-        <div className="flex h-[500px]">
-          <div className="w-64 shrink-0 border-r border-[var(--border)] p-5 space-y-4">
-            <div>
-              <label className="text-xs text-[var(--text-muted)] block mb-1">Topic / theme</label>
-              <input
-                value={plannerTopic}
-                onChange={e => setPlannerTopic(e.target.value)}
-                placeholder="e.g. product launch, brand awareness"
-                className="w-full bg-[var(--surface-2)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none focus:border-[#DA7756]/50"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-[var(--text-muted)] block mb-2">Platforms</label>
-              <div className="space-y-1.5">
-                {['linkedin', 'facebook', 'instagram'].map(p => (
-                  <label key={p} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={plannerPlatforms.includes(p)}
-                      onChange={e => {
-                        if (e.target.checked) setPlannerPlatforms(prev => [...prev, p])
-                        else setPlannerPlatforms(prev => prev.filter(x => x !== p))
-                      }}
-                      className="accent-[#DA7756]"
-                    />
-                    <span className="text-xs text-[var(--text-secondary)] capitalize">{p}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="text-xs text-[var(--text-muted)] block mb-1">Days: {plannerDays}</label>
-              <input
-                type="range" min={3} max={14} value={plannerDays}
-                onChange={e => setPlannerDays(parseInt(e.target.value))}
-                className="w-full accent-[#DA7756]"
-              />
-            </div>
-            <Button onClick={generateWeekPlan} loading={planning} disabled={plannerPlatforms.length === 0} className="w-full">
-              Generate Plan
-            </Button>
+          {/* Badge */}
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#DA7756]/10 border border-[#DA7756]/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#DA7756]" />
+            <span className="text-xs font-medium text-[#DA7756]">Coming Soon</span>
           </div>
-          <div className="flex-1 p-5 overflow-y-auto">
-            {!planOutput && !planning && (
-              <div className="flex items-center justify-center h-full text-center">
-                <div>
-                  <p className="text-2xl mb-3">📅</p>
-                  <p className="text-sm text-[var(--text-muted)]">Set your topic and platforms, then generate a full content plan with ready-to-use posts.</p>
-                </div>
+
+          <div className="space-y-2">
+            <h2 className="text-base font-semibold text-[var(--text-primary)]">Social Publishing</h2>
+            <p className="text-sm text-[var(--text-muted)] leading-relaxed">
+              Direct publishing to LinkedIn, Facebook, and Instagram is on its way. We&apos;re completing platform verification requirements and will enable this feature shortly.
+            </p>
+          </div>
+
+          {/* Features preview */}
+          <div className="text-left space-y-2.5 bg-[var(--surface-2)] border border-[var(--border)] rounded-xl p-5">
+            <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">What&apos;s coming</p>
+            {[
+              'One-click publish to LinkedIn, Facebook & Instagram',
+              'AI-generated content calendar with scheduling',
+              'Post approval workflow with queue management',
+              'Media upload with platform-optimised previews',
+            ].map(item => (
+              <div key={item} className="flex items-start gap-2.5">
+                <div className="w-4 h-4 rounded-full border border-[var(--border)] bg-[var(--surface)] shrink-0 mt-0.5" />
+                <p className="text-xs text-[var(--text-secondary)]">{item}</p>
               </div>
-            )}
-            {(planOutput || planning) && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  {planning && <span className="text-xs text-[#DA7756] flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#DA7756] animate-pulse" />Generating…</span>}
-                  {planOutput && !planning && (
-                    <Button size="sm" variant="secondary" onClick={() => navigator.clipboard.writeText(planOutput)}>Copy Plan</Button>
-                  )}
-                </div>
-                <pre className="text-sm text-[var(--text-secondary)] whitespace-pre-wrap font-sans leading-relaxed">
-                  {planOutput}
-                  {planning && <span className="inline-block w-1.5 h-4 bg-[#DA7756] animate-pulse ml-0.5 align-middle" />}
-                </pre>
-              </div>
-            )}
+            ))}
           </div>
         </div>
-      </Modal>
+      </div>
     </div>
   )
 }

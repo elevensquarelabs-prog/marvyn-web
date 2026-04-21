@@ -3,7 +3,7 @@ import { connectDB } from '@/lib/mongodb'
 import SocialPost from '@/models/SocialPost'
 import mongoose from 'mongoose'
 import axios from 'axios'
-import { publishToLinkedIn, publishToFacebook, publishToInstagram } from '@/lib/social-publish'
+import { publishToLinkedIn, publishToFacebook, publishToInstagram, resolvePublishMediaUrl, validatePublishPayload } from '@/lib/social-publish'
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +28,7 @@ type Candidate = {
   platform: string
   content: string
   hashtags?: string[]
+  mediaKey?: string
   mediaUrl?: string
   mediaType?: string
   retryCount: number
@@ -120,7 +121,7 @@ export async function GET(req: NextRequest) {
         { nextRetryAt: { $lte: now } },
       ],
     },
-    { _id: 1, userId: 1, platform: 1, content: 1, hashtags: 1, mediaUrl: 1, mediaType: 1, retryCount: 1, platformPostId: 1, publishAttemptId: 1 }
+    { _id: 1, userId: 1, platform: 1, content: 1, hashtags: 1, mediaKey: 1, mediaUrl: 1, mediaType: 1, retryCount: 1, platformPostId: 1, publishAttemptId: 1 }
   )
     .limit(BATCH_SIZE)
     .lean() as Candidate[]
@@ -251,9 +252,11 @@ export async function GET(req: NextRequest) {
         const fb = conn.facebook
         const ig = conn.instagram
         if (!fb?.pageAccessToken || !ig?.accountId) throw new Error('Instagram not connected')
-        if (!candidate.mediaUrl) throw new Error('Instagram requires media URL')
+        const mediaUrl = await resolvePublishMediaUrl(candidate.mediaKey, candidate.mediaUrl)
+        const validationError = validatePublishPayload('instagram', mediaUrl)
+        if (validationError) throw new Error(validationError)
         const result = await publishToInstagram(
-          { content: candidate.content, hashtags: candidate.hashtags, mediaUrl: candidate.mediaUrl, mediaType: candidate.mediaType },
+          { content: candidate.content, hashtags: candidate.hashtags, mediaUrl, mediaType: candidate.mediaType },
           fb.pageAccessToken,
           ig.accountId
         )
