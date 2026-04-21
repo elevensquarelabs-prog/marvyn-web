@@ -6,9 +6,8 @@ import { NextRequest } from 'next/server'
 export type AdminRole = 'super_admin' | 'support' | 'billing_viewer'
 
 const COOKIE_NAME = 'admin_session'
-const SECRET = new TextEncoder().encode(
-  process.env.NEXTAUTH_SECRET || 'fallback-secret-change-in-prod'
-)
+if (!process.env.NEXTAUTH_SECRET) throw new Error('NEXTAUTH_SECRET is not set')
+const SECRET = new TextEncoder().encode(process.env.NEXTAUTH_SECRET)
 const EXPIRY = '8h'
 
 export interface AdminTokenPayload {

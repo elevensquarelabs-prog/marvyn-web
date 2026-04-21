@@ -3,6 +3,7 @@ import { connectDB } from '@/lib/mongodb'
 import mongoose from 'mongoose'
 import axios from 'axios'
 import { verifyShopifyHmac } from '@/lib/shopify'
+import { parseOAuthState } from '@/lib/oauth-state'
 
 const BASE_URL = () => (process.env.NEXTAUTH_URL || '').trim()
 const SHOPIFY_CLIENT_ID = () => (process.env.SHOPIFY_CLIENT_ID || '').trim()
@@ -25,7 +26,15 @@ export async function GET(req: NextRequest) {
     return Response.redirect(`${BASE_URL()}/settings?error=shopify_oauth_failed`)
   }
 
-  const [userId, stateFrom] = rawState.split('|')
+  let userId: string, stateFrom: string
+  try {
+    const parsed = parseOAuthState(rawState)
+    userId = parsed.userId
+    stateFrom = parsed.from
+  } catch (e) {
+    console.error('[shopify/callback] invalid state:', e)
+    return Response.redirect(`${BASE_URL()}/settings?error=shopify_oauth_failed`)
+  }
   const successRedirect = stateFrom === 'onboarding'
     ? `${BASE_URL()}/onboarding/connected?platform=shopify&status=success`
     : `${BASE_URL()}/settings?connected=shopify`

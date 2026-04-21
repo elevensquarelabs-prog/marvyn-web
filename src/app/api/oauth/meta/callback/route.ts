@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { connectDB } from '@/lib/mongodb'
 import User from '@/models/User'
 import axios from 'axios'
+import { parseOAuthState } from '@/lib/oauth-state'
 
 const BASE_URL = () => (process.env.NEXTAUTH_URL || '').trim()
 
@@ -14,7 +15,16 @@ export async function GET(req: NextRequest) {
     return Response.redirect(`${BASE_URL()}/settings?error=meta_oauth_failed`)
   }
 
-  const [userId, stateFrom] = rawState.split('|')
+  let userId: string, stateFrom: string
+  try {
+    const parsed = parseOAuthState(rawState)
+    userId = parsed.userId
+    stateFrom = parsed.from
+  } catch (e) {
+    console.error('[meta/callback] invalid state:', e)
+    return Response.redirect(`${BASE_URL()}/settings?error=meta_oauth_failed`)
+  }
+
   const successRedirect = stateFrom === 'onboarding'
     ? `${BASE_URL()}/onboarding/connected?platform=meta&status=success`
     : `${BASE_URL()}/settings?connected=meta`

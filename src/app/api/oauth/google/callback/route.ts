@@ -2,23 +2,31 @@ import { NextRequest } from 'next/server'
 import { connectDB } from '@/lib/mongodb'
 import mongoose from 'mongoose'
 import axios from 'axios'
+import { parseOAuthState } from '@/lib/oauth-state'
 
 const BASE_URL = () => (process.env.NEXTAUTH_URL || '').trim()
 
 export async function GET(req: NextRequest) {
-  console.log('[Google CB] FULL URL:', req.url)
   const { searchParams } = new URL(req.url)
   const code = searchParams.get('code')
   const error = searchParams.get('error')
   const rawState = searchParams.get('state')
-  console.log('[Google CB] code:', !!code, 'error:', error, 'state:', rawState)
 
   if (!code || !rawState) {
     console.log('[Google CB] missing code or state — aborting')
     return Response.redirect(`${BASE_URL()}/settings?error=google_oauth_failed`)
   }
 
-  const [state, stateFrom] = rawState.split('|')
+  let state: string, stateFrom: string
+  try {
+    const parsed = parseOAuthState(rawState)
+    state = parsed.userId
+    stateFrom = parsed.from
+  } catch (e) {
+    console.error('[Google CB] invalid state:', e)
+    return Response.redirect(`${BASE_URL()}/settings?error=google_oauth_failed`)
+  }
+
   const successRedirect = stateFrom === 'onboarding'
     ? `${BASE_URL()}/onboarding/connected?platform=google&status=success`
     : `${BASE_URL()}/settings?connected=google`

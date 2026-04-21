@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { generateOAuthState } from '@/lib/oauth-state'
 
 const BASE_URL = () => (process.env.NEXTAUTH_URL || '').trim()
 
@@ -9,7 +10,7 @@ export async function GET(req: NextRequest) {
   if (!session?.user?.id) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const from = new URL(req.url).searchParams.get('from')
-  const state = from === 'onboarding' ? `${session.user.id}|onboarding` : session.user.id
+  const state = generateOAuthState(session.user.id, from ?? undefined)
 
   const appId = (process.env.META_APP_ID || '').trim()
   const redirectUri = `${BASE_URL()}/api/oauth/meta/callback`

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { connectDB } from '@/lib/mongodb'
 import mongoose from 'mongoose'
 import axios from 'axios'
+import { parseOAuthState } from '@/lib/oauth-state'
 
 const BASE_URL = () => (process.env.NEXTAUTH_URL || '').trim()
 
@@ -14,7 +15,16 @@ export async function GET(req: NextRequest) {
     return Response.redirect(`${BASE_URL()}/settings?error=ga4_oauth_failed&section=connections`)
   }
 
-  const [state, stateFrom] = rawState.split('|')
+  let state: string, stateFrom: string
+  try {
+    const parsed = parseOAuthState(rawState)
+    state = parsed.userId
+    stateFrom = parsed.from
+  } catch (e) {
+    console.error('[ga4/callback] invalid state:', e)
+    return Response.redirect(`${BASE_URL()}/settings?error=ga4_oauth_failed&section=connections`)
+  }
+
   const successRedirect = stateFrom === 'onboarding'
     ? `${BASE_URL()}/onboarding/connected?platform=ga4&status=success`
     : `${BASE_URL()}/settings?connected=ga4&section=connections`

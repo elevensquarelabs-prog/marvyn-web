@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { generateOAuthState } from '@/lib/oauth-state'
 
 const BASE_URL = () => (process.env.NEXTAUTH_URL || '').trim()
 const SHOPIFY_CLIENT_ID = () => (process.env.SHOPIFY_CLIENT_ID || '').trim()
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
   const shopDomain = shop.includes('.myshopify.com') ? shop : `${shop}.myshopify.com`
 
   // State encodes userId + onboarding context
-  const state = from === 'onboarding' ? `${session.user.id}|onboarding` : session.user.id
+  const state = generateOAuthState(session.user.id, from ?? undefined)
 
   const redirectUri = `${BASE_URL()}/api/integrations/shopify/callback`
   const params = new URLSearchParams({
