@@ -8,11 +8,16 @@ const BASE_URL = () => (process.env.NEXTAUTH_URL || '').trim()
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const code = searchParams.get('code')
-  const userId = searchParams.get('state')
+  const rawState = searchParams.get('state')
 
-  if (!code || !userId) {
+  if (!code || !rawState) {
     return Response.redirect(`${BASE_URL()}/settings?error=meta_oauth_failed`)
   }
+
+  const [userId, stateFrom] = rawState.split('|')
+  const successRedirect = stateFrom === 'onboarding'
+    ? `${BASE_URL()}/onboarding/connected?platform=meta&status=success`
+    : `${BASE_URL()}/settings?connected=meta`
 
   try {
     const redirectUri = `${BASE_URL()}/api/oauth/meta/callback`
@@ -53,7 +58,7 @@ export async function GET(req: NextRequest) {
       'connections.meta': { accessToken, accountId, accountName },
     })
 
-    return Response.redirect(`${BASE_URL()}/settings?connected=meta`)
+    return Response.redirect(successRedirect)
   } catch (err) {
     console.error('[meta/callback]', err)
     return Response.redirect(`${BASE_URL()}/settings?error=meta_oauth_failed`)

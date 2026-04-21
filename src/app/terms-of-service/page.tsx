@@ -36,7 +36,7 @@ export default function TermsOfService() {
             <p>
               Marvyn is an AI-powered marketing workspace for businesses. It helps users manage content, SEO, ads,
               analytics, social publishing, and reporting across connected third-party platforms including Google,
-              Meta, LinkedIn, Microsoft Clarity, and DataForSEO.
+              Meta, LinkedIn, Shopify, Microsoft Clarity, and DataForSEO.
             </p>
           </section>
 
@@ -65,13 +65,21 @@ export default function TermsOfService() {
           <section>
             <h2 className="text-xl font-semibold text-white mb-3">4. Connected Third-Party Accounts</h2>
             <p>
-              When you connect Google, Meta, LinkedIn, Clarity, or other supported services, you confirm that you have
-              authority to authorize access for the relevant account or business. You are responsible for your use of
-              those connected accounts and for any content or actions initiated from Marvyn.
+              When you connect Google, Meta, LinkedIn, Shopify, Clarity, or other supported services, you confirm that
+              you have authority to authorize access for the relevant account or business. You are responsible for your
+              use of those connected accounts and for any content or actions initiated from Marvyn.
             </p>
             <p>
               Third-party services operate under their own policies and APIs. Marvyn is not responsible for outages,
               restrictions, permission changes, or policy changes imposed by those platforms.
+            </p>
+            <p>
+              <strong className="text-white font-medium">Shopify merchant data.</strong> When you connect a Shopify
+              store, Marvyn accesses order, product, customer, checkout, discount, and analytics data via the Shopify
+              Admin API solely to generate insights and recommendations within the product. You remain the data
+              controller for your store data. Marvyn acts as a data processor on your behalf. We do not claim
+              ownership of your store data, do not sell it, and do not use it to train AI models. You can revoke
+              access at any time from Settings or directly from your Shopify admin under Apps &amp; sales channels.
             </p>
           </section>
 

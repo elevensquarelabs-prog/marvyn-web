@@ -35,12 +35,12 @@ export function MissionControl({ agentStatus = 'idle', activeTool = null }: { ag
 
   return (
     <aside className="w-[260px] shrink-0 border-l border-[var(--border)] bg-[var(--bg-sidebar)] h-screen overflow-y-auto flex flex-col">
-      <div className="px-4 py-5 border-b border-[var(--border)]">
+      <div className="px-4 py-5 border-b border-[var(--border)] shrink-0">
         <h2 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Mission Control</h2>
       </div>
 
       {/* Agent status */}
-      <div className="px-4 py-3 border-b border-[var(--border)]">
+      <div className="px-4 py-3 border-b border-[var(--border)] shrink-0">
         <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-2">Agent</p>
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${agentStatus === 'running' ? 'bg-[#DA7756] animate-pulse' : 'bg-[#333]'}`} />
@@ -51,7 +51,7 @@ export function MissionControl({ agentStatus = 'idle', activeTool = null }: { ag
       </div>
 
       {/* Knowledge Base */}
-      <div className="px-4 py-3 border-b border-[var(--border)]">
+      <div className="px-4 py-3 border-b border-[var(--border)] shrink-0">
         <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-2">Knowledge Base</p>
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
@@ -80,7 +80,7 @@ export function MissionControl({ agentStatus = 'idle', activeTool = null }: { ag
       </div>
 
       {/* Credits */}
-      <div className="px-4 py-3 border-b border-[var(--border)]">
+      <div className="px-4 py-3 border-b border-[var(--border)] shrink-0">
         <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-2">Credits</p>
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
@@ -102,7 +102,7 @@ export function MissionControl({ agentStatus = 'idle', activeTool = null }: { ag
       </div>
 
       {/* Blog */}
-      <div className="px-4 py-3 border-b border-[var(--border)]">
+      <div className="px-4 py-3 border-b border-[var(--border)] shrink-0">
         <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-2">Blog</p>
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
@@ -117,7 +117,7 @@ export function MissionControl({ agentStatus = 'idle', activeTool = null }: { ag
       </div>
 
       {/* Quick actions */}
-      <div className="px-4 py-3 mt-auto">
+      <div className="px-4 py-3">
         <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-2">Quick Links</p>
         <div className="space-y-1">
           {[

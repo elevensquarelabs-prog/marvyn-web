@@ -46,6 +46,9 @@ interface MetaPage {
   accessToken: string
   hasInstagram: boolean
   instagramAccountId?: string
+  instagramUsername?: string
+  instagramName?: string
+  instagramPictureUrl?: string
 }
 
 interface AdAccount {
@@ -206,7 +209,24 @@ export default function SettingsPage() {
     try {
       const res = await fetch('/api/oauth/meta/pages')
       const data = await res.json()
-      setMetaPages(data.pages || [])
+      const pages = data.pages || []
+      setMetaPages(pages)
+      // Auto-enrich instagram state if the currently selected page has richer data
+      setConnections(prev => {
+        const selectedPageId = prev.facebook?.pageId
+        if (!selectedPageId) return prev
+        const match = pages.find((p: MetaPage) => p.id === selectedPageId)
+        if (!match?.instagramAccountId) return prev
+        return {
+          ...prev,
+          instagram: {
+            ...prev.instagram,
+            accountId: match.instagramAccountId,
+            username: match.instagramUsername ?? prev.instagram?.username ?? '',
+            pictureUrl: match.instagramPictureUrl ?? prev.instagram?.pictureUrl ?? '',
+          },
+        }
+      })
     } finally {
       setLoadingPages(false)
     }
@@ -488,12 +508,16 @@ export default function SettingsPage() {
         pageName: page.name,
         pageAccessToken: page.accessToken,
         instagramAccountId: page.instagramAccountId,
+        instagramUsername: page.instagramUsername,
+        instagramPictureUrl: page.instagramPictureUrl,
       }),
     })
     setConnections(prev => ({
       ...prev,
       facebook: { pageId: page.id, pageName: page.name },
-      ...(page.instagramAccountId ? { instagram: { accountId: page.instagramAccountId } } : {}),
+      ...(page.instagramAccountId ? {
+        instagram: { accountId: page.instagramAccountId, username: page.instagramUsername ?? '', pictureUrl: page.instagramPictureUrl ?? '' },
+      } : {}),
     }))
   }
 
@@ -1174,18 +1198,7 @@ export default function SettingsPage() {
                       )}
                     </div>
 
-                    {connections.facebook?.pageId && !metaPages.length ? (
-                      <div className="flex items-center gap-2 px-3 py-2 bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg">
-                        <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
-                        <span className="text-xs text-white">{connections.facebook.pageName || connections.facebook.pageId}</span>
-                        {connections.instagram?.accountId && (
-                          <span className="text-[10px] text-pink-400 ml-1">+ Instagram</span>
-                        )}
-                        <button onClick={loadMetaPages} disabled={loadingPages} className="ml-auto text-[10px] text-[#555] hover:text-white">
-                          {loadingPages ? '…' : 'Change'}
-                        </button>
-                      </div>
-                    ) : metaPages.length > 0 ? (
+                    {metaPages.length > 0 ? (
                       <div className="relative">
                         <select
                           value={connections.facebook?.pageId || ''}
@@ -1195,7 +1208,7 @@ export default function SettingsPage() {
                           <option value="">Select Facebook page…</option>
                           {metaPages.map(p => (
                             <option key={p.id} value={p.id} className="bg-[#0D0D0D]">
-                              {p.name}{p.hasInstagram ? ' + Instagram' : ''}
+                              {p.name}{p.instagramUsername ? ` (@${p.instagramUsername})` : p.hasInstagram ? ' + Instagram' : ''}
                             </option>
                           ))}
                         </select>
@@ -1204,11 +1217,56 @@ export default function SettingsPage() {
                     ) : null}
 
                     {connections.facebook?.pageId && (
-                      <p className="text-xs text-green-400 flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                        Posting as {connections.facebook.pageName}
-                        {connections.instagram?.accountId && ' · Instagram connected'}
-                      </p>
+                      <div className="rounded-lg border border-[#2A2A2A] overflow-hidden">
+                        {/* Facebook Page row */}
+                        <div className="flex items-center gap-3 px-3 py-2.5 bg-[#0D0D0D]">
+                          <img
+                            src={`https://graph.facebook.com/${connections.facebook.pageId}/picture?type=small`}
+                            alt=""
+                            className="w-8 h-8 rounded-full object-cover shrink-0 bg-[#1877F2]"
+                            onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-white truncate">{connections.facebook.pageName}</p>
+                            <p className="text-[10px] text-[#555]">Facebook Page</p>
+                          </div>
+                          <span className="flex items-center gap-1 text-[10px] text-green-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                            Connected
+                          </span>
+                          <button onClick={loadMetaPages} disabled={loadingPages} className="text-[10px] text-[#555] hover:text-white ml-1">
+                            {loadingPages ? '…' : 'Change'}
+                          </button>
+                        </div>
+
+                        {/* Instagram row */}
+                        {connections.instagram?.accountId && (
+                          <div className="flex items-center gap-3 px-3 py-2.5 bg-[#0D0D0D] border-t border-[#1A1A1A]">
+                            {connections.instagram.pictureUrl ? (
+                              <img
+                                src={connections.instagram.pictureUrl}
+                                alt=""
+                                className="w-8 h-8 rounded-full object-cover shrink-0"
+                                onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                              />
+                            ) : (
+                              <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center" style={{ background: 'linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)' }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-white truncate">
+                                {connections.instagram.username ? `@${connections.instagram.username}` : `ID ${connections.instagram.accountId}`}
+                              </p>
+                              <p className="text-[10px] text-[#555]">Instagram Business</p>
+                            </div>
+                            <span className="flex items-center gap-1 text-[10px] text-pink-400">
+                              <span className="w-1.5 h-1.5 rounded-full bg-pink-400" />
+                              Connected
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}

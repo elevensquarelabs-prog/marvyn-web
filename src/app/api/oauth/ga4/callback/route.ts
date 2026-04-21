@@ -8,11 +8,16 @@ const BASE_URL = () => (process.env.NEXTAUTH_URL || '').trim()
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const code = searchParams.get('code')
-  const state = searchParams.get('state')
+  const rawState = decodeURIComponent(searchParams.get('state') ?? '')
 
-  if (!code || !state) {
+  if (!code || !rawState) {
     return Response.redirect(`${BASE_URL()}/settings?error=ga4_oauth_failed&section=connections`)
   }
+
+  const [state, stateFrom] = rawState.split('|')
+  const successRedirect = stateFrom === 'onboarding'
+    ? `${BASE_URL()}/onboarding/connected?platform=ga4&status=success`
+    : `${BASE_URL()}/settings?connected=ga4&section=connections`
 
   try {
     const redirectUri = `${BASE_URL()}/api/oauth/ga4/callback`
@@ -47,7 +52,7 @@ export async function GET(req: NextRequest) {
       }
     )
 
-    return Response.redirect(`${BASE_URL()}/settings?connected=ga4&section=connections`)
+    return Response.redirect(successRedirect)
   } catch (err) {
     console.error('[GA4 callback] OAuth exchange failed:', err)
     return Response.redirect(`${BASE_URL()}/settings?error=ga4_oauth_failed&section=connections`)

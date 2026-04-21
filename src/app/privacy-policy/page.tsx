@@ -184,6 +184,30 @@ export default function PrivacyPolicy() {
                 </ul>
               </div>
               <div>
+                <h3 className="text-white font-medium mb-2">Shopify</h3>
+                <p className="mb-2">When you connect your Shopify store to Marvyn, we access the following data via the Shopify Admin API using these scopes:</p>
+                <div className="flex flex-wrap gap-2 mb-3 text-xs">
+                  {['read_orders', 'read_products', 'read_customers', 'read_checkouts', 'read_discounts', 'read_price_rules', 'read_analytics'].map(scope => (
+                    <span key={scope} className="px-2 py-1 rounded border border-white/10 bg-white/5 text-[#888]">{scope}</span>
+                  ))}
+                </div>
+                <ul className="list-disc list-inside space-y-2">
+                  <li><strong className="text-white font-medium">Order data:</strong> Revenue, order count, average order value, refund rates, and purchase trends.</li>
+                  <li><strong className="text-white font-medium">Product data:</strong> Top products by revenue and sales volume.</li>
+                  <li><strong className="text-white font-medium">Customer data:</strong> New vs returning customer ratios and geographic distribution. We access aggregated metrics only — individual customer names, emails, and personal identifiers are never stored or used.</li>
+                  <li><strong className="text-white font-medium">Checkout data:</strong> Abandoned checkout rates and estimated revenue lost.</li>
+                  <li><strong className="text-white font-medium">Discount data:</strong> Discount codes, price rules, and per-code performance including order counts and revenue contribution.</li>
+                  <li><strong className="text-white font-medium">Analytics data:</strong> Traffic source and UTM attribution as reported by Shopify.</li>
+                </ul>
+                <p className="mt-3">
+                  Shopify data is used solely to generate marketing insights and recommendations within Marvyn. We do not
+                  share, sell, or use your store data to train AI models or for any purpose beyond delivering the product
+                  features you have authorised. You can disconnect your Shopify store at any time from Settings, which
+                  removes Marvyn&apos;s access token. You may also revoke access directly from your Shopify admin under
+                  Apps &amp; sales channels.
+                </p>
+              </div>
+              <div>
                 <h3 className="text-white font-medium mb-2">Microsoft Clarity</h3>
                 <p>
                   If you connect Clarity, Marvyn reads project-level behavioral analytics including sessions, scroll depth,

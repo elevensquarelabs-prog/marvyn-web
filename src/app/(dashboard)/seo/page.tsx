@@ -662,17 +662,17 @@ Provide domain-specific steps. Include exact code snippets or CMS instructions w
 
         {/* ── AI Actions ── */}
         {activeTab === 'ai-actions' && (
-          <div className="space-y-3 max-w-3xl">
+          <div className="space-y-3">
             {audit.aiActions?.length === 0 && (
               <p className="text-sm text-[#555]">No AI recommendations available. Try re-running the audit.</p>
             )}
             {audit.aiActions?.map((action, idx) => {
               const effortColor: Record<string, string> = { Low: 'text-green-400', Medium: 'text-yellow-400', High: 'text-red-400' }
               const typeColor: Record<string, string> = {
-                technical: 'bg-purple-900/20 text-purple-300',
-                content: 'bg-blue-900/20 text-blue-300',
-                keyword: 'bg-orange-900/20 text-orange-300',
-                competitor: 'bg-pink-900/20 text-pink-300',
+                technical: 'bg-purple-100 text-purple-700',
+                content: 'bg-blue-100 text-blue-700',
+                keyword: 'bg-orange-100 text-orange-700',
+                competitor: 'bg-pink-100 text-pink-700',
               }
               return (
                 <div key={idx} className={`bg-[#111] border rounded-xl p-4 transition-opacity ${action.done ? 'opacity-50 border-[#1A1A1A]' : 'border-[#1E1E1E]'}`}>

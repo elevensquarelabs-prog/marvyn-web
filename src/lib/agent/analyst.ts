@@ -37,6 +37,7 @@ function getCandidateAgents(inferredDomains: string[]): AgentName[] {
   if (inferredDomains.includes('ads')) agents.push('ads')
   if (inferredDomains.includes('seo')) agents.push('seo')
   if (inferredDomains.includes('content')) agents.push('content')
+  if (inferredDomains.includes('ecommerce')) agents.push('ads', 'content', 'strategist')
   if (inferredDomains.includes('strategy')) {
     // For strategy, load all agent histories as Strategist needs them
     return ['ads', 'seo', 'content', 'strategist']
@@ -112,6 +113,27 @@ async function fetchBundle(
         if (brand.status === 'fulfilled') bundle.brand = brand.value
         if (meta.status === 'fulfilled') bundle.socialPerformance = meta.value
         if (analytics.status === 'fulfilled') bundle.ga4Organic = analytics.value
+        break
+      }
+
+      case 'ecommerce': {
+        const fetches = [
+          executeTool('get_brand_context', {}, context),
+          executeTool('get_shopify_data', {}, context),
+        ]
+        const keys = ['brand', 'ecommerce']
+        if (context.connections.meta?.accountId) {
+          fetches.push(executeTool('get_meta_ads_performance', {}, context))
+          keys.push('metaAds')
+        }
+        if (context.connections.google?.customerId) {
+          fetches.push(executeTool('get_google_ads_performance', {}, context))
+          keys.push('googleAds')
+        }
+        const results = await Promise.allSettled(fetches)
+        results.forEach((r, i) => {
+          if (r.status === 'fulfilled') bundle[keys[i]] = r.value
+        })
         break
       }
 

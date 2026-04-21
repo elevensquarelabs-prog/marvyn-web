@@ -56,7 +56,11 @@ describe('buildCMOReviewPrompt', () => {
       ...minimalBoard,
       taskList: [{ ...minimalBoard.taskList[0], status: 'done' }],
       agentAttempts: {
-        seo: [{ summary: 'SEO is weak', findings: [], evidence: [], recommendations: [] }],
+        seo: [{
+          summary: 'SEO is weak', findings: [], evidence: [], recommendations: [],
+          diagnosis: { rootCause: 'Missing meta descriptions.', confidence: 0.8, supportingEvidence: [] },
+          priorRecommendationReview: { checked: true, pendingUnacted: [], notableOutcomes: [] },
+        }],
       },
     }
     const prompt = buildCMOReviewPrompt(boardWithOutput, 'cmo skill')

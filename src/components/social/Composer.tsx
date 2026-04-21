@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Modal } from '@/components/shared/Modal'
 import { Button } from '@/components/shared/Button'
+import { getComposerValidationError, requiresMedia } from './composer-utils'
 
 const PLATFORM_LIMITS: Record<string, number> = {
   linkedin: 3000,
@@ -58,6 +59,7 @@ export function Composer({ open, onClose, onSaved }: ComposerProps) {
 
   const limit = PLATFORM_LIMITS[platform]
   const charColor = content.length > limit ? 'text-red-400' : content.length > limit * 0.9 ? 'text-yellow-400' : 'text-[#555]'
+  const validationError = getComposerValidationError(platform, content, media?.uploadedUrl)
 
   const handleFile = useCallback(async (file: File) => {
     const isVideo = file.type.startsWith('video/')
@@ -123,6 +125,7 @@ export function Composer({ open, onClose, onSaved }: ComposerProps) {
           status,
           scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
           mediaKey: media?.uploadedKey,
+          mediaType: media?.file.type,
           mediaUrl: media?.uploadedUrl,
         }),
       })
@@ -191,7 +194,9 @@ export function Composer({ open, onClose, onSaved }: ComposerProps) {
 
           {/* Media upload */}
           <div>
-            <label className="text-xs text-[#555] block mb-2">Media (optional)</label>
+            <label className="text-xs text-[#555] block mb-2">
+              Media {requiresMedia(platform) ? <span className="text-[#DA7756]">(required for Instagram)</span> : <span>(optional)</span>}
+            </label>
             {!media ? (
               <div
                 onDragOver={e => { e.preventDefault(); setDragOver(true) }}
@@ -239,11 +244,17 @@ export function Composer({ open, onClose, onSaved }: ComposerProps) {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/gif,video/mp4,video/quicktime"
+              accept={platform === 'instagram' ? 'image/jpeg,image/png,video/mp4' : 'image/jpeg,image/png,image/gif,video/mp4,video/quicktime'}
               className="hidden"
               onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]) }}
             />
           </div>
+
+          {validationError && (
+            <p className="rounded-lg border border-[#4A2B24] bg-[#241310] px-3 py-2 text-xs text-[#E6A18C]">
+              {validationError}
+            </p>
+          )}
 
           {/* Content textarea with char counter */}
           <div>
@@ -289,9 +300,11 @@ export function Composer({ open, onClose, onSaved }: ComposerProps) {
             <Button variant="ghost" size="sm" onClick={handleClose}>Cancel</Button>
             <Button variant="secondary" size="sm" onClick={() => save('draft')} loading={saving}>Save Draft</Button>
             {scheduledAt && (
-              <Button variant="secondary" size="sm" onClick={() => save('scheduled')} loading={saving}>Schedule</Button>
+              <Button variant="secondary" size="sm" onClick={() => save('scheduled')} loading={saving} disabled={Boolean(validationError)}>
+                Schedule
+              </Button>
             )}
-            <Button size="sm" onClick={() => save('pending_approval')} loading={saving} disabled={!content.trim()}>
+            <Button size="sm" onClick={() => save('pending_approval')} loading={saving} disabled={Boolean(validationError)}>
               Add to Queue
             </Button>
           </div>

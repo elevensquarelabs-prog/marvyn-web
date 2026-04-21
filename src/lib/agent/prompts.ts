@@ -74,10 +74,10 @@ function goalBlock(board: ContextBoard): string {
  * before building the prompt — reduces token cost significantly.
  */
 const AGENT_CONTEXT_KEYS: Record<AgentName, string[]> = {
-  ads: ['brand', 'metaAds', 'googleAds', 'ga4Conversions'],
-  seo: ['brand', 'seoAudit', 'gsc'],
-  content: ['brand', 'ga4Organic', 'calendar', 'competitors', 'seoFindings', 'socialPerformance'],
-  strategist: ['brand', 'ga4Organic', 'seoAudit', 'calendar', 'upstreamOutputs', 'upstreamHistories'],
+  ads: ['brand', 'metaAds', 'googleAds', 'ga4Conversions', 'ecommerce'],
+  seo: ['brand', 'seoAudit', 'gsc', 'ecommerce'],
+  content: ['brand', 'ga4Organic', 'calendar', 'competitors', 'seoFindings', 'socialPerformance', 'ecommerce'],
+  strategist: ['brand', 'ga4Organic', 'seoAudit', 'calendar', 'upstreamOutputs', 'upstreamHistories', 'ecommerce'],
 }
 
 /**
@@ -146,11 +146,22 @@ ${marketingContextBlock(board) || brandBlock(board)}
 
 ## Output Rules
 - Only recommend what the data in contextBundle supports. No speculation.
+- Think in this order: (1) review prior recommendations, (2) diagnose root cause, (3) then recommend.
 - Return a single valid JSON object matching this schema exactly — no prose outside JSON:
 {
   "summary": "string",
   "findings": ["string"],
   "evidence": ["string"],
+  "priorRecommendationReview": {
+    "checked": true,
+    "pendingUnacted": ["recommendation text from memory that has not been acted on"],
+    "notableOutcomes": ["recommendation that was acted on + what changed in the data"]
+  },
+  "diagnosis": {
+    "rootCause": "The likely reason [observed problem] is happening is [causal theory] because [evidence].",
+    "confidence": 0.0,
+    "supportingEvidence": ["finding or data point that backs this up"]
+  },
   "recommendations": [
     {
       "id": "uuid-here",
@@ -163,20 +174,22 @@ ${marketingContextBlock(board) || brandBlock(board)}
     }
   ]
 }
+- priorRecommendationReview.checked must always be true. If no prior history, set pendingUnacted and notableOutcomes to [].
+- diagnosis.rootCause must be written before recommendations. State what you think is CAUSING the problem in one sentence — commit to a theory. If the data is insufficient, say so and set confidence below 0.5.
 - Each recommendation.id must be a unique UUID (use crypto.randomUUID() pattern).
 - Each recommendation.sourceKeys must reference at least one key from the context data you received.
-- If confidence < 0.4, include an empty recommendations array and explain why in summary.
+- If diagnosis.confidence < 0.4, include an empty recommendations array and explain why in summary.
 - Set requiresHumanDecision: true if the action needs budget approval or irreversible change.`
 
   const historySection = history.length
-    ? `\n## Your Previous Recommendations\n${history
+    ? `\n## Your Previous Recommendations (REVIEW THESE FIRST)\n${history
         .slice(0, 5)
         .map(
           (h) =>
             `- [${h.timestamp.slice(0, 10)}] ${h.recommendation} (status: ${h.status}${h.outcome ? `, outcome: ${h.outcome}` : ''})`
         )
-        .join('\n')}\nCompare these to current data. Have prior recommendations been acted on? Has the metric improved?`
-    : ''
+        .join('\n')}\nYou MUST populate priorRecommendationReview before anything else. Identify which recommendations are still unacted (status=open with no outcome). If a prior recommendation is still relevant and unacted, surface it first in your summary — e.g. "Last time I flagged [X] — that's still open. Here's why it still matters..." Compare current data to the metricSnapshot at time of recommendation: has the metric improved, worsened, or stayed flat?`
+    : '\n## Prior Recommendations\nNo prior history for this user. Set priorRecommendationReview.checked = true with empty arrays.'
 
   const correctionSection = lastCorrection
     ? `\n## Correction Required (Attempt ${lastCorrection.attempt})\nCMO rejected your previous output for: ${lastCorrection.issues.join(', ')}\nNote: ${lastCorrection.note}\nFix these issues in your new response.`

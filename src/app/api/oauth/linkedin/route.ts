@@ -2,9 +2,12 @@ import { NextRequest } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const from = new URL(req.url).searchParams.get('from')
+  const state = from === 'onboarding' ? `${session.user.id}|onboarding` : session.user.id
 
   const clientId = (process.env.LINKEDIN_CLIENT_ID || '').trim()
   const redirectUri = `${process.env.NEXTAUTH_URL?.trim()}/api/oauth/linkedin/callback`
@@ -21,7 +24,7 @@ export async function GET(_req: NextRequest) {
     'r_organization_social',
     'w_organization_social',
   ].join(' '))
-  const authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&state=${session.user.id}&prompt=consent`
+  const authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&state=${state}&prompt=consent`
 
   return Response.json({ authUrl })
 }

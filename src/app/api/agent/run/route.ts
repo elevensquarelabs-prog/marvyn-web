@@ -214,18 +214,42 @@ function buildFinalResponse(board: ContextBoard): string {
     if (!output) continue
 
     const agentLabel = task.agent.charAt(0).toUpperCase() + task.agent.slice(1)
+
+    // Prior recommendation follow-up — surface before anything else
+    const prior = output.priorRecommendationReview
+    if (prior?.pendingUnacted?.length) {
+      const topUnacted = prior.pendingUnacted[0]
+      sections.push(`> **Still open from last time:** ${topUnacted}`)
+    }
+
     sections.push(`## ${agentLabel}\n\n${output.summary}`)
+
+    // Diagnosis — root cause before recommendations
+    if (output.diagnosis?.rootCause) {
+      const diagConf = output.diagnosis.confidence ?? 1
+      const confLabel = diagConf >= 0.7 ? '' : diagConf >= 0.5 ? ' *(moderate confidence)*' : ' *(low confidence — limited data)*'
+      sections.push(`**Root cause:**${confLabel} ${output.diagnosis.rootCause}`)
+    }
 
     if (output.findings.length) {
       sections.push(`**Findings:**\n${output.findings.map((f) => `- ${f}`).join('\n')}`)
     }
 
     if (output.recommendations.length) {
-      sections.push(
-        `**Recommendations:**\n${output.recommendations
-          .map((r) => `- ${r.action}${r.requiresHumanDecision ? ' *(requires your decision)*' : ''}`)
-          .join('\n')}`
-      )
+      const recLines = output.recommendations.map((r) => {
+        let line = `- ${r.action}`
+        if (r.requiresHumanDecision) line += ' *(requires your decision)*'
+        if (r.confidence < 0.6) {
+          line += `\n  > I'd want more data before acting on this — confidence is ${Math.round(r.confidence * 100)}%.`
+        }
+        return line
+      })
+      sections.push(`**Recommendations:**\n${recLines.join('\n')}`)
+    }
+
+    // Notable outcomes from memory — what changed after prior recs were acted on
+    if (prior?.notableOutcomes?.length) {
+      sections.push(`**From last session:** ${prior.notableOutcomes.join(' · ')}`)
     }
   }
 
