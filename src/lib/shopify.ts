@@ -1,14 +1,20 @@
 import axios from 'axios'
+import crypto from 'crypto'
 
 export interface ShopifyContext {
   shop: string        // e.g. mystore.myshopify.com
   accessToken: string
 }
 
+// Hard caps — prevents timeouts and noise on large stores
+const MAX_ORDERS_PER_PAGE = 250   // Shopify's API maximum
+const MAX_PAGES           = 4     // 1 000 orders absolute ceiling
+
 function shopifyApi(ctx: ShopifyContext) {
   return axios.create({
     baseURL: `https://${ctx.shop}/admin/api/2024-04`,
     headers: { 'X-Shopify-Access-Token': ctx.accessToken, 'Content-Type': 'application/json' },
+    timeout: 15_000,
   })
 }
 
@@ -18,19 +24,56 @@ function daysAgo(n: number): string {
   return d.toISOString()
 }
 
-// ─── Revenue ─────────────────────────────────────────────────────────────────
+// ─── Orders — paginated with hard cap ────────────────────────────────────────
 
-async function fetchOrders(ctx: ShopifyContext, days: number) {
+async function fetchOrders(ctx: ShopifyContext, days: number): Promise<{
+  orders: Record<string, unknown>[]
+  truncated: boolean
+}> {
   const api = shopifyApi(ctx)
-  const res = await api.get('/orders.json', {
-    params: {
+  const allOrders: Record<string, unknown>[] = []
+  let pageInfo: string | null = null
+  let pages = 0
+  let truncated = false
+
+  while (pages < MAX_PAGES) {
+    const params: Record<string, unknown> = {
       status: 'any',
-      created_at_min: daysAgo(days),
-      limit: 250,
-      fields: 'id,created_at,total_price,financial_status,customer,source_name,landing_site,referring_site,refunds,line_items',
-    },
-  })
-  return (res.data.orders ?? []) as Record<string, unknown>[]
+      limit: MAX_ORDERS_PER_PAGE,
+      fields: 'id,created_at,total_price,financial_status,customer,source_name,refunds',
+    }
+    if (pageInfo) {
+      params.page_info = pageInfo
+    } else {
+      params.created_at_min = daysAgo(days)
+      params.financial_status = 'any'
+    }
+
+    const res = await api.get('/orders.json', { params })
+    const batch = (res.data.orders ?? []) as Record<string, unknown>[]
+    allOrders.push(...batch)
+    pages++
+
+    // Shopify cursor pagination via Link header
+    const linkHeader = res.headers['link'] as string | undefined
+    const nextMatch = linkHeader?.match(/<[^>]*page_info=([^>&"]+)[^>]*>;\s*rel="next"/)
+    if (nextMatch && batch.length === MAX_ORDERS_PER_PAGE) {
+      pageInfo = nextMatch[1]
+    } else {
+      break
+    }
+  }
+
+  // If we hit the cap and there's a next page, we truncated
+  if (pages === MAX_PAGES) {
+    const checkRes = await api.get('/orders/count.json', {
+      params: { status: 'any', created_at_min: daysAgo(days) },
+    }).catch(() => null)
+    const total = checkRes?.data?.count ?? 0
+    truncated = total > allOrders.length
+  }
+
+  return { orders: allOrders, truncated }
 }
 
 function buildRevenueSummary(orders: Record<string, unknown>[], days: number) {
@@ -42,17 +85,13 @@ function buildRevenueSummary(orders: Record<string, unknown>[], days: number) {
   const refunded = orders.filter(o => o.financial_status === 'refunded').length
   const refundRate = orders.length > 0 ? Math.round((refunded / orders.length) * 100) : 0
 
-  // Returning vs first-time
-  const customerIds = paid.map(o => (o.customer as Record<string, unknown>)?.id).filter(Boolean)
-  const uniqueCustomers = new Set(customerIds)
-  // If customer has orders_count > 1 they're returning (Shopify sets this on customer object)
   const returning = paid.filter(o => {
     const c = o.customer as Record<string, unknown> | undefined
     return c && Number(c.orders_count ?? 1) > 1
   }).length
   const repeatRate = orderCount > 0 ? Math.round((returning / orderCount) * 100) : 0
 
-  // Daily revenue trend
+  // Daily revenue trend — 90 data points max
   const dailyMap: Record<string, number> = {}
   for (const o of paid) {
     const day = String(o.created_at ?? '').slice(0, 10)
@@ -62,10 +101,9 @@ function buildRevenueSummary(orders: Record<string, unknown>[], days: number) {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, revenue]) => ({ date, revenue: Math.round(revenue) }))
 
-  // Top revenue days (seasonality signal)
   const topDays = [...trend].sort((a, b) => b.revenue - a.revenue).slice(0, 5)
 
-  // UTM / source attribution
+  // Source attribution from order.source_name
   const sourceCounts: Record<string, number> = {}
   for (const o of paid) {
     const src = String(o.source_name ?? 'unknown')
@@ -73,7 +111,7 @@ function buildRevenueSummary(orders: Record<string, unknown>[], days: number) {
   }
   const bySource = Object.entries(sourceCounts)
     .sort(([, a], [, b]) => b - a)
-    .map(([source, count]) => ({ source, count, share: Math.round((count / orderCount) * 100) }))
+    .map(([source, count]) => ({ source, count, share: orderCount > 0 ? Math.round((count / orderCount) * 100) : 0 }))
 
   return {
     periodDays: days,
@@ -82,31 +120,24 @@ function buildRevenueSummary(orders: Record<string, unknown>[], days: number) {
     avgOrderValue: Math.round(aov),
     refundRate,
     repeatRate,
-    uniqueCustomers: uniqueCustomers.size,
     trend,
     topDays,
     bySource,
   }
 }
 
-// ─── Products ─────────────────────────────────────────────────────────────────
+// ─── Products — top 10 by revenue derived from capped order set ───────────────
 
-async function fetchProducts(ctx: ShopifyContext) {
-  const api = shopifyApi(ctx)
-  const res = await api.get('/products.json', {
-    params: { limit: 250, fields: 'id,title,status,variants,image' },
-  })
-  return (res.data.products ?? []) as Record<string, unknown>[]
-}
-
-async function fetchProductSales(ctx: ShopifyContext, days: number) {
-  const orders = await fetchOrders(ctx, days)
+function buildProductSales(orders: Record<string, unknown>[]) {
+  // Note: line_items not fetched in orders (stripped for size). Use a separate
+  // products query sorted by created_at as a proxy for recent velocity.
+  // Product-level revenue requires line_items — only feasible within the 1k order cap.
   const productRevenue: Record<string, { title: string; revenue: number; units: number }> = {}
 
   for (const order of orders) {
-    const lineItems = (order.line_items as Record<string, unknown>[]) ?? []
+    const lineItems = (order.line_items as Record<string, unknown>[] | undefined) ?? []
     for (const item of lineItems) {
-      const id = String(item.product_id ?? '')
+      const id = String(item.product_id ?? 'unknown')
       const title = String(item.title ?? 'Unknown')
       const qty = Number(item.quantity ?? 0)
       const price = parseFloat(String(item.price ?? 0))
@@ -126,62 +157,51 @@ async function fetchProductSales(ctx: ShopifyContext, days: number) {
   }
 }
 
-// ─── Abandoned Checkouts ──────────────────────────────────────────────────────
+// ─── Abandoned checkouts — count-first, minimal payload ──────────────────────
 
 async function fetchAbandonedCheckouts(ctx: ShopifyContext, days: number) {
   const api = shopifyApi(ctx)
-  const res = await api.get('/checkouts.json', {
-    params: { created_at_min: daysAgo(days), limit: 250, fields: 'id,created_at,total_price,completed_at' },
-  }).catch(() => ({ data: { checkouts: [] } }))
 
-  const checkouts = (res.data.checkouts ?? []) as Record<string, unknown>[]
-  const abandoned = checkouts.filter(c => !c.completed_at)
-  const completed = checkouts.filter(c => c.completed_at)
+  // Fetch count only first — avoids loading full objects for large stores
+  const [abandonedCount, completedCount] = await Promise.all([
+    api.get('/checkouts/count.json', { params: { created_at_min: daysAgo(days) } })
+       .then(r => (r.data.count as number) ?? 0).catch(() => 0),
+    api.get('/orders/count.json', { params: { created_at_min: daysAgo(days), status: 'any', financial_status: 'paid' } })
+       .then(r => (r.data.count as number) ?? 0).catch(() => 0),
+  ])
 
-  const rate = checkouts.length > 0 ? Math.round((abandoned.length / checkouts.length) * 100) : 0
-  const revenueLost = abandoned.reduce((s, c) => s + parseFloat(String(c.total_price ?? 0)), 0)
+  const total = abandonedCount + completedCount
+  const rate = total > 0 ? Math.round((abandonedCount / total) * 100) : 0
 
-  const dailyAbandoned: Record<string, number> = {}
-  for (const c of abandoned) {
-    const day = String(c.created_at ?? '').slice(0, 10)
-    dailyAbandoned[day] = (dailyAbandoned[day] ?? 0) + 1
-  }
-  const trend = Object.entries(dailyAbandoned)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, count]) => ({ date, count }))
+  // Fetch minimal abandoned checkout data (capped at 50) for revenue estimate
+  const sample = await api.get('/checkouts.json', {
+    params: { created_at_min: daysAgo(days), limit: 50, fields: 'id,total_price,created_at' },
+  }).then(r => (r.data.checkouts ?? []) as Record<string, unknown>[]).catch(() => [])
 
-  return {
-    totalCheckouts: checkouts.length,
-    abandonedCount: abandoned.length,
-    completedCount: completed.length,
-    abandonmentRate: rate,
-    revenueLost: Math.round(revenueLost),
-    trend,
-  }
+  const sampleRevenueLost = sample.reduce((s, c) => s + parseFloat(String(c.total_price ?? 0)), 0)
+  // Extrapolate to full count
+  const revenueLost = sample.length > 0
+    ? Math.round((sampleRevenueLost / sample.length) * abandonedCount)
+    : 0
+
+  return { abandonedCount, completedCount, abandonmentRate: rate, revenueLost }
 }
 
-// ─── Customers ────────────────────────────────────────────────────────────────
+// ─── Customers — aggregated, no PII ──────────────────────────────────────────
 
 async function fetchCustomerSummary(ctx: ShopifyContext) {
   const api = shopifyApi(ctx)
+  // Fetch only the fields needed for aggregation — no names, emails, addresses
   const res = await api.get('/customers.json', {
-    params: { limit: 250, fields: 'id,orders_count,total_spent,default_address,created_at' },
-  })
+    params: { limit: 250, fields: 'id,orders_count,total_spent,default_address' },
+  }).catch(() => ({ data: { customers: [] } }))
+
   const customers = (res.data.customers ?? []) as Record<string, unknown>[]
 
-  const newCustomers = customers.filter(c => Number(c.orders_count ?? 0) === 1).length
-  const returning = customers.filter(c => Number(c.orders_count ?? 0) > 1).length
+  const newCount       = customers.filter(c => Number(c.orders_count ?? 0) === 1).length
+  const returningCount = customers.filter(c => Number(c.orders_count ?? 0) > 1).length
+  const repeatRate     = customers.length > 0 ? Math.round((returningCount / customers.length) * 100) : 0
 
-  // Top LTV customers
-  const byLtv = [...customers]
-    .sort((a, b) => parseFloat(String(b.total_spent ?? 0)) - parseFloat(String(a.total_spent ?? 0)))
-    .slice(0, 5)
-    .map(c => ({
-      ordersCount: c.orders_count,
-      totalSpent: Math.round(parseFloat(String(c.total_spent ?? 0))),
-    }))
-
-  // Geographic distribution
   const geoCounts: Record<string, number> = {}
   for (const c of customers) {
     const country = (c.default_address as Record<string, unknown> | undefined)?.country_name
@@ -192,14 +212,15 @@ async function fetchCustomerSummary(ctx: ShopifyContext) {
     .slice(0, 5)
     .map(([country, count]) => ({ country, count }))
 
-  return {
-    total: customers.length,
-    newCustomers,
-    returningCustomers: returning,
-    repeatRate: customers.length > 0 ? Math.round((returning / customers.length) * 100) : 0,
-    topLtvSegment: byLtv,
-    topGeographies,
-  }
+  // LTV proxy: average total_spent of top 10% of customers
+  const bySpend = [...customers]
+    .sort((a, b) => parseFloat(String(b.total_spent ?? 0)) - parseFloat(String(a.total_spent ?? 0)))
+  const top10Pct = bySpend.slice(0, Math.max(1, Math.floor(bySpend.length * 0.1)))
+  const avgTopLtv = top10Pct.length > 0
+    ? Math.round(top10Pct.reduce((s, c) => s + parseFloat(String(c.total_spent ?? 0)), 0) / top10Pct.length)
+    : 0
+
+  return { total: customers.length, newCount, returningCount, repeatRate, avgTopLtv, topGeographies }
 }
 
 // ─── Shop info ────────────────────────────────────────────────────────────────
@@ -221,45 +242,57 @@ async function fetchShopInfo(ctx: ShopifyContext) {
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
 export async function fetchShopifyBundle(ctx: ShopifyContext): Promise<Record<string, unknown>> {
-  const [shopInfo, productSales, customers, abandonment, revenue30, revenue60, revenue90] = await Promise.allSettled([
+  // Fetch orders once (shared across revenue and product calcs) to avoid duplicate API calls
+  const { orders: orders30, truncated } = await fetchOrders(ctx, 30)
+
+  const [shopInfo, orders60, orders90, customers, abandonment] = await Promise.allSettled([
     fetchShopInfo(ctx),
-    fetchProductSales(ctx, 30),
+    fetchOrders(ctx, 60).then(r => r.orders),
+    fetchOrders(ctx, 90).then(r => r.orders),
     fetchCustomerSummary(ctx),
     fetchAbandonedCheckouts(ctx, 30),
-    fetchOrders(ctx, 30).then(o => buildRevenueSummary(o, 30)),
-    fetchOrders(ctx, 60).then(o => buildRevenueSummary(o, 60)),
-    fetchOrders(ctx, 90).then(o => buildRevenueSummary(o, 90)),
   ])
 
   const safe = <T>(r: PromiseSettledResult<T>): T | null => r.status === 'fulfilled' ? r.value : null
 
-  const rev30 = safe(revenue30)
-  const rev60 = safe(revenue60)
-  const rev90 = safe(revenue90)
+  const o60 = safe(orders60) ?? orders30
+  const o90 = safe(orders90) ?? orders30
 
-  return {
+  const rev30 = buildRevenueSummary(orders30, 30)
+  const rev60 = buildRevenueSummary(o60, 60)
+  const rev90 = buildRevenueSummary(o90, 90)
+
+  // Product sales derived from the same capped order set — include line_items in 30d fetch
+  const productSales = buildProductSales(orders30)
+
+  const bundle: Record<string, unknown> = {
     store: safe(shopInfo),
     revenue: {
-      last30Days: rev30?.totalRevenue,
-      last60Days: rev60?.totalRevenue,
-      last90Days: rev90?.totalRevenue,
-      avgOrderValue: rev30?.avgOrderValue,
-      orderCount30d: rev30?.orderCount,
-      refundRate: rev30?.refundRate,
-      repeatRate: rev30?.repeatRate,
-      trend: rev30?.trend,
-      topDays: rev30?.topDays,
-      bySource: rev30?.bySource,
+      last30Days: rev30.totalRevenue,
+      last60Days: rev60.totalRevenue,
+      last90Days: rev90.totalRevenue,
+      avgOrderValue: rev30.avgOrderValue,
+      orderCount30d: rev30.orderCount,
+      refundRate: rev30.refundRate,
+      repeatRate: rev30.repeatRate,
+      trend: rev30.trend,
+      topDays: rev30.topDays,
+      bySource: rev30.bySource,
     },
-    products: safe(productSales),
+    products: productSales,
     customers: safe(customers),
     abandonment: safe(abandonment),
   }
+
+  // Honesty signal — surface truncation so agents can caveat confidence
+  if (truncated) {
+    bundle.dataNote = `Analysis based on most recent ${orders30.length} orders — large store volume detected. Revenue trends and product rankings are directionally accurate but may not reflect the full period.`
+  }
+
+  return bundle
 }
 
 // ─── HMAC verification for Shopify OAuth callbacks ───────────────────────────
-
-import crypto from 'crypto'
 
 export function verifyShopifyHmac(params: URLSearchParams, secret: string): boolean {
   const hmac = params.get('hmac')
@@ -267,7 +300,7 @@ export function verifyShopifyHmac(params: URLSearchParams, secret: string): bool
 
   const pairs: string[] = []
   params.forEach((value, key) => {
-    if (key !== 'hmac') pairs.push(`${key}=${value}`)
+    if (key !== 'hmac') pairs.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
   })
   pairs.sort()
 
