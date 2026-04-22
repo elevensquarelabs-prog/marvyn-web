@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose'
 
-export type AlertType = 'weekly_digest' | 'weekly_brief' | 'traffic_drop' | 'content_gap' | 'budget_alert'
+export type AlertType = 'weekly_digest' | 'weekly_brief' | 'traffic_drop' | 'content_gap' | 'budget_alert' | 'strategy_pulse'
 export type AlertSeverity = 'info' | 'warning' | 'critical'
 
 export interface IAlert extends Document {
@@ -21,7 +21,7 @@ const AlertSchema = new Schema<IAlert>({
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   type: {
     type: String,
-    enum: ['weekly_digest', 'weekly_brief', 'traffic_drop', 'content_gap', 'budget_alert'],
+    enum: ['weekly_digest', 'weekly_brief', 'traffic_drop', 'content_gap', 'budget_alert', 'strategy_pulse'],
     required: true,
   },
   severity: { type: String, enum: ['info', 'warning', 'critical'], default: 'info' },

@@ -107,7 +107,7 @@ function formatContextBundle(bundle: Record<string, unknown>, agent: AgentName):
     }
   }
   const full = JSON.stringify(expanded, null, 2)
-  const MAX = 12_000
+  const MAX = 8_000
   if (full.length <= MAX) return full
   return full.slice(0, MAX) + '\n\n... [context truncated — data above is a representative sample]'
 }
@@ -306,13 +306,20 @@ Schema for each decision:
     .map((task) => {
       const attempts = board.agentAttempts[task.agent] ?? []
       const corrections = board.correctionHistory[task.agent] ?? []
+      const latestOutput = attempts.at(-1) ?? null
+      // Truncate to avoid review prompts exceeding model context
+      const MAX_OUTPUT_CHARS = 3_000
+      const rawOutput = JSON.stringify(latestOutput, null, 2)
+      const truncatedOutput = rawOutput.length > MAX_OUTPUT_CHARS
+        ? rawOutput.slice(0, MAX_OUTPUT_CHARS) + '\n... [output truncated]'
+        : rawOutput
       return `### ${task.agent.toUpperCase()}
 Task: ${task.task}
 Success criteria: ${task.successCriteria ?? 'not specified'}
 Correction history: ${corrections.length} prior correction(s)
 
 Latest output (attempt ${attempts.length}):
-${JSON.stringify(attempts.at(-1) ?? null, null, 2)}
+${truncatedOutput}
 
 ${corrections.length > 0 ? `Previous corrections:\n${JSON.stringify(corrections, null, 2)}` : ''}`
     })
@@ -343,4 +350,70 @@ export function loadAgentSkills(agent: AgentName): string {
 
 export function loadCMOSkill(): string {
   return loadSkill('cmo-overview.md')
+}
+
+/**
+ * Contract C — final streaming synthesis.
+ * Takes all completed agent outputs and produces a natural language response
+ * the user actually wants to read. Called with llmStream, not llmJson.
+ */
+export function buildSynthesisPrompt(board: ContextBoard): PromptPair {
+  const doneTasks = board.taskList.filter((t) => t.status === 'done')
+
+  const agentSections = doneTasks
+    .map((task) => {
+      const output = board.agentAttempts[task.agent]?.at(-1)
+      if (!output) return ''
+      const conf = output.diagnosis?.confidence ?? 1
+      const confNote = conf < 0.5 ? ' *(low confidence — limited data)*' : conf < 0.7 ? ' *(moderate confidence)*' : ''
+      const findings = output.findings.slice(0, 4).map((f) => `- ${f}`).join('\n')
+      const recs = output.recommendations
+        .slice(0, 4)
+        .map((r) => {
+          let line = `- ${r.action}`
+          if (r.requiresHumanDecision) line += ' *(needs your decision)*'
+          if (r.confidence < 0.6) line += ` (${Math.round(r.confidence * 100)}% confidence)`
+          return line
+        })
+        .join('\n')
+      const rootCause = output.diagnosis?.rootCause
+        ? `Root cause${confNote}: ${output.diagnosis.rootCause}`
+        : ''
+      return [
+        `**${task.agent.charAt(0).toUpperCase() + task.agent.slice(1)}**`,
+        output.summary,
+        rootCause,
+        findings ? `Findings:\n${findings}` : '',
+        recs ? `Recommendations:\n${recs}` : '',
+      ].filter(Boolean).join('\n')
+    })
+    .filter(Boolean)
+    .join('\n\n---\n\n')
+
+  // Surface unacted prior recommendations from any agent
+  const pendingPrior = doneTasks
+    .flatMap((t) => board.agentAttempts[t.agent]?.at(-1)?.priorRecommendationReview?.pendingUnacted ?? [])
+    .slice(0, 2)
+
+  const brand = parseBrandFromBundle(board)
+  const brandName = brand?.name ? `for ${brand.name}` : ''
+
+  const system = `You are Marvyn, an AI marketing advisor ${brandName}.
+You've just received specialist analysis. Write a direct, useful response to the user.
+
+Rules:
+- Lead with the single most important insight — not a preamble
+- Use actual numbers from the analysis when they exist
+- Be specific and actionable, not generic
+- Keep it under 350 words
+- Use bullet points for recommendations, prose for context
+- If data is missing or confidence is low, say so plainly
+- Never write "Based on the analysis" or "As an AI" — just answer directly`
+
+  const user = `User asked: "${board.goal.userRequest}"
+
+${pendingPrior.length ? `Still open from last session:\n${pendingPrior.map((p) => `- ${p}`).join('\n')}\n\n` : ''}Specialist findings:
+${agentSections || 'No agent data was collected. Explain what integrations would help and what the user can do in the meantime.'}`
+
+  return { system, user }
 }

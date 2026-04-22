@@ -27,6 +27,17 @@ interface StrategyTask {
   title: string
   done: boolean
   sourcePriority?: string
+  blockedByPriority?: string[]
+}
+
+interface StrategyPulse {
+  day: number
+  capturedAt?: string
+  onTrack: string[]
+  behind: string[]
+  blocked: string[]
+  signalDrift: string | null
+  todaysFocus: string
 }
 
 interface StrategyChannel {
@@ -68,6 +79,8 @@ interface StrategyPlan {
   contentIdeas: string[]
   risks: string[]
   tasks: StrategyTask[]
+  priorityDependencies?: Record<string, string[]>
+  pulses?: StrategyPulse[]
   customAdjustments?: string
   manualNotes?: string
   manualWins?: string
@@ -472,6 +485,8 @@ export default function StrategyPage() {
   const [committing, setCommitting] = useState(false)
   const [closing, setClosing] = useState(false)
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle')
+  const [preparingSummary, setPreparingSummary] = useState(false)
+  const [pulseDismissed, setPulseDismissed] = useState(false)
   const [banner, setBanner] = useState('')
   const [error, setError] = useState('')
   const [draftAdjustments, setDraftAdjustments] = useState('')
@@ -589,6 +604,26 @@ export default function StrategyPage() {
     if (!activePlan?.tasks?.length) return 0
     return Math.round((activePlan.tasks.filter(task => task.done).length / activePlan.tasks.length) * 100)
   }, [activePlan])
+
+  const latestPulse = useMemo(() => {
+    if (!activePlan?.pulses?.length) return null
+    return [...activePlan.pulses].sort((a, b) => b.day - a.day)[0]
+  }, [activePlan])
+
+  const isTaskBlocked = useMemo(() => {
+    if (!activePlan) return () => false
+    return (task: StrategyTask): boolean => {
+      if (!task.blockedByPriority?.length) return false
+      return task.blockedByPriority.some(blockingPriority =>
+        activePlan.tasks.some(t => t.sourcePriority === blockingPriority && !t.done)
+      )
+    }
+  }, [activePlan])
+
+  const blockedTaskCount = useMemo(() => {
+    if (!activePlan) return 0
+    return activePlan.tasks.filter(t => !t.done && isTaskBlocked(t)).length
+  }, [activePlan, isTaskBlocked])
 
   const activeSignal = useMemo(() => inferActual(activePlan, { ga4, ads, keywords, blogCount, socialCount }), [activePlan, ga4, ads, keywords, blogCount, socialCount])
   const activeCurrentSnapshot = useMemo<StrategySnapshot | null>(() => {
@@ -837,6 +872,29 @@ export default function StrategyPage() {
     anchor.download = `marvyn-strategy-${selectedDocument.status}-${new Date().toISOString().slice(0, 10)}.md`
     anchor.click()
     URL.revokeObjectURL(url)
+  }
+
+  const generateSummary = async () => {
+    if (!activePlan) return
+    setPreparingSummary(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/strategy/plan/${activePlan._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'prepareSummary' }),
+      })
+      const data = await safeResponseJson<{ error?: string; preFill?: { wins: string; blockers: string; adjustments: string } }>(res, {})
+      if (!res.ok) { setError(data.error || 'Unable to generate summary.'); return }
+      if (data.preFill) {
+        setActiveWins(data.preFill.wins)
+        setActiveNotes(data.preFill.blockers)
+        setActiveAdjustments(data.preFill.adjustments)
+        setBanner('Summary pre-filled — review and edit before closing.')
+      }
+    } finally {
+      setPreparingSummary(false)
+    }
   }
 
   return (
@@ -1158,6 +1216,69 @@ export default function StrategyPage() {
                       </div>
                     </div>
 
+                    {/* Pulse panel */}
+                    {latestPulse && !pulseDismissed && (
+                      <div className="rounded-2xl border border-[#DA7756]/30 bg-[#DA7756]/5 p-5">
+                        <div className="flex items-start justify-between gap-3 mb-4">
+                          <div>
+                            <p className="text-[11px] uppercase tracking-[0.2em] text-[#DA7756]">Cycle Pulse — Day {latestPulse.day} of 30</p>
+                            <p className="mt-1 text-sm font-semibold text-[var(--text-primary)]">{latestPulse.todaysFocus}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setPulseDismissed(true)}
+                            className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] shrink-0 transition"
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          {latestPulse.onTrack.length > 0 && (
+                            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-600 mb-2">On track</p>
+                              <ul className="space-y-1.5">
+                                {latestPulse.onTrack.map(item => (
+                                  <li key={item} className="flex items-start gap-2 text-xs text-[var(--text-secondary)]">
+                                    <span className="text-emerald-500 shrink-0">✓</span>{item}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {latestPulse.behind.length > 0 && (
+                            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-amber-600 mb-2">Behind</p>
+                              <ul className="space-y-1.5">
+                                {latestPulse.behind.map(item => (
+                                  <li key={item} className="flex items-start gap-2 text-xs text-[var(--text-secondary)]">
+                                    <span className="text-amber-500 shrink-0">→</span>{item}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {latestPulse.blocked.length > 0 && (
+                            <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-red-600 mb-2">Blocked ({latestPulse.blocked.length})</p>
+                              <ul className="space-y-1.5">
+                                {latestPulse.blocked.map(item => (
+                                  <li key={item} className="flex items-start gap-2 text-xs text-[var(--text-secondary)]">
+                                    <span className="text-red-500 shrink-0">⚠</span>{item}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                        {latestPulse.signalDrift && (
+                          <p className="mt-3 text-xs text-[var(--text-secondary)] border-t border-[#DA7756]/15 pt-3">
+                            <span className="font-medium text-[var(--text-primary)]">Signal drift: </span>
+                            {latestPulse.signalDrift}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     {/* Channel plan */}
                     <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
                       <ChannelBoard plan={activePlan} />
@@ -1166,23 +1287,54 @@ export default function StrategyPage() {
                     {/* Execution checklist */}
                     <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
                       <div className="mb-4 flex items-center justify-between gap-3">
-                        <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--text-muted)]">Execution Checklist</p>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--text-muted)]">Execution Checklist</p>
+                          {blockedTaskCount > 0 && (
+                            <p className="mt-1 text-xs text-amber-600">
+                              ⚠ {blockedTaskCount} task{blockedTaskCount > 1 ? 's' : ''} blocked by incomplete upstream work
+                            </p>
+                          )}
+                        </div>
                         <Button variant="secondary" onClick={closeCycle} loading={closing}>Close Cycle</Button>
                       </div>
                       <div className="space-y-4">
                         {(activePlan.priorities || []).map(priority => {
                           const groupTasks = activePlan.tasks.filter(task => task.sourcePriority === priority.title)
+                          const priorityIsBlocked = groupTasks.some(t => isTaskBlocked(t))
                           return (
                             <div key={priority.title}>
-                              <p className="mb-2 text-xs font-semibold text-[var(--text-primary)]">{priority.title}</p>
+                              <div className="mb-2 flex items-center gap-2">
+                                <p className="text-xs font-semibold text-[var(--text-primary)]">{priority.title}</p>
+                                {priorityIsBlocked && (
+                                  <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-600">
+                                    blocked
+                                  </span>
+                                )}
+                              </div>
                               <div className="space-y-0.5">
                                 {groupTasks.map(task => {
                                   const globalIndex = activePlan.tasks.findIndex(t => t.title === task.title && t.sourcePriority === task.sourcePriority)
+                                  const blocked = isTaskBlocked(task)
                                   return (
-                                    <label key={`${task.sourcePriority}-${task.title}`} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 hover:bg-[var(--surface-2)] transition">
-                                      <input type="checkbox" checked={task.done} onChange={() => toggleTask(globalIndex)} className="accent-[#DA7756]" />
-                                      <span className={`text-xs break-words ${task.done ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-secondary)]'}`}>{task.title}</span>
-                                    </label>
+                                    <div key={`${task.sourcePriority}-${task.title}`}>
+                                      <label className={`flex items-center gap-3 rounded-lg px-3 py-2 transition ${blocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-[var(--surface-2)]'}`}>
+                                        <input
+                                          type="checkbox"
+                                          checked={task.done}
+                                          onChange={() => !blocked && toggleTask(globalIndex)}
+                                          disabled={blocked}
+                                          className="accent-[#DA7756]"
+                                        />
+                                        <span className={`text-xs break-words ${task.done ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-secondary)]'}`}>
+                                          {task.title}
+                                        </span>
+                                      </label>
+                                      {blocked && task.blockedByPriority?.length && (
+                                        <p className="ml-10 text-[10px] text-amber-600 pb-1">
+                                          Waiting on: {task.blockedByPriority.join(', ')}
+                                        </p>
+                                      )}
+                                    </div>
                                   )
                                 })}
                               </div>
@@ -1252,7 +1404,24 @@ export default function StrategyPage() {
                     </div>
 
                     <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
-                      <p className="mb-4 text-[11px] uppercase tracking-[0.2em] text-[var(--text-muted)]">Cycle Notes</p>
+                      <div className="mb-4 flex items-center justify-between gap-3">
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--text-muted)]">Cycle Notes</p>
+                        <button
+                          type="button"
+                          onClick={generateSummary}
+                          disabled={preparingSummary}
+                          className="flex items-center gap-1.5 text-[11px] text-[#DA7756] hover:text-[#c46140] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {preparingSummary ? (
+                            <>
+                              <span className="inline-block h-3 w-3 rounded-full border border-[#DA7756]/30 border-t-[#DA7756] animate-spin" />
+                              Generating…
+                            </>
+                          ) : (
+                            'Generate summary ↗'
+                          )}
+                        </button>
+                      </div>
                       <div className="space-y-3">
                         <div className="grid grid-cols-2 gap-3">
                           <div>
@@ -1266,15 +1435,15 @@ export default function StrategyPage() {
                         </div>
                         <div>
                           <label className="mb-1.5 block text-xs text-[var(--text-muted)]">Wins / outcomes</label>
-                          <textarea value={activeWins} onChange={e => setActiveWins(e.target.value)} rows={3} className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none" />
+                          <textarea value={activeWins} onChange={e => setActiveWins(e.target.value)} rows={3} placeholder="What actually shipped or improved this cycle" className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]" />
                         </div>
                         <div>
                           <label className="mb-1.5 block text-xs text-[var(--text-muted)]">Blockers / notes</label>
-                          <textarea value={activeNotes} onChange={e => setActiveNotes(e.target.value)} rows={3} className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none" />
+                          <textarea value={activeNotes} onChange={e => setActiveNotes(e.target.value)} rows={3} placeholder="What failed or got blocked, and why" className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]" />
                         </div>
                         <div>
-                          <label className="mb-1.5 block text-xs text-[var(--text-muted)]">Mid-cycle adjustments</label>
-                          <textarea value={activeAdjustments} onChange={e => setActiveAdjustments(e.target.value)} rows={2} className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none" />
+                          <label className="mb-1.5 block text-xs text-[var(--text-muted)]">Adjustments for next cycle</label>
+                          <textarea value={activeAdjustments} onChange={e => setActiveAdjustments(e.target.value)} rows={2} placeholder="One structural fix to apply before the next cycle starts" className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]" />
                         </div>
                         <div className="flex flex-wrap gap-2">
                           <Button variant="secondary" onClick={saveActive} loading={savingCycle}>Save</Button>

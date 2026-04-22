@@ -5,6 +5,10 @@ import { ThemeProvider } from '@/components/shared/ThemeProvider'
 export const metadata: Metadata = {
   title: 'Marvyn — AI Marketing OS',
   description: 'AI-powered marketing platform for growth teams',
+  icons: {
+    icon: '/icon.png',
+    apple: '/apple-icon.png',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

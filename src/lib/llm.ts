@@ -43,9 +43,39 @@ export async function llm(
 }
 
 /**
+ * Walk forward from `startIndex` tracking bracket depth and string literals
+ * to find the exact closing character for the first `open` bracket encountered.
+ * Returns the slice [startIndex, closeIndex+1] or null if no balanced pair found.
+ *
+ * This is the only correct way to extract JSON from prose: naive indexOf/lastIndexOf
+ * breaks whenever the model writes text before or after the JSON object, or when
+ * string values contain unescaped brackets.
+ */
+function findBalancedJson(text: string, startIndex: number, open: '{' | '['): string | null {
+  const close = open === '{' ? '}' : ']'
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  for (let i = startIndex; i < text.length; i++) {
+    const ch = text[i]
+    if (escaped) { escaped = false; continue }
+    if (ch === '\\' && inString) { escaped = true; continue }
+    if (ch === '"') { inString = !inString; continue }
+    if (inString) continue
+    if (ch === open) depth++
+    else if (ch === close) {
+      depth--
+      if (depth === 0) return text.slice(startIndex, i + 1)
+    }
+  }
+  return null
+}
+
+/**
  * Extract the first valid JSON object or array from a raw LLM response.
- * Handles markdown fences, leading prose, and truncation by finding the
- * outermost { } or [ ] boundaries.
+ * Handles markdown fences, leading prose, trailing prose, and nested structures
+ * by using a balanced-bracket scanner rather than naive indexOf/lastIndexOf.
  */
 function extractJson(raw: string): unknown {
   // 1. Strip markdown fences
@@ -54,21 +84,25 @@ function extractJson(raw: string): unknown {
     .replace(/\s*```\s*$/m, '')
     .trim()
 
-  // 2. Try direct parse first (fastest path)
+  // 2. Fast path: direct parse (model returned clean JSON)
   try { return JSON.parse(stripped) } catch { /* fall through */ }
 
-  // 3. Extract first { ... } block (object)
+  // 3. Find and extract the first balanced { ... } block
   const objStart = stripped.indexOf('{')
-  const objEnd = stripped.lastIndexOf('}')
-  if (objStart !== -1 && objEnd > objStart) {
-    try { return JSON.parse(stripped.slice(objStart, objEnd + 1)) } catch { /* fall through */ }
+  if (objStart !== -1) {
+    const candidate = findBalancedJson(stripped, objStart, '{')
+    if (candidate) {
+      try { return JSON.parse(candidate) } catch { /* fall through */ }
+    }
   }
 
-  // 4. Extract first [ ... ] block (array)
+  // 4. Find and extract the first balanced [ ... ] block
   const arrStart = stripped.indexOf('[')
-  const arrEnd = stripped.lastIndexOf(']')
-  if (arrStart !== -1 && arrEnd > arrStart) {
-    try { return JSON.parse(stripped.slice(arrStart, arrEnd + 1)) } catch { /* fall through */ }
+  if (arrStart !== -1) {
+    const candidate = findBalancedJson(stripped, arrStart, '[')
+    if (candidate) {
+      try { return JSON.parse(candidate) } catch { /* fall through */ }
+    }
   }
 
   throw new Error(`JSON parse failed — response was ${stripped.length} chars, could not find valid JSON boundary`)

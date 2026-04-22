@@ -46,6 +46,21 @@ export type GeneratedStrategyPlan = {
   channelPlan: StrategyChannel[]
   contentIdeas: string[]
   risks: string[]
+  priorityDependencies?: Record<string, string[]>
+}
+
+export type PulseResult = {
+  onTrack: string[]
+  behind: string[]
+  blocked: string[]
+  signalDrift: string | null
+  todaysFocus: string
+}
+
+export type CycleSummaryPreFill = {
+  wins: string
+  blockers: string
+  adjustments: string
 }
 
 export type StrategyQuestion = {
@@ -575,16 +590,36 @@ function normalizeChannels(plan: GeneratedStrategyPlan, preferredChannels: strin
 }
 
 function buildTasks(plan: GeneratedStrategyPlan) {
+  const depMap = plan.priorityDependencies || {}
   return plan.priorities.flatMap(priority =>
     priority.actions.map(action => ({
       title: sanitizeText(action),
       done: false,
       sourcePriority: sanitizeText(priority.title),
+      blockedByPriority: (depMap[priority.title] || []).map(p => sanitizeText(p)),
     }))
   )
 }
 
 function alignPlan(plan: GeneratedStrategyPlan, context: StrategyContext) {
+  const sanitizedPriorities = plan.priorities.slice(0, 3).map(priority => ({
+    title: sanitizeText(priority.title),
+    reason: sanitizeText(priority.reason),
+    actions: priority.actions.slice(0, 4).map(action => sanitizeText(action)),
+  }))
+
+  const rawDeps = plan.priorityDependencies || {}
+  const sanitizedDeps: Record<string, string[]> = {}
+  const priorityTitles = new Set(sanitizedPriorities.map(p => p.title))
+  for (const [key, deps] of Object.entries(rawDeps)) {
+    const sanitizedKey = sanitizeText(key)
+    if (!priorityTitles.has(sanitizedKey)) continue
+    const validDeps = (Array.isArray(deps) ? deps : [])
+      .map(d => sanitizeText(String(d)))
+      .filter(d => priorityTitles.has(d) && d !== sanitizedKey)
+    if (validDeps.length) sanitizedDeps[sanitizedKey] = validDeps
+  }
+
   const repaired = {
     ...plan,
     summary: sanitizeText(plan.summary),
@@ -593,14 +628,11 @@ function alignPlan(plan: GeneratedStrategyPlan, context: StrategyContext) {
       label: sanitizeText(plan.successMetric.label),
       target: sanitizeText(plan.successMetric.target),
     } : undefined,
-    priorities: plan.priorities.slice(0, 3).map(priority => ({
-      title: sanitizeText(priority.title),
-      reason: sanitizeText(priority.reason),
-      actions: priority.actions.slice(0, 4).map(action => sanitizeText(action)),
-    })),
+    priorities: sanitizedPriorities,
     channelPlan: normalizeChannels(plan, context.brand.primaryChannels),
     contentIdeas: plan.contentIdeas.slice(0, 5).map(item => sanitizeText(item)),
     risks: plan.risks.slice(0, 5).map(item => sanitizeText(item)),
+    priorityDependencies: sanitizedDeps,
   }
 
   const goal = `${context.brand.primaryGoal} ${context.brand.primaryConversion}`.toLowerCase()
@@ -786,7 +818,8 @@ Return JSON:
   "priorities": [{ "title": "string", "reason": "string", "actions": ["string"] }],
   "channelPlan": [{ "channel": "string", "platformRole": "string", "focus": "string", "kpi": "string", "cadence": "string", "outputTarget": "string", "effort": "low | medium | high", "executionNote": "string" }],
   "contentIdeas": ["string"],
-  "risks": ["string"]
+  "risks": ["string"],
+  "priorityDependencies": { "Priority N title": ["Priority M title that must be complete first"] }
 }`
 
   const planningPass = await runPass<GeneratedStrategyPlan>({
@@ -820,7 +853,7 @@ Repair requirements:
 - If social cadence is too weak, increase it to a realistic minimum.
 - If the plan includes generic filler, replace it with brand-specific language.
 - If the previous cycle failed on the same issue, force a different priority order.
-- Keep output in the same JSON shape as the draft plan.`
+- Keep output in the same JSON shape as the draft plan, including priorityDependencies.`
 
   const criticPass = await runPass<GeneratedStrategyPlan>({
     prompt: criticPrompt,
@@ -863,6 +896,7 @@ export function buildDraftPayload(params: {
     contentIdeas: alignedPlan.contentIdeas,
     risks: alignedPlan.risks,
     tasks: buildTasks(alignedPlan),
+    priorityDependencies: alignedPlan.priorityDependencies || {},
     customAdjustments: params.customAdjustments || '',
     manualNotes: '',
     manualWins: '',
@@ -875,6 +909,166 @@ export function buildDraftPayload(params: {
     committedAt: undefined,
     completedAt: undefined,
   }
+}
+
+type AgentUsage = { model: string; inputTokens: number; outputTokens: number; estimatedCostInr: number; estimatedCostUsd?: number }
+
+export async function runPulseAgent(params: {
+  plan: {
+    summary: string
+    northStarMetric: string
+    successMetric?: { label?: string; target?: string }
+    priorities: Array<{ title: string; actions: string[] }>
+    tasks: Array<{ title: string; done: boolean; sourcePriority?: string; blockedByPriority?: string[] }>
+    channelPlan: Array<{ channel: string; kpi: string; cadence?: string; outputTarget?: string }>
+  }
+  daysSinceCommit: number
+  baselineSnapshot?: IStrategyPerformanceSnapshot
+  currentSnapshot: IStrategyPerformanceSnapshot
+}): Promise<{ result: PulseResult; usage: AgentUsage }> {
+  const { plan, daysSinceCommit, baselineSnapshot, currentSnapshot } = params
+
+  const tasksByPriority = plan.priorities.map(priority => {
+    const tasks = plan.tasks.filter(t => t.sourcePriority === priority.title)
+    const done = tasks.filter(t => t.done).length
+    return { priority: priority.title, done, total: tasks.length, pct: tasks.length ? Math.round((done / tasks.length) * 100) : 0 }
+  })
+
+  const blockedPriorities = plan.priorities
+    .map(p => {
+      const representative = plan.tasks.find(t => t.sourcePriority === p.title)
+      if (!representative?.blockedByPriority?.length) return null
+      const isBlocked = representative.blockedByPriority.some(dep =>
+        plan.tasks.some(t => t.sourcePriority === dep && !t.done)
+      )
+      return isBlocked ? { priority: p.title, blockedBy: representative.blockedByPriority } : null
+    })
+    .filter(Boolean)
+
+  const signalChanges = buildSignalChanges(baselineSnapshot, currentSnapshot)
+
+  const fallback: PulseResult = {
+    onTrack: tasksByPriority.filter(t => t.pct >= 50).map(t => `${t.priority} — ${t.pct}% tasks complete`),
+    behind: tasksByPriority.filter(t => t.pct < 50).map(t => `${t.priority} — ${t.done}/${t.total} tasks done`),
+    blocked: (blockedPriorities as Array<{ priority: string; blockedBy: string[] }>).map(b => `${b.priority} blocked by: ${b.blockedBy.join(', ')}`),
+    signalDrift: signalChanges.length ? signalChanges[0] : null,
+    todaysFocus: tasksByPriority.find(t => t.pct === 0)?.priority
+      ? `Start ${tasksByPriority.find(t => t.pct === 0)!.priority} — no tasks completed yet.`
+      : 'Review blocked priorities before continuing.',
+  }
+
+  const system = `${skills.marketingOpsPlan}
+
+You are the Marvyn Pulse Agent reviewing an active 30-day strategy cycle at day ${daysSinceCommit}.
+- Do NOT summarise the plan back to the user — they know the plan.
+- Be direct and specific. Reference actual task names, priority titles, and metric values.
+- If something is blocked, name exactly what it is blocking.
+- todaysFocus must be one concrete action, not a general observation.
+- Return valid JSON only.`
+
+  const prompt = `It is day ${daysSinceCommit} of this 30-day cycle. Give the user a direct check-in.
+
+Plan summary: ${plan.summary}
+North star: ${plan.northStarMetric}
+Target: ${plan.successMetric?.label || 'Not set'} / ${plan.successMetric?.target || 'Not set'}
+
+Task completion by priority:
+${tasksByPriority.map(t => `  ${t.priority}: ${t.done}/${t.total} tasks done (${t.pct}%)`).join('\n')}
+
+Blocked priorities (cannot start):
+${(blockedPriorities as Array<{ priority: string; blockedBy: string[] }>).map(b => `  ${b.priority} → waiting on: ${b.blockedBy.join(', ')}`).join('\n') || '  None'}
+
+Signal changes since commit:
+${signalChanges.join('\n') || '  No baseline data available'}
+
+Return JSON:
+{
+  "onTrack": ["specific observation about what is actually running"],
+  "behind": ["specific task or priority that is behind, with concrete detail"],
+  "blocked": ["priority name + what it is blocked by + consequence"],
+  "signalDrift": "one sentence if a signal has meaningfully shifted, or null",
+  "todaysFocus": "one specific action the user should do today, named precisely"
+}`
+
+  const pass = await runPass<PulseResult>({ prompt, system, complexity: 'medium', fallback })
+  return { result: pass.parsed, usage: pass.usage }
+}
+
+export async function prepareCycleSummary(params: {
+  plan: {
+    summary: string
+    northStarMetric: string
+    successMetric?: { label?: string; target?: string }
+    priorities: Array<{ title: string; actions: string[] }>
+    tasks: Array<{ title: string; done: boolean; sourcePriority?: string }>
+    manualWins?: string
+    manualNotes?: string
+    customAdjustments?: string
+  }
+  baselineSnapshot?: IStrategyPerformanceSnapshot
+  currentSnapshot: IStrategyPerformanceSnapshot
+  previousCycleCompletionRate?: number
+}): Promise<{ preFill: CycleSummaryPreFill; usage: AgentUsage }> {
+  const { plan, baselineSnapshot, currentSnapshot, previousCycleCompletionRate } = params
+
+  const tasksByPriority = plan.priorities.map(priority => {
+    const tasks = plan.tasks.filter(t => t.sourcePriority === priority.title)
+    const doneTasks = tasks.filter(t => t.done)
+    return { priority: priority.title, done: doneTasks.length, total: tasks.length, doneTitles: doneTasks.map(t => t.title) }
+  })
+  const signalChanges = buildSignalChanges(baselineSnapshot, currentSnapshot)
+  const overallDone = plan.tasks.filter(t => t.done).length
+  const overallTotal = plan.tasks.length
+
+  const fallback: CycleSummaryPreFill = {
+    wins: tasksByPriority
+      .filter(g => g.done > 0)
+      .map(g => `${g.priority}: ${g.done}/${g.total} tasks completed`)
+      .join('\n') || 'No tasks completed this cycle.',
+    blockers: tasksByPriority
+      .filter(g => g.done < g.total)
+      .map(g => `${g.priority}: ${g.total - g.done} tasks not completed`)
+      .join('\n') || 'No blockers recorded.',
+    adjustments: previousCycleCompletionRate != null && previousCycleCompletionRate < 40 && (overallDone / (overallTotal || 1)) < 0.4
+      ? 'Execution completion was low again this cycle. Next cycle needs named owners per task and a hard day-10 checkpoint before work continues.'
+      : 'Review what slowed execution and apply one structural fix before the next cycle starts.',
+  }
+
+  const system = `${skills.marketingOpsPlan}
+
+You are the Marvyn Retrospective Agent preparing a closing summary for a 30-day cycle.
+- Write from the perspective of what Marvyn observed, not what the user told you.
+- Be direct and specific. Name tasks, priorities, and metrics.
+- wins should name what actually shipped or improved.
+- blockers should name specific tasks or signals that failed, with context.
+- adjustments should name one concrete structural change for the next cycle.
+- Return valid JSON only.`
+
+  const prompt = `Prepare the closing summary for this strategy cycle.
+
+Plan summary: ${plan.summary}
+North star: ${plan.northStarMetric} / target: ${plan.successMetric?.target || 'Not set'}
+Execution: ${overallDone}/${overallTotal} tasks completed
+
+Task completion by priority:
+${tasksByPriority.map(g => `  ${g.priority}: ${g.done}/${g.total} done${g.doneTitles.length ? ` — shipped: ${g.doneTitles.join(', ')}` : ''}`).join('\n')}
+
+Signal changes since commit:
+${signalChanges.join('\n') || '  No baseline comparison available'}
+
+${previousCycleCompletionRate != null ? `Previous cycle completion rate: ${previousCycleCompletionRate}%` : ''}
+${plan.manualWins ? `User noted wins: ${plan.manualWins}` : ''}
+${plan.manualNotes ? `User noted blockers: ${plan.manualNotes}` : ''}
+
+Return JSON:
+{
+  "wins": "2-4 bullet lines of what actually worked or shipped (newline separated)",
+  "blockers": "2-4 bullet lines of what failed or blocked, with specific task/signal names (newline separated)",
+  "adjustments": "1-2 sentences on one structural fix for the next cycle"
+}`
+
+  const pass = await runPass<CycleSummaryPreFill>({ prompt, system, complexity: 'medium', fallback })
+  return { preFill: pass.parsed, usage: pass.usage }
 }
 
 export async function synthesizeCycleReview(params: {

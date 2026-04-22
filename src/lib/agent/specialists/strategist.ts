@@ -34,7 +34,7 @@ export async function runStrategistAgent(board: ContextBoard, taskId: string): P
     loadAgentSkills('strategist')
   )
   const output = await llmJson<AgentOutput>(
-    user, system, MODELS.powerful, 4000,
+    user, system, MODELS.powerful, 8000,
     makeUsageTracker(board, MODELS.powerful)
   )
 

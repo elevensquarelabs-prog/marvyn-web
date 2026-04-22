@@ -1,9 +1,22 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import React from 'react'
 import { Button } from '@/components/shared/Button'
 import { BrandIcon } from '@/components/shared/BrandIcon'
 import { SocialWorkspaceTabs } from '@/components/social/SocialWorkspaceTabs'
+
+const CACHE_TTL_MS = 5 * 60 * 1000
+
+type InsightsCache = {
+  timestamp: number
+  connections: ConnectionsResponse['connections']
+  meta: MetaInsightsResponse | null
+  linkedin: LinkedInResponse | null
+  posts: SocialPost[]
+}
+
+let insightsCache: InsightsCache | null = null
 
 type MetricResponse = {
   ok: boolean
@@ -108,6 +121,67 @@ function getMediaMetricValue(item: Record<string, unknown>, metric: string) {
   return Number(values[0]?.value || 0)
 }
 
+function Skeleton({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return <div className={`animate-pulse rounded-xl bg-[var(--border)] ${className ?? ''}`} style={style} />
+}
+
+function SocialInsightsSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-3">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-8 w-20" />
+            <Skeleton className="h-3 w-36" />
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.3fr_1fr]">
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-4">
+          <Skeleton className="h-4 w-32" />
+          <div className="grid gap-3 md:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4 space-y-3">
+                <Skeleton className="h-7 w-7 rounded-full" />
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-3 w-full" />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-4">
+          <Skeleton className="h-4 w-36" />
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="rounded-2xl border border-[var(--border)] p-4 space-y-2">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-7 w-16" />
+              <Skeleton className="h-3 w-32" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div key={i} className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-4">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-7 w-16" />
+            </div>
+            <div className="h-28 grid grid-cols-7 gap-2 items-end">
+              {Array.from({ length: 7 }).map((_, j) => (
+                <Skeleton key={j} className="w-full rounded-t-xl" style={{ height: `${30 + Math.random() * 70}%` }} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function SummaryCard({
   label,
   value,
@@ -182,6 +256,15 @@ export default function SocialInsightsPage() {
   const [posts, setPosts] = useState<SocialPost[]>([])
 
   const loadData = useCallback(async (isRefresh = false) => {
+    if (!isRefresh && insightsCache && Date.now() - insightsCache.timestamp < CACHE_TTL_MS) {
+      setConnections(insightsCache.connections || {})
+      setMeta(insightsCache.meta)
+      setLinkedin(insightsCache.linkedin)
+      setPosts(insightsCache.posts)
+      setLoading(false)
+      return
+    }
+
     if (isRefresh) setRefreshing(true)
     else setLoading(true)
 
@@ -200,10 +283,15 @@ export default function SocialInsightsPage() {
         postsRes.json(),
       ])
 
-      setConnections(connectionsData.connections || {})
+      const connections = connectionsData.connections || {}
+      const posts = Array.isArray(postsData.posts) ? postsData.posts : []
+
+      insightsCache = { timestamp: Date.now(), connections, meta: metaData, linkedin: linkedinData, posts }
+
+      setConnections(connections)
       setMeta(metaData)
       setLinkedin(linkedinData)
-      setPosts(Array.isArray(postsData.posts) ? postsData.posts : [])
+      setPosts(posts)
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -255,9 +343,7 @@ export default function SocialInsightsPage() {
 
       <div className="flex-1 p-6 space-y-6">
         {loading ? (
-          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-8 text-sm text-[var(--text-secondary)]">
-            Loading social performance…
-          </div>
+          <SocialInsightsSkeleton />
         ) : (
           <>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

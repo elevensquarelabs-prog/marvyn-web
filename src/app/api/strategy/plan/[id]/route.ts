@@ -3,7 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { connectDB } from '@/lib/mongodb'
 import StrategyPlan from '@/models/StrategyPlan'
-import { collectCycleSnapshot, normalizeQuestionAnswers, synthesizeCycleReview } from '@/lib/strategy-agent'
+import StrategyPlanModel from '@/models/StrategyPlan'
+import { collectCycleSnapshot, normalizeQuestionAnswers, prepareCycleSummary, synthesizeCycleReview } from '@/lib/strategy-agent'
 import { recordAiUsage } from '@/lib/ai-usage'
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -13,7 +14,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params
   await connectDB()
   const body = await req.json()
-  const action = body?.action as 'saveDraft' | 'commit' | 'saveActive' | 'close' | undefined
+  const action = body?.action as 'saveDraft' | 'commit' | 'saveActive' | 'close' | 'prepareSummary' | undefined
 
   if (action === 'saveDraft') {
     const plan = await StrategyPlan.findOne({ _id: id, userId: session.user.id, status: 'draft' })
@@ -143,6 +144,54 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     })
 
     return Response.json({ plan: activePlan })
+  }
+
+  if (action === 'prepareSummary') {
+    const activePlan = await StrategyPlanModel.findOne({ _id: id, userId: session.user.id, status: 'active' })
+    if (!activePlan) return Response.json({ error: 'Active cycle not found' }, { status: 404 })
+
+    const [currentSnapshot, previousCycle] = await Promise.all([
+      collectCycleSnapshot(session.user.id, {
+        completedTasks: activePlan.tasks?.filter((t: { done?: boolean }) => t.done).length || 0,
+        totalTasks: activePlan.tasks?.length || 0,
+      }),
+      StrategyPlanModel.findOne({ userId: session.user.id, status: 'completed' })
+        .sort({ completedAt: -1 })
+        .select('tasks')
+        .lean() as Promise<{ tasks?: Array<{ done?: boolean }> } | null>,
+    ])
+
+    const previousCompletionRate = previousCycle?.tasks?.length
+      ? Math.round((previousCycle.tasks.filter((t) => t.done).length / previousCycle.tasks.length) * 100)
+      : undefined
+
+    const { preFill, usage } = await prepareCycleSummary({
+      plan: {
+        summary: activePlan.summary,
+        northStarMetric: activePlan.northStarMetric,
+        successMetric: activePlan.successMetric,
+        priorities: activePlan.priorities,
+        tasks: activePlan.tasks,
+        manualWins: activePlan.manualWins,
+        manualNotes: activePlan.manualNotes,
+        customAdjustments: activePlan.customAdjustments,
+      },
+      baselineSnapshot: activePlan.baselineSnapshot,
+      currentSnapshot,
+      previousCycleCompletionRate: previousCompletionRate,
+    })
+
+    await recordAiUsage({
+      userId: session.user.id,
+      feature: 'strategy_review',
+      model: usage.model,
+      estimatedInputTokens: usage.inputTokens,
+      estimatedOutputTokens: usage.outputTokens,
+      estimatedCostInr: usage.estimatedCostInr,
+      status: 'success',
+    })
+
+    return Response.json({ preFill })
   }
 
   return Response.json({ error: 'Unsupported strategy action.' }, { status: 400 })

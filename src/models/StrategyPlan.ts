@@ -4,6 +4,18 @@ export interface IStrategyTask {
   title: string
   done: boolean
   sourcePriority?: string
+  blockedByPriority?: string[]
+}
+
+export interface IStrategyPulse {
+  day: number
+  capturedAt: Date
+  onTrack: string[]
+  behind: string[]
+  blocked: string[]
+  signalDrift: string | null
+  todaysFocus: string
+  snapshot: IStrategyPerformanceSnapshot
 }
 
 export interface IStrategyPriority {
@@ -85,6 +97,8 @@ export interface IStrategyPlan extends Document {
   contentIdeas: string[]
   risks: string[]
   tasks: IStrategyTask[]
+  priorityDependencies?: Record<string, string[]>
+  pulses?: IStrategyPulse[]
   customAdjustments?: string
   manualNotes?: string
   manualWins?: string
@@ -146,6 +160,34 @@ const StrategyPlanSchema = new Schema<IStrategyPlan>({
     title: String,
     done: { type: Boolean, default: false },
     sourcePriority: String,
+    blockedByPriority: [String],
+  }],
+  priorityDependencies: { type: Schema.Types.Mixed, default: {} },
+  pulses: [{
+    day: Number,
+    capturedAt: Date,
+    onTrack: [String],
+    behind: [String],
+    blocked: [String],
+    signalDrift: String,
+    todaysFocus: String,
+    snapshot: {
+      capturedAt: Date,
+      ga4Sessions: Number,
+      ga4Users: Number,
+      ga4Conversions: Number,
+      ga4BounceRate: Number,
+      organicClicks: Number,
+      paidSpend: Number,
+      paidClicks: Number,
+      paidConversions: Number,
+      paidRoas: Number,
+      paidCtr: Number,
+      blogCount: Number,
+      socialCount: Number,
+      completedTasks: Number,
+      totalTasks: Number,
+    },
   }],
   customAdjustments: String,
   manualNotes: String,

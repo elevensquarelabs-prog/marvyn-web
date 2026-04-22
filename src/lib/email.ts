@@ -270,6 +270,88 @@ export async function sendWeeklyBriefEmail(
   })
 }
 
+export async function sendStrategyPulseEmail(
+  to: string,
+  name: string,
+  pulse: {
+    brandName: string
+    day: number
+    onTrack: string[]
+    behind: string[]
+    blocked: string[]
+    signalDrift: string | null
+    todaysFocus: string
+  }
+) {
+  const bullet = (items: string[], icon: string) =>
+    items.map(item => `
+    <div style="display:flex;gap:10px;margin-bottom:10px;">
+      <span style="flex-shrink:0;color:#DA7756;font-weight:700;">${icon}</span>
+      <span style="font-size:14px;color:#ccc;line-height:1.6;">${item}</span>
+    </div>`).join('')
+
+  const section = (label: string, content: string) => `
+    <div style="margin-bottom:24px;">
+      <div style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:1.5px;border-bottom:1px solid #1E1E1E;padding-bottom:8px;margin-bottom:14px;">${label}</div>
+      ${content}
+    </div>`
+
+  const onTrackSection = pulse.onTrack.length
+    ? section('ON TRACK', bullet(pulse.onTrack, '✓'))
+    : ''
+  const behindSection = pulse.behind.length
+    ? section('BEHIND', bullet(pulse.behind, '→'))
+    : ''
+  const blockedSection = pulse.blocked.length
+    ? section(`BLOCKED (${pulse.blocked.length})`, bullet(pulse.blocked, '⚠'))
+    : ''
+  const driftSection = pulse.signalDrift
+    ? section('SIGNAL DRIFT', `<div style="font-size:14px;color:#ccc;line-height:1.6;">${pulse.signalDrift}</div>`)
+    : ''
+
+  return getResend().emails.send({
+    from: FROM,
+    to,
+    subject: `${pulse.brandName}: Day ${pulse.day} check-in — ${pulse.todaysFocus.slice(0, 60)}`,
+    html: `
+<!DOCTYPE html>
+<html>
+<body style="background:#0A0A0A;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:40px 0;">
+  <div style="max-width:560px;margin:0 auto;padding:0 24px;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:32px;">
+      <div style="width:40px;height:40px;background:#DA7756;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;color:#fff;flex-shrink:0;">M</div>
+      <div>
+        <div style="font-size:12px;color:#555;text-transform:uppercase;letter-spacing:1px;">Strategy Pulse</div>
+        <div style="font-size:13px;color:#888;">${pulse.brandName} · Day ${pulse.day} of 30</div>
+      </div>
+    </div>
+
+    ${onTrackSection}
+    ${behindSection}
+    ${blockedSection}
+    ${driftSection}
+
+    <div style="background:#111;border:1px solid #1E1E1E;border-left:3px solid #DA7756;border-radius:8px;padding:16px 18px;margin-bottom:28px;">
+      <div style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;">DO THIS TODAY</div>
+      <div style="font-size:15px;font-weight:600;color:#fff;line-height:1.5;">${pulse.todaysFocus}</div>
+    </div>
+
+    <div style="margin-top:24px;padding-top:20px;border-top:1px solid #1E1E1E;text-align:center;">
+      <a href="${APP_URL}/strategy" style="display:inline-block;background:#DA7756;color:#fff;text-decoration:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:600;">
+        View active cycle →
+      </a>
+    </div>
+
+    <p style="color:#2A2A2A;font-size:11px;margin:24px 0 0;text-align:center;">
+      Marvyn · <a href="${APP_URL}" style="color:#333;text-decoration:none;">marvyn.tech</a> ·
+      <a href="${APP_URL}/settings" style="color:#333;text-decoration:none;">manage preferences</a>
+    </p>
+  </div>
+</body>
+</html>`,
+  })
+}
+
 export async function sendPasswordResetEmail(to: string, token: string) {
   const resetUrl = `${APP_URL}/reset-password?token=${token}`
   return getResend().emails.send({

@@ -12,8 +12,9 @@ import { createBoard } from '@/lib/agent/board'
 import { parseAtMention, inferDomains } from '@/lib/agent/routing'
 import { runAnalyst } from '@/lib/agent/analyst'
 import { cmoOrchestrate, runSpecialists, cmoReview } from '@/lib/agent/cmo'
+import { buildSynthesisPrompt } from '@/lib/agent/prompts'
+import { llmStream } from '@/lib/llm'
 import type { AgentContext } from '@/lib/agent/tools'
-import type { ContextBoard } from '@/lib/agent/board'
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -143,32 +144,44 @@ export async function POST(req: NextRequest) {
         await runSpecialists(board, send)
 
         // ── Step 5: CMO review loop ───────────────────────────────────────
-        // Skip review only when the single specialist completed successfully
-        // and has no correction history. A blocked specialist must still go
-        // through cmoReview so it can surface the escalation message correctly.
-        const singleAgentSucceeded =
-          board.taskList.length === 1 &&
-          board.taskList[0].status === 'done' &&
-          Object.values(board.correctionHistory).every(h => !h?.length)
+        // Skip review when ALL specialists completed cleanly with no corrections.
+        // Any blocked task or prior correction round must still go through cmoReview
+        // so it can surface the escalation message correctly.
+        const allAgentsSucceeded =
+          board.taskList.length > 0 &&
+          board.taskList.every((t) => t.status === 'done') &&
+          Object.values(board.correctionHistory).every((h) => !h?.length)
 
         let escalationMessage = ''
-        if (singleAgentSucceeded) {
+        if (allAgentsSucceeded) {
           board.reviewStatus = 'passed'
         } else {
           escalationMessage = await cmoReview(board, connections, userId, chatSessionId, send)
         }
 
         // ── Step 6: Stream final response ────────────────────────────────
-        const finalText = escalationMessage || buildFinalResponse(board)
-
-        const chunkSize = 20
-        for (let i = 0; i < finalText.length; i += chunkSize) {
-          send({ type: 'delta', content: finalText.slice(i, i + chunkSize) })
+        // Escalation: dump the escalation message as plain chunks (no extra LLM call)
+        if (escalationMessage) {
+          const chunkSize = 20
+          for (let i = 0; i < escalationMessage.length; i += chunkSize) {
+            send({ type: 'delta', content: escalationMessage.slice(i, i + chunkSize) })
+          }
+          send({ type: 'done' })
+          await persistRun(escalationMessage)
+        } else {
+          // Happy path: real streaming synthesis — user sees tokens as they arrive
+          const { system: synthSystem, user: synthUser } = buildSynthesisPrompt(board)
+          const msgStream = await llmStream(synthUser, synthSystem, 'powerful')
+          let finalText = ''
+          for await (const event of msgStream) {
+            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+              finalText += event.delta.text
+              send({ type: 'delta', content: event.delta.text })
+            }
+          }
+          send({ type: 'done' })
+          await persistRun(finalText)
         }
-        send({ type: 'done' })
-
-        // ── Step 7: Persist ──────────────────────────────────────────────
-        await persistRun(finalText)
 
         controller.close()
       } catch (err: unknown) {
@@ -191,67 +204,3 @@ export async function POST(req: NextRequest) {
   })
 }
 
-/** Assemble final human-readable response from all passed agent outputs. */
-function buildFinalResponse(board: ContextBoard): string {
-  const doneTasks = board.taskList.filter((t) => t.status === 'done')
-  const blockedTasks = board.taskList.filter((t) => t.status === 'blocked')
-
-  // All specialists failed — surface a clear error instead of "Analysis complete."
-  if (doneTasks.length === 0 && blockedTasks.length > 0) {
-    const agents = [...new Set(blockedTasks.map((t) => t.agent))]
-    return (
-      `The ${agents.join(', ')} specialist${agents.length > 1 ? 's' : ''} could not ` +
-      `complete the analysis. This is usually caused by a missing or expired integration, ` +
-      `or an API error from the data source. Check your connected platforms under Settings ` +
-      `and try again.`
-    )
-  }
-
-  const sections: string[] = []
-
-  for (const task of doneTasks) {
-    const output = board.agentAttempts[task.agent]?.at(-1)
-    if (!output) continue
-
-    const agentLabel = task.agent.charAt(0).toUpperCase() + task.agent.slice(1)
-
-    // Prior recommendation follow-up — surface before anything else
-    const prior = output.priorRecommendationReview
-    if (prior?.pendingUnacted?.length) {
-      const topUnacted = prior.pendingUnacted[0]
-      sections.push(`> **Still open from last time:** ${topUnacted}`)
-    }
-
-    sections.push(`## ${agentLabel}\n\n${output.summary}`)
-
-    // Diagnosis — root cause before recommendations
-    if (output.diagnosis?.rootCause) {
-      const diagConf = output.diagnosis.confidence ?? 1
-      const confLabel = diagConf >= 0.7 ? '' : diagConf >= 0.5 ? ' *(moderate confidence)*' : ' *(low confidence — limited data)*'
-      sections.push(`**Root cause:**${confLabel} ${output.diagnosis.rootCause}`)
-    }
-
-    if (output.findings.length) {
-      sections.push(`**Findings:**\n${output.findings.map((f) => `- ${f}`).join('\n')}`)
-    }
-
-    if (output.recommendations.length) {
-      const recLines = output.recommendations.map((r) => {
-        let line = `- ${r.action}`
-        if (r.requiresHumanDecision) line += ' *(requires your decision)*'
-        if (r.confidence < 0.6) {
-          line += `\n  > I'd want more data before acting on this — confidence is ${Math.round(r.confidence * 100)}%.`
-        }
-        return line
-      })
-      sections.push(`**Recommendations:**\n${recLines.join('\n')}`)
-    }
-
-    // Notable outcomes from memory — what changed after prior recs were acted on
-    if (prior?.notableOutcomes?.length) {
-      sections.push(`**From last session:** ${prior.notableOutcomes.join(' · ')}`)
-    }
-  }
-
-  return sections.join('\n\n') || 'Analysis complete.'
-}
